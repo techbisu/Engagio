@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, LogIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ViewName } from '@/types'
 
@@ -34,20 +34,29 @@ export function CtaSection({ onNavigate }: CtaSectionProps) {
 
         <div className="relative">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Ready to launch your next quiz?
+            Ready to make your next event more engaging?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-emerald-50 sm:text-lg">
-            Spin up an event, import your questions, and share a link in
-            minutes. No credit card required.
+            Create your event, invite your participants, and start engaging them
+            from registration to certificate.
           </p>
-          <div className="mt-8 flex justify-center">
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
               size="lg"
               onClick={() => onNavigate('login')}
               className="bg-white text-emerald-700 shadow-lg hover:bg-emerald-50"
             >
-              Get Started Free
+              Create your first event
               <ArrowRight className="size-4" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => onNavigate('login')}
+              className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              <LogIn className="size-4" />
+              Sign in
             </Button>
           </div>
         </div>

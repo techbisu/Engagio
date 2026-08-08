@@ -3,67 +3,67 @@
 import * as React from 'react'
 import { motion } from 'framer-motion'
 import {
-  UserPlus,
-  Radio,
-  FileQuestion,
-  BarChart3,
-  Award,
-  LayoutTemplate,
+  HeartPulse,
+  Wrench,
+  Building2,
+  Users,
+  GraduationCap,
+  Video,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
-interface Feature {
+interface UseCase {
   icon: LucideIcon
   title: string
   description: string
 }
 
-const FEATURES: Feature[] = [
+const USE_CASES: UseCase[] = [
   {
-    icon: UserPlus,
-    title: 'Event Registration',
+    icon: HeartPulse,
+    title: 'Medical Summits',
     description:
-      'Create beautiful registration forms, collect participant information, and manage registrations from one place.',
+      'Registration, CME-style assessments, live polling, case discussions, Q&A, feedback, and certificates.',
   },
   {
-    icon: Radio,
-    title: 'Live Engagement',
+    icon: Wrench,
+    title: 'Workshops',
     description:
-      'Keep participants involved with live polls, quizzes, voting, Q&A, and interactive sessions.',
+      'Pre-tests, interactive activities, post-tests, learning improvement, and certificates.',
   },
   {
-    icon: FileQuestion,
-    title: 'Assessments',
+    icon: Building2,
+    title: 'Corporate Training',
     description:
-      'Build quizzes, knowledge checks, certification tests, and workshop assessments using your reusable question bank.',
+      'Employee registration, knowledge checks, assessments, feedback, and completion certificates.',
   },
   {
-    icon: BarChart3,
-    title: 'Results & Insights',
+    icon: Users,
+    title: 'Conferences',
     description:
-      'See participation, responses, scores, leaderboards, feedback, and learning outcomes.',
+      'Event pages, registration, live audience engagement, Q&A, voting, and analytics.',
   },
   {
-    icon: Award,
-    title: 'Certificates',
+    icon: GraduationCap,
+    title: 'Educational Events',
     description:
-      'Generate branded certificates automatically and let participants verify them through a secure public link.',
+      'Quizzes, competitions, assessments, leaderboards, and certificates.',
   },
   {
-    icon: LayoutTemplate,
-    title: 'Event Pages',
+    icon: Video,
+    title: 'Seminars & Webinars',
     description:
-      'Build professional event landing pages with speakers, teams, schedules, sponsors, registration, and more.',
+      'Registration, polls, Q&A, feedback, and participant engagement.',
   },
 ]
 
-export function Features() {
+export function UseCases() {
   return (
     <section
-      id="features"
+      id="solutions"
       className="relative bg-background py-20 sm:py-24"
-      aria-labelledby="features-heading"
+      aria-labelledby="use-cases-heading"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -74,30 +74,30 @@ export function Features() {
           className="mx-auto max-w-2xl text-center"
         >
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            Features
+            Solutions
           </span>
           <h2
-            id="features-heading"
+            id="use-cases-heading"
             className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
-            Everything in one place
+            Built for every kind of gathering.
           </h2>
           <p className="mt-4 text-base text-muted-foreground">
-            From registration to certification, Engagio helps you create better
-            participant experiences.
+            Engagio adapts to your format — from small workshops to large-scale
+            conferences and certification programs.
           </p>
         </motion.div>
 
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature, i) => (
+          {USE_CASES.map((uc, i) => (
             <motion.div
-              key={feature.title}
+              key={uc.title}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: i * 0.06 }}
             >
-              <FeatureCard {...feature} />
+              <UseCaseCard {...uc} />
             </motion.div>
           ))}
         </div>
@@ -106,7 +106,7 @@ export function Features() {
   )
 }
 
-function FeatureCard({ icon: Icon, title, description }: Feature) {
+function UseCaseCard({ icon: Icon, title, description }: UseCase) {
   return (
     <Card className="group h-full transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-600/5">
       <CardContent className="flex h-full flex-col gap-4 p-6">

@@ -2,43 +2,38 @@
 
 import * as React from 'react'
 import { motion } from 'framer-motion'
-import {
-  CalendarPlus,
-  ListPlus,
-  Share2,
-  PlayCircle,
-  type LucideIcon,
-} from 'lucide-react'
 
 interface Step {
-  icon: LucideIcon
+  number: string
   title: string
   description: string
 }
 
 const STEPS: Step[] = [
   {
-    icon: CalendarPlus,
-    title: 'Create an Event',
-    description:
-      'Set up your workshop or exam with title, dates, and description.',
+    number: '01',
+    title: 'Create',
+    description: 'Build your event and landing page.',
   },
   {
-    icon: ListPlus,
-    title: 'Add Questions',
-    description: 'Type them in or import from a CSV file in one click.',
+    number: '02',
+    title: 'Register',
+    description: 'Collect participants and payments.',
   },
   {
-    icon: Share2,
-    title: 'Generate Quiz Link',
-    description:
-      'Get a unique shareable link with quiz settings — time limit, shuffle, and more.',
+    number: '03',
+    title: 'Engage',
+    description: 'Run polls, quizzes, Q&A and live activities.',
   },
   {
-    icon: PlayCircle,
-    title: 'Participants Attempt',
-    description:
-      'Participants login with Gmail and take the anti-cheat-protected quiz.',
+    number: '04',
+    title: 'Assess',
+    description: 'Measure knowledge and learning outcomes.',
+  },
+  {
+    number: '05',
+    title: 'Certify',
+    description: 'Generate and verify certificates.',
   },
 ]
 
@@ -72,39 +67,29 @@ export function HowItWorks() {
             id="how-heading"
             className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
-            Launch a quiz in four simple steps
+            From registration to certificate.
           </h2>
-          <p className="mt-4 text-base text-muted-foreground">
-            From event creation to live attempts in minutes — no setup wizard,
-            no friction.
-          </p>
         </motion.div>
 
         <div className="relative mt-16">
           {/* Connecting line (desktop only) */}
           <div
             aria-hidden
-            className="absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/40 to-emerald-500/0 lg:block"
+            className="absolute left-0 right-0 top-7 hidden h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/40 to-emerald-500/0 lg:block"
           />
-          <ol className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+          <ol className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
             {STEPS.map((step, i) => (
               <motion.li
-                key={step.title}
+                key={step.number}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: i * 0.08 }}
                 className="relative flex flex-col items-center text-center"
               >
-                <div className="relative z-10 flex size-16 flex-col items-center">
-                  <span className="grid size-16 place-items-center rounded-full border border-emerald-500/30 bg-background text-lg font-bold text-emerald-600 shadow-sm">
-                    {i + 1}
-                  </span>
-                  <step.icon
-                    className="mt-3 size-5 text-emerald-600"
-                    aria-hidden="true"
-                  />
-                </div>
+                <span className="relative z-10 grid size-14 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-lg font-bold text-white shadow-md shadow-emerald-600/20">
+                  {step.number}
+                </span>
                 <h3 className="mt-4 text-base font-semibold text-foreground">
                   {step.title}
                 </h3>

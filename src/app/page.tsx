@@ -17,9 +17,17 @@ import { SiteFooter } from "@/components/shared/site-footer"
 import { LoginForm } from "@/components/auth/login-form"
 
 import { Hero } from "@/components/landing/hero"
+import { TrustStrip } from "@/components/landing/trust-strip"
+import { ProblemSection } from "@/components/landing/problem-section"
 import { Features } from "@/components/landing/features"
+import { ActivitiesSection } from "@/components/landing/activities-section"
 import { HowItWorks } from "@/components/landing/how-it-works"
-import { Faq } from "@/components/landing/faq"
+import { UseCases } from "@/components/landing/use-cases"
+import { AssessmentSection } from "@/components/landing/assessment-section"
+import { SecuritySection } from "@/components/landing/security-section"
+import { CertificateSection } from "@/components/landing/certificate-section"
+import { OrganizationSection } from "@/components/landing/organization-section"
+import { TeamSection } from "@/components/landing/team-section"
 import { CtaSection } from "@/components/landing/cta-section"
 
 import { AdminShell } from "@/components/admin/admin-shell"
@@ -366,10 +374,21 @@ export default function Home() {
         onSignOut={handleSignOut}
       />
       <main className="flex-1">
-        <Hero onNavigate={handleNavigate} />
+        <Hero
+          onNavigate={handleNavigate}
+          session={user ? { user } : null}
+        />
+        <TrustStrip />
+        <ProblemSection />
         <Features />
+        <ActivitiesSection />
         <HowItWorks />
-        <Faq />
+        <UseCases />
+        <AssessmentSection />
+        <SecuritySection />
+        <CertificateSection />
+        <OrganizationSection onNavigate={handleNavigate} />
+        <TeamSection />
         <CtaSection onNavigate={handleNavigate} />
       </main>
       <SiteFooter />

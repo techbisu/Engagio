@@ -15,33 +15,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QuizMaster Pro — Workshop & Event Quiz Platform",
+  title: "Engagio — Interactive Event & Learning Platform",
   description:
-    "Create events, import questions via CSV, generate shareable quiz links, and let participants attempt with anti-cheat protection — all in one beautiful platform.",
+    "Create engaging events, workshops, conferences, training programs, and assessments with registration, live activities, quizzes, results, and certificates.",
   keywords: [
-    "quiz platform",
-    "workshop quiz",
+    "event engagement platform",
+    "interactive event platform",
+    "workshop platform",
+    "event registration",
+    "live polling",
     "event quiz",
-    "exam platform",
-    "anti-cheat quiz",
-    "Next.js quiz",
+    "online assessment",
+    "conference engagement",
+    "training assessment",
+    "event certificates",
   ],
-  authors: [{ name: "QuizMaster Pro" }],
+  authors: [{ name: "Engagio" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "QuizMaster Pro — Workshop & Event Quiz Platform",
+    title: "Engagio — Interactive Event & Learning Platform",
     description:
-      "Run flawless quizzes for your next workshop or event. CSV import, anti-cheat, shareable links.",
-    siteName: "QuizMaster Pro",
+      "Engage participants, run interactive activities, assess learning, and issue certificates from one platform.",
+    siteName: "Engagio",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "QuizMaster Pro",
+    title: "Engagio — Interactive Event & Learning Platform",
     description:
-      "Run flawless quizzes for your next workshop or event. CSV import, anti-cheat, shareable links.",
+      "Engage participants, run interactive activities, assess learning, and issue certificates from one platform.",
   },
 };
 

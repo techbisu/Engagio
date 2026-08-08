@@ -135,11 +135,11 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <BrandLogo size="md" />
           </div>
           <CardTitle className="text-center text-2xl">
-            {tab === 'signin' ? 'Welcome back' : 'Quick demo'}
+            {tab === 'signin' ? 'Welcome back to Engagio' : 'Quick demo'}
           </CardTitle>
           <CardDescription className="text-center">
             {tab === 'signin'
-              ? 'Sign in to your account to continue'
+              ? 'Manage your events, activities, assessments, and participants from one place.'
               : 'Try the platform as an admin or a participant — no setup needed'}
           </CardDescription>
         </CardHeader>

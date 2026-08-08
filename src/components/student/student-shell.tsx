@@ -142,10 +142,10 @@ export function StudentShell({
         )}
       >
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:px-6 lg:px-8">
-          <p>© {new Date().getFullYear()} QuizMaster Pro. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Engagio. All rights reserved.</p>
           <p className="flex items-center gap-1.5">
             <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-            QuizMaster Pro
+            Engagio
           </p>
         </div>
       </footer>

@@ -1,4 +1,4 @@
-// Shared types for QuizMaster Pro
+// Shared types for Engagio
 
 export type ViewName =
   | "landing"

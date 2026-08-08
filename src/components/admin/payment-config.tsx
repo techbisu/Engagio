@@ -339,7 +339,7 @@ export function PaymentConfig({
                 id="upi-link"
                 value={event.upiLink ?? ""}
                 onChange={(e) => emit({ upiLink: e.target.value })}
-                placeholder="upi://pay?pa=event@upi&pn=QuizMaster"
+                placeholder="upi://pay?pa=event@upi&pn=Engagio"
                 autoComplete="off"
               />
             </div>

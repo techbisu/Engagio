@@ -23,10 +23,9 @@ interface SiteHeaderProps {
 }
 
 const NAV_LINKS = [
-  { label: 'Home', href: '#home' },
   { label: 'Features', href: '#features' },
-  { label: 'How it Works', href: '#how-it-works' },
-  { label: 'FAQ', href: '#faq' },
+  { label: 'Solutions', href: '#solutions' },
+  { label: 'How it works', href: '#how-it-works' },
 ] as const
 
 export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) {
@@ -88,7 +87,7 @@ export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) 
                 size="sm"
                 onClick={() => onNavigate('login')}
               >
-                Sign In
+                Sign in
               </Button>
               <Button
                 variant="default"
@@ -96,7 +95,7 @@ export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) 
                 onClick={() => onNavigate('login')}
                 className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/90 hover:to-teal-500/90"
               >
-                Get Started
+                Get started
               </Button>
             </>
           )}
@@ -157,14 +156,14 @@ export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) 
                     variant="outline"
                     onClick={() => handleNav('login')}
                   >
-                    Sign In
+                    Sign in
                   </Button>
                   <Button
                     variant="default"
                     onClick={() => handleNav('login')}
                     className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/90 hover:to-teal-500/90"
                   >
-                    Get Started Free
+                    Get started
                   </Button>
                 </>
               )}

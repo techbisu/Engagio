@@ -250,7 +250,7 @@ export function AdminShell({
             <div className="flex h-14 items-center gap-2 border-b px-4">
               <BrandMark />
               <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold">QuizMaster</span>
+                <span className="text-sm font-semibold">Engagio</span>
                 <span className="text-[10px] uppercase tracking-wider text-emerald-600">
                   Admin Panel
                 </span>
@@ -265,7 +265,7 @@ export function AdminShell({
             <BrandMark />
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold">QuizMaster Pro</span>
+            <span className="text-sm font-semibold">Engagio</span>
             <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
               Admin Panel
             </span>
@@ -418,7 +418,7 @@ export function AdminShell({
       {/* Sticky footer */}
       <footer className="mt-auto border-t bg-white px-4 py-3 dark:bg-slate-900 dark:border-slate-800">
         <div className="mx-auto flex w-full max-w-7xl flex-col sm:flex-row items-center justify-between gap-1 text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} QuizMaster Pro. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Engagio. All rights reserved.</p>
           <p className="flex items-center gap-1.5">
             <span className="inline-flex size-1.5 rounded-full bg-emerald-500" />
             Admin v1.0

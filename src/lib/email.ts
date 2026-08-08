@@ -8,7 +8,7 @@
  *
  * Env vars:
  *   RESEND_API_KEY   — Resend API key (optional)
- *   EMAIL_FROM       — From address (default: noreply@quizmaster.pro)
+ *   EMAIL_FROM       — From address (default: noreply@engagio.app)
  *
  * If RESEND_API_KEY is not configured, `sendEmail` returns a success
  * status with `sent: false` and logs a warning — email is NEVER a hard
@@ -32,7 +32,7 @@ export interface SendEmailResult {
 }
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@quizmaster.pro"
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@engagio.app"
 
 export function isEmailConfigured(): boolean {
   return !!RESEND_API_KEY
@@ -123,7 +123,7 @@ export async function sendResultPublishedEmail(params: {
       <a href="${escapeHtml(resultUrl)}" style="display:inline-block;margin:24px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View My Result</a>
       <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;">If the button doesn't work, copy this URL: ${escapeHtml(resultUrl)}</p>
     </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by QuizMaster Pro</p>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by Engagio</p>
   </body>
 </html>`
 
@@ -160,7 +160,7 @@ export async function sendCertificateIssuedEmail(params: {
       <p style="margin:0 0 16px;font-family:monospace;font-size:16px;color:#0f172a;">${escapeHtml(certificateNumber)}</p>
       <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;margin:8px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View Certificate</a>
     </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by QuizMaster Pro</p>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by Engagio</p>
   </body>
 </html>`
 

@@ -1,4 +1,4 @@
-# QuizMaster Pro — Workshop & Event Quiz Platform
+# Engagio — Workshop & Event Quiz Platform
 
 A complete, production-ready Next.js 16 quiz/exam platform with admin panel, Gmail auth, anti-cheat protection, CSV question import, shareable quiz links, and live analytics. Built with TypeScript, Tailwind CSS 4, shadcn/ui, Prisma, and NextAuth.
 

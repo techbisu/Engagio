@@ -1,6 +1,6 @@
 'use client'
 
-import { GraduationCap } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface BrandLogoProps {
@@ -28,14 +28,11 @@ export function BrandLogo({ className, iconOnly = false, size = 'md' }: BrandLog
         )}
         aria-hidden="true"
       >
-        <GraduationCap className={s.icon} strokeWidth={2.4} />
+        <Sparkles className={s.icon} strokeWidth={2.4} />
       </span>
       {!iconOnly && (
         <span className={cn('font-semibold tracking-tight text-foreground', s.text)}>
-          QuizMaster{' '}
-          <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
-            Pro
-          </span>
+          Engagio
         </span>
       )}
     </span>

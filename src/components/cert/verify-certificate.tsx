@@ -73,7 +73,7 @@ export function VerifyCertificate({ token, onExit }: VerifyCertificateProps) {
           <div className="flex items-center gap-2">
             <BrandLogo size="sm" />
             <span className="text-sm font-semibold text-slate-900">
-              QuizMaster Pro
+              Engagio
             </span>
             <span className="hidden text-xs uppercase tracking-wider text-emerald-600 sm:inline">
               · Certificate Verification
@@ -112,11 +112,11 @@ export function VerifyCertificate({ token, onExit }: VerifyCertificateProps) {
       <footer className="border-t border-slate-200 bg-slate-50">
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-1 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:px-6">
           <p>
-            © {new Date().getFullYear()} QuizMaster Pro. All rights reserved.
+            © {new Date().getFullYear()} Engagio. All rights reserved.
           </p>
           <p className="flex items-center gap-1.5">
             <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
-            Powered by QuizMaster Pro
+            Powered by Engagio
           </p>
         </div>
       </footer>
@@ -152,7 +152,7 @@ function VerifiedCard({ data }: { data: VerifyResponse }) {
           Certificate Verified
         </h1>
         <p className="mt-2 text-sm text-emerald-700/80 dark:text-emerald-200/80">
-          This is a valid certificate issued by QuizMaster Pro.
+          This is a valid certificate issued by Engagio.
         </p>
       </div>
 
