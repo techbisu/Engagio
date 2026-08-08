@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Download,
   Search,
@@ -14,6 +14,15 @@ import {
   Monitor,
   Smartphone,
   ExternalLink,
+  Flag,
+  Keyboard,
+  Camera,
+  EyeOff,
+  Users,
+  ScanFace,
+  Send,
+  Lock,
+  type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -47,6 +56,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Separator } from "@/components/ui/separator"
 import { cn, formatDateTime, formatDuration, initials, truncate } from "@/lib/utils"
 
@@ -94,11 +108,39 @@ const ALL_STATUSES: (AttemptStatus | "ALL")[] = [
   "TIMEOUT",
 ]
 
+type PublishedFilter = "ALL" | "PUBLISHED" | "UNPUBLISHED"
+
 const LETTERS = ["A", "B", "C", "D", "E", "F"]
 
+/** Security violation column definitions (used in the table header). */
+interface ViolationColumn {
+  key:
+    | "devtoolsOpen"
+    | "screenshotAttempts"
+    | "keyboardViolations"
+    | "faceNotDetected"
+    | "multiFaceAlerts"
+    | "lookAwayAlerts"
+  label: string
+  Icon: LucideIcon
+  /** Threshold at which the count turns amber (rather than slate). */
+  warn?: number
+}
+
+const VIOLATION_COLUMNS: ViolationColumn[] = [
+  { key: "devtoolsOpen", label: "DevTools", Icon: Monitor, warn: 1 },
+  { key: "screenshotAttempts", label: "Screenshots", Icon: Camera, warn: 1 },
+  { key: "keyboardViolations", label: "Keyboard", Icon: Keyboard, warn: 1 },
+  { key: "faceNotDetected", label: "Face ✗", Icon: ScanFace, warn: 1 },
+  { key: "multiFaceAlerts", label: "MultiFace", Icon: Users, warn: 1 },
+  { key: "lookAwayAlerts", label: "LookAway", Icon: EyeOff, warn: 1 },
+]
+
 export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) {
+  const queryClient = useQueryClient()
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<AttemptStatus | "ALL">("ALL")
+  const [publishedFilter, setPublishedFilter] = React.useState<PublishedFilter>("ALL")
   const [eventFilter, setEventFilter] = React.useState<string>(eventId || "ALL")
   const [page, setPage] = React.useState(0)
   const [selected, setSelected] = React.useState<QuizAttemptDto | null>(null)
@@ -106,7 +148,7 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
   // Reset page on filter changes
   React.useEffect(() => {
     setPage(0)
-  }, [search, statusFilter, eventFilter])
+  }, [search, statusFilter, publishedFilter, eventFilter])
 
   const eventsQuery = useQuery<EventDto[]>({
     queryKey: ["events"],
@@ -142,6 +184,11 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
         return false
       }
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false
+      if (publishedFilter !== "ALL") {
+        const isPublished = a.published ?? !!a.publishedAt
+        if (publishedFilter === "PUBLISHED" && !isPublished) return false
+        if (publishedFilter === "UNPUBLISHED" && isPublished) return false
+      }
       if (search) {
         const s = search.toLowerCase()
         const matchesEmail = a.user?.email?.toLowerCase().includes(s)
@@ -150,10 +197,80 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       }
       return true
     })
-  }, [attemptsList, statusFilter, search, preselectedSlug])
+  }, [attemptsList, statusFilter, publishedFilter, search, preselectedSlug])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  // ---- Publish / Unpublish mutations ----
+  const publishMutation = useMutation({
+    mutationFn: (body: { quizLinkId?: string; attemptId?: string }) =>
+      api<{ published: number }>("/api/attempts/publish", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (data, vars) => {
+      toast.success(
+        vars.attemptId
+          ? "Attempt published."
+          : `${data.published} attempt${data.published === 1 ? "" : "s"} published.`,
+      )
+      queryClient.invalidateQueries({ queryKey: ["attempts", "all"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to publish"),
+  })
+
+  const unpublishMutation = useMutation({
+    mutationFn: (body: { quizLinkId?: string; attemptId?: string }) =>
+      api<{ unpublished: number }>("/api/attempts/publish", {
+        method: "DELETE",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (data, vars) => {
+      toast.success(
+        vars.attemptId
+          ? "Attempt unpublished."
+          : `${data.unpublished} attempt${data.unpublished === 1 ? "" : "s"} unpublished.`,
+      )
+      queryClient.invalidateQueries({ queryKey: ["attempts", "all"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to unpublish"),
+  })
+
+  // Bulk-publish the unpublished completed attempts in the current filtered set.
+  const unpublishedCompleted = filtered.filter(
+    (a) =>
+      a.status === "COMPLETED" && !(a.published ?? !!a.publishedAt),
+  )
+  const unpublishedQuizLinkIds = Array.from(
+    new Set(unpublishedCompleted.map((a) => a.quizLinkId).filter(Boolean) as string[]),
+  )
+
+  function handleBulkPublish() {
+    if (unpublishedQuizLinkIds.length === 0) {
+      toast.info("No unpublished attempts to publish.")
+      return
+    }
+    // Publish for each unique quiz link id (the endpoint is per-link).
+    Promise.all(
+      unpublishedQuizLinkIds.map((quizLinkId) =>
+        api<{ published: number }>("/api/attempts/publish", {
+          method: "POST",
+          body: JSON.stringify({ quizLinkId }),
+        }),
+      ),
+    )
+      .then((results) => {
+        const total = results.reduce((s, r) => s + (r.published ?? 0), 0)
+        toast.success(`Published ${total} attempt${total === 1 ? "" : "s"}.`)
+        queryClient.invalidateQueries({ queryKey: ["attempts", "all"] })
+      })
+      .catch((e: unknown) =>
+        toast.error(e instanceof Error ? e.message : "Failed to publish"),
+      )
+  }
 
   function exportCsv() {
     if (filtered.length === 0) {
@@ -175,6 +292,15 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       "fullscreen_exits",
       "copy_attempts",
       "right_clicks",
+      "devtools_open",
+      "screenshot_attempts",
+      "keyboard_violations",
+      "face_not_detected",
+      "multi_face_alerts",
+      "look_away_alerts",
+      "flagged_questions",
+      "published",
+      "published_at",
       "started_at",
       "completed_at",
     ]
@@ -183,8 +309,12 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
       return s
     }
-    const rows = filtered.map((a) =>
-      [
+    const rows = filtered.map((a) => {
+      const flagged = Array.isArray(a.flaggedQuestions)
+        ? a.flaggedQuestions.length
+        : 0
+      const published = a.published ?? !!a.publishedAt
+      return [
         a.user?.name || "",
         a.user?.email || "",
         a.event?.title || "",
@@ -199,12 +329,21 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
         a.fullscreenExits,
         a.copyAttempts,
         a.rightClicks,
+        a.devtoolsOpen,
+        a.screenshotAttempts,
+        a.keyboardViolations,
+        a.faceNotDetected,
+        a.multiFaceAlerts,
+        a.lookAwayAlerts,
+        flagged,
+        published ? "yes" : "no",
+        a.publishedAt || "",
         a.startedAt,
         a.completedAt || "",
       ]
         .map(escape)
         .join(",")
-    )
+    })
     const csv = [headers.join(","), ...rows].join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -227,10 +366,23 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
             All quiz attempts across events. {filtered.length} shown.
           </p>
         </div>
-        <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
-          <Download className="size-4" />
-          Export CSV
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {unpublishedCompleted.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleBulkPublish}
+              disabled={publishMutation.isPending}
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+            >
+              <Send className="size-4" />
+              Publish {unpublishedCompleted.length} unpublished
+            </Button>
+          )}
+          <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download className="size-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -277,9 +429,19 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center justify-end text-xs text-muted-foreground">
-              {filtered.length} of {data?.length ?? 0}
-            </div>
+            <Select
+              value={publishedFilter}
+              onValueChange={(v) => setPublishedFilter(v as PublishedFilter)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Publish state" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All publish states</SelectItem>
+                <SelectItem value="PUBLISHED">Published</SelectItem>
+                <SelectItem value="UNPUBLISHED">Unpublished</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -315,10 +477,45 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
                   <TableHead className="hidden lg:table-cell">Slug</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Score</TableHead>
-                  <TableHead className="text-center">%</TableHead>
                   <TableHead className="text-center hidden sm:table-cell">Pass</TableHead>
                   <TableHead className="text-center hidden md:table-cell">Time</TableHead>
                   <TableHead className="text-center hidden lg:table-cell">Tabs</TableHead>
+                  {/* New security violation columns (desktop only) */}
+                  {VIOLATION_COLUMNS.map((col) => (
+                    <TableHead
+                      key={col.key}
+                      className="hidden xl:table-cell text-center"
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center justify-center">
+                            <col.Icon className="size-3.5 text-muted-foreground" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{col.label}</TooltipContent>
+                      </Tooltip>
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-center hidden lg:table-cell">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center justify-center">
+                          <Flag className="size-3.5 text-muted-foreground" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Flagged questions</TooltipContent>
+                    </Tooltip>
+                  </TableHead>
+                  <TableHead className="text-center hidden lg:table-cell">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center justify-center">
+                          <Lock className="size-3.5 text-muted-foreground" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Published state</TooltipContent>
+                    </Tooltip>
+                  </TableHead>
                   <TableHead className="hidden xl:table-cell">Started</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -326,6 +523,10 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
               <TableBody>
                 {pageData.map((a) => {
                   const meta = statusMeta[a.status] || statusMeta.IN_PROGRESS
+                  const flaggedCount = Array.isArray(a.flaggedQuestions)
+                    ? a.flaggedQuestions.length
+                    : 0
+                  const isPublished = a.published ?? !!a.publishedAt
                   return (
                     <TableRow
                       key={a.id}
@@ -372,9 +573,6 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
                       <TableCell className="text-center tabular-nums text-sm">
                         {a.score == null ? "—" : `${a.score}/${a.totalMarks ?? "?"}`}
                       </TableCell>
-                      <TableCell className="text-center tabular-nums text-sm font-semibold">
-                        {a.percentage == null ? "—" : `${a.percentage}%`}
-                      </TableCell>
                       <TableCell className="text-center hidden sm:table-cell">
                         {a.passed == null ? (
                           <span className="text-muted-foreground">—</span>
@@ -397,6 +595,51 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
                         >
                           {a.tabSwitches}
                         </span>
+                      </TableCell>
+                      {/* Security violation count cells */}
+                      {VIOLATION_COLUMNS.map((col) => {
+                        const value = (a[col.key] ?? 0) as number
+                        const warn = col.warn ?? 1
+                        return (
+                          <TableCell
+                            key={col.key}
+                            className="hidden xl:table-cell text-center text-xs tabular-nums"
+                          >
+                            <span
+                              className={cn(
+                                value >= warn
+                                  ? value >= 3
+                                    ? "text-rose-600 font-semibold"
+                                    : "text-amber-600 font-medium"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {value}
+                            </span>
+                          </TableCell>
+                        )
+                      })}
+                      {/* Flagged questions */}
+                      <TableCell className="text-center hidden lg:table-cell">
+                        {flaggedCount > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+                                <Flag className="size-3" />
+                                {flaggedCount}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {flaggedCount} question{flaggedCount === 1 ? "" : "s"} flagged for review
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      {/* Published badge */}
+                      <TableCell className="text-center hidden lg:table-cell">
+                        <PublishBadge published={isPublished} />
                       </TableCell>
                       <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                         {formatDateTime(a.startedAt)}
@@ -457,8 +700,38 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       <AttemptDetailDialog
         attempt={selected}
         onClose={() => setSelected(null)}
+        onPublish={(attemptId) =>
+          publishMutation.mutate({ attemptId })
+        }
+        onUnpublish={(attemptId) =>
+          unpublishMutation.mutate({ attemptId })
+        }
+        publishPending={publishMutation.isPending}
+        unpublishPending={unpublishMutation.isPending}
       />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Publish badge
+// ---------------------------------------------------------------------------
+
+function PublishBadge({ published }: { published: boolean }) {
+  return published ? (
+    <Badge
+      variant="outline"
+      className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+    >
+      <Check className="size-3" /> Published
+    </Badge>
+  ) : (
+    <Badge
+      variant="outline"
+      className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+    >
+      <Lock className="size-3" /> Unpublished
+    </Badge>
   )
 }
 
@@ -469,9 +742,17 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
 function AttemptDetailDialog({
   attempt,
   onClose,
+  onPublish,
+  onUnpublish,
+  publishPending,
+  unpublishPending,
 }: {
   attempt: QuizAttemptDto | null
   onClose: () => void
+  onPublish: (attemptId: string) => void
+  onUnpublish: (attemptId: string) => void
+  publishPending: boolean
+  unpublishPending: boolean
 }) {
   const open = !!attempt
   const { data: questions, isLoading } = useQuery<QuestionDto[]>({
@@ -488,6 +769,10 @@ function AttemptDetailDialog({
   const order = attempt.questionOrder || questions?.map((q) => q.id) || []
   const ua = attempt as QuizAttemptDto & { ipAddress?: string | null; userAgent?: string | null }
   const isMobile = /mobile|android|iphone|ipad/i.test(ua.userAgent || "")
+  const isPublished = attempt.published ?? !!attempt.publishedAt
+  const flaggedCount = Array.isArray(attempt.flaggedQuestions)
+    ? attempt.flaggedQuestions.length
+    : 0
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -498,10 +783,14 @@ function AttemptDetailDialog({
             <Badge variant="outline" className={cn("ring-1", meta.className)}>
               {meta.label}
             </Badge>
+            <PublishBadge published={isPublished} />
           </DialogTitle>
           <DialogDescription>
             Started {formatDateTime(attempt.startedAt)}
             {attempt.completedAt ? ` · Completed ${formatDateTime(attempt.completedAt)}` : ""}
+            {attempt.publishedAt
+              ? ` · Published ${formatDateTime(attempt.publishedAt)}`
+              : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -559,6 +848,18 @@ function AttemptDetailDialog({
                   attempt.timeTaken == null ? "—" : formatDuration(attempt.timeTaken)
                 }
               />
+              {attempt.publishedAt && (
+                <Field
+                  label="Published at"
+                  value={formatDateTime(attempt.publishedAt)}
+                />
+              )}
+              {flaggedCount > 0 && (
+                <Field
+                  label="Flagged"
+                  value={`${flaggedCount} question${flaggedCount === 1 ? "" : "s"}`}
+                />
+              )}
             </div>
           </div>
 
@@ -586,6 +887,36 @@ function AttemptDetailDialog({
                 label="Right clicks"
                 value={attempt.rightClicks}
                 warn={attempt.rightClicks > 0}
+              />
+              <Metric
+                label="DevTools open"
+                value={attempt.devtoolsOpen}
+                warn={attempt.devtoolsOpen > 0}
+              />
+              <Metric
+                label="Screenshots"
+                value={attempt.screenshotAttempts}
+                warn={attempt.screenshotAttempts > 0}
+              />
+              <Metric
+                label="Keyboard violations"
+                value={attempt.keyboardViolations}
+                warn={attempt.keyboardViolations > 0}
+              />
+              <Metric
+                label="Face not detected"
+                value={attempt.faceNotDetected}
+                warn={attempt.faceNotDetected > 0}
+              />
+              <Metric
+                label="Multi-face alerts"
+                value={attempt.multiFaceAlerts}
+                warn={attempt.multiFaceAlerts > 0}
+              />
+              <Metric
+                label="Look-away alerts"
+                value={attempt.lookAwayAlerts}
+                warn={attempt.lookAwayAlerts > 0}
               />
             </div>
             <Separator />
@@ -711,7 +1042,27 @@ function AttemptDetailDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
+          {attempt.status === "COMPLETED" && (
+            isPublished ? (
+              <Button
+                variant="outline"
+                onClick={() => onUnpublish(attempt.id)}
+                disabled={unpublishPending}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/40"
+              >
+                <Lock className="size-4" /> Unpublish
+              </Button>
+            ) : (
+              <Button
+                onClick={() => onPublish(attempt.id)}
+                disabled={publishPending}
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                <Send className="size-4" /> Publish attempt
+              </Button>
+            )
+          )}
           <Button variant="outline" onClick={onClose}>
             <ExternalLink className="size-4" />
             Close

@@ -1,11 +1,13 @@
 "use client"
 
+import { Flag } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface QuestionNavigatorProps {
   total: number
   current: number
   answered: boolean[]
+  flagged?: boolean[]
   onJump: (idx: number) => void
 }
 
@@ -13,6 +15,7 @@ export function QuestionNavigator({
   total,
   current,
   answered,
+  flagged,
   onJump,
 }: QuestionNavigatorProps) {
   return (
@@ -25,6 +28,7 @@ export function QuestionNavigator({
       {Array.from({ length: total }).map((_, idx) => {
         const isCurrent = idx === current
         const isAnswered = answered[idx]
+        const isFlagged = flagged?.[idx]
         return (
           <button
             key={idx}
@@ -33,10 +37,10 @@ export function QuestionNavigator({
             onClick={() => onJump(idx)}
             aria-label={`Go to question ${idx + 1}${
               isAnswered ? " (answered)" : " (unanswered)"
-            }`}
+            }${isFlagged ? " (flagged for review)" : ""}`}
             aria-current={isCurrent ? "true" : undefined}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-all",
+              "relative flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-all",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
               isCurrent
                 ? "border-emerald-500 bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-500/30"
@@ -46,6 +50,12 @@ export function QuestionNavigator({
             )}
           >
             {idx + 1}
+            {isFlagged && (
+              <Flag
+                className="absolute -right-1 -top-1 size-3 fill-amber-500 text-amber-500"
+                aria-hidden="true"
+              />
+            )}
           </button>
         )
       })}

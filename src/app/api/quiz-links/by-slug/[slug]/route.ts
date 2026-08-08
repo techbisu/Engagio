@@ -1,40 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import type { QuizLinkDto } from "@/types";
+import { toQuizLinkDto } from "@/app/api/quiz-links/route";
 
 type RouteContext = { params: Promise<{ slug: string }> };
-
-function toQuizLinkDto(link: any): QuizLinkDto {
-  return {
-    id: link.id,
-    eventId: link.eventId,
-    slug: link.slug,
-    isActive: link.isActive,
-    shuffleQuestions: link.shuffleQuestions,
-    shuffleOptions: link.shuffleOptions,
-    timeLimit: link.timeLimit,
-    maxAttempts: link.maxAttempts,
-    showResults: link.showResults,
-    passThreshold: link.passThreshold,
-    requireFullscreen: link.requireFullscreen,
-    createdAt: link.createdAt.toISOString(),
-    expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
-    event: link.event
-      ? {
-          id: link.event.id,
-          title: link.event.title,
-          description: link.event.description,
-          image: link.event.image ?? null,
-        }
-      : undefined,
-  };
-}
 
 /**
  * GET /api/quiz-links/by-slug/[slug]
  *
  * Public route — anyone with the link (including unauthenticated users)
  * can read this metadata so the landing page can show event info before login.
+ * Returns the full set of security toggles + questionCount + publishResults
+ * + aiProctor sub-toggles so the client knows which features to activate.
  */
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   try {
@@ -90,6 +66,24 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
       requireFullscreen: link.requireFullscreen,
       isActive: link.isActive,
       hasExpired,
+      // Security config (mirrors quizLink fields — duplicated here so the
+      // pre-quiz landing screen can read them in one flat object).
+      security: {
+        autoSubmitOnExit: link.autoSubmitOnExit,
+        tabSwitchDetection: link.tabSwitchDetection,
+        copyPasteBlocking: link.copyPasteBlocking,
+        rightClickDisable: link.rightClickDisable,
+        keyboardShortcutBlocking: link.keyboardShortcutBlocking,
+        devtoolsDetection: link.devtoolsDetection,
+        antiScreenshot: link.antiScreenshot,
+        watermarkOverlay: link.watermarkOverlay,
+        aiProctor: link.aiProctor,
+        aiProctorFaceDetection: link.aiProctorFaceDetection,
+        aiProctorMultiFace: link.aiProctorMultiFace,
+        aiProctorLookAway: link.aiProctorLookAway,
+      },
+      quizLinkQuestionCount: link.questionCount,
+      publishResults: link.publishResults,
       // Registration gate: if true, the caller must fill out the event's
       // registration form (GET /api/events/[id]/fields) before /attempts/start
       // will accept them.

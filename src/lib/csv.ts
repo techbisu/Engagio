@@ -1,11 +1,34 @@
-import type { CsvRow } from "@/types"
+import type { CsvRow, QuestionType } from "@/types"
+
+const VALID_TYPES: QuestionType[] = [
+  "MCQ",
+  "TRUE_FALSE",
+  "FILL_BLANK",
+  "MATCHING",
+  "CODING",
+]
 
 /**
  * Parse CSV text into structured question rows.
- * Expected header format:
- *   question, option_a, option_b, option_c, option_d, correct_answer, marks, explanation
- * `correct_answer` can be a letter (A/B/C/D) or 1-based index.
- * `marks` and `explanation` are optional.
+ *
+ * Header columns (case-insensitive):
+ *   question, option_a, option_b, option_c, option_d,
+ *   correct_answer, marks, explanation,
+ *   type, category, negative_marks, correct_text
+ *
+ * The last four are optional:
+ *  - type            default "MCQ" — must be one of MCQ|TRUE_FALSE|FILL_BLANK|MATCHING|CODING
+ *  - category        default null  — free-form string tag
+ *  - negative_marks  default 0     — applied on wrong MCQ/TRUE_FALSE answers
+ *  - correct_text    default null  — short answer (FILL_BLANK) or reference solution (CODING)
+ *
+ * `correct_answer` can be a letter (A/B/C/D) or 1-based index, and is required
+ * for MCQ + TRUE_FALSE rows (ignored for the other types).
+ *
+ * MATCHING rows encode pairs as alternating columns: option_a=left1,
+ * option_b=right1, option_c=left2, option_d=right2.
+ *
+ * Old CSVs without the new columns still parse — defaults are applied.
  */
 export function parseCsvQuestions(csvText: string): {
   rows: CsvRow[]
@@ -24,15 +47,24 @@ export function parseCsvQuestions(csvText: string): {
     b: header.findIndex((h) => h === "option_b" || h === "optionb" || h === "b"),
     c: header.findIndex((h) => h === "option_c" || h === "optionc" || h === "c"),
     d: header.findIndex((h) => h === "option_d" || h === "optiond" || h === "d"),
-    correct: header.findIndex((h) => h.startsWith("correct")),
+    correct: header.findIndex(
+      (h) => h === "correct_answer" || h.startsWith("correct")
+    ),
     marks: header.findIndex((h) => h === "marks"),
     explanation: header.findIndex((h) => h.startsWith("explanation")),
+    type: header.findIndex((h) => h === "type" || h === "question_type"),
+    category: header.findIndex((h) => h === "category"),
+    negativeMarks: header.findIndex(
+      (h) => h === "negative_marks" || h === "negativemarks" || h === "negative"
+    ),
+    correctText: header.findIndex(
+      (h) => h === "correct_text" || h === "correcttext" || h === "answer_text"
+    ),
   }
 
-  if (idx.question < 0) errors.push("Missing 'question' column.")
-  if (idx.a < 0 || idx.b < 0) errors.push("Need at least option_a and option_b columns.")
-  if (idx.correct < 0) errors.push("Missing 'correct_answer' column.")
-  if (errors.length) return { rows: [], errors }
+  if (idx.question < 0) {
+    return { rows: [], errors: ["Missing 'question' column."] }
+  }
 
   const rows: CsvRow[] = []
   for (let i = 1; i < lines.length; i++) {
@@ -44,6 +76,24 @@ export function parseCsvQuestions(csvText: string): {
       continue
     }
 
+    // ----- Resolve type -----
+    const rawType = (
+      idx.type >= 0 ? cells[idx.type] || "" : ""
+    )
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]/g, "_")
+    const type: QuestionType = rawType ? (rawType as QuestionType) : "MCQ"
+    if (rawType && !VALID_TYPES.includes(type)) {
+      errors.push(
+        `Row ${i + 1}: unsupported type "${rawType}". Must be one of ${VALID_TYPES.join(
+          ", "
+        )}.`
+      )
+      continue
+    }
+
+    // ----- Resolve options -----
     const options: string[] = []
     for (const colIdx of [idx.a, idx.b, idx.c, idx.d]) {
       if (colIdx >= 0) {
@@ -51,31 +101,181 @@ export function parseCsvQuestions(csvText: string): {
         if (opt) options.push(opt)
       }
     }
-    if (options.length < 2) {
-      errors.push(`Row ${i + 1}: needs at least 2 options.`)
+
+    // ----- Type-specific handling -----
+    if (type === "MCQ") {
+      if (options.length < 2) {
+        errors.push(`Row ${i + 1}: MCQ needs at least 2 options.`)
+        continue
+      }
+      const correctAnswer = resolveCorrectAnswer(
+        (cells[idx.correct] || "").trim(),
+        options.length
+      )
+      if (correctAnswer < 0) {
+        errors.push(
+          `Row ${i + 1}: invalid correct_answer "${(cells[idx.correct] || "").trim()}".`
+        )
+        continue
+      }
+      rows.push({
+        question,
+        options,
+        correctAnswer,
+        marks: parseMarks(cells, idx.marks),
+        explanation: parseExplanation(cells, idx.explanation),
+        type,
+        category: parseCategory(cells, idx.category),
+        negativeMarks: parseNegative(cells, idx.negativeMarks),
+      })
       continue
     }
 
-    const rawCorrect = (cells[idx.correct] || "").trim()
-    let correctAnswer = -1
-    if (/^[a-zA-Z]$/.test(rawCorrect)) {
-      correctAnswer = rawCorrect.toUpperCase().charCodeAt(0) - 65
-    } else if (/^\d+$/.test(rawCorrect)) {
-      correctAnswer = parseInt(rawCorrect, 10) - 1 // 1-based -> 0-based
-    }
-    if (correctAnswer < 0 || correctAnswer >= options.length) {
-      errors.push(`Row ${i + 1}: invalid correct_answer "${rawCorrect}".`)
+    if (type === "TRUE_FALSE") {
+      // Auto-generate the True/False options if the admin didn't supply them.
+      const tfOptions =
+        options.length === 2 &&
+        options[0].toLowerCase() === "true" &&
+        options[1].toLowerCase() === "false"
+          ? options
+          : ["True", "False"]
+      const correctAnswer = resolveTrueFalse(
+        (cells[idx.correct] || "").trim()
+      )
+      if (correctAnswer < 0) {
+        errors.push(
+          `Row ${i + 1}: TRUE_FALSE needs a correct_answer of "true" or "false" (or A/B, 0/1).`
+        )
+        continue
+      }
+      rows.push({
+        question,
+        options: tfOptions,
+        correctAnswer,
+        marks: parseMarks(cells, idx.marks),
+        explanation: parseExplanation(cells, idx.explanation),
+        type,
+        category: parseCategory(cells, idx.category),
+        negativeMarks: parseNegative(cells, idx.negativeMarks),
+      })
       continue
     }
 
-    const marks = idx.marks >= 0 ? parseInt(cells[idx.marks] || "1", 10) || 1 : 1
-    const explanation =
-      idx.explanation >= 0 ? cells[idx.explanation]?.trim() || undefined : undefined
+    if (type === "FILL_BLANK" || type === "CODING") {
+      // correct_answer column is ignored; pull the answer / solution from
+      // correct_text (or, fallback, from option_a).
+      const fromCol = idx.correctText >= 0 ? cells[idx.correctText]?.trim() : ""
+      const fromOpt = options[0] || ""
+      const correctText = (fromCol || fromOpt || "").trim()
+      if (!correctText) {
+        errors.push(
+          `Row ${i + 1}: ${type} needs a correct_text (or option_a) value.`
+        )
+        continue
+      }
+      rows.push({
+        question,
+        options: [],
+        correctAnswer: -1,
+        marks: parseMarks(cells, idx.marks),
+        explanation: parseExplanation(cells, idx.explanation),
+        type,
+        category: parseCategory(cells, idx.category),
+        negativeMarks: parseNegative(cells, idx.negativeMarks),
+        correctText,
+      })
+      continue
+    }
 
-    rows.push({ question, options, correctAnswer, marks, explanation })
+    if (type === "MATCHING") {
+      // Pairs are encoded as alternating left/right columns:
+      //   option_a=left1, option_b=right1, option_c=left2, option_d=right2
+      const leftCols = [idx.a, idx.c].filter((c) => c >= 0)
+      const rightCols = [idx.b, idx.d].filter((c) => c >= 0)
+      const pairCount = Math.min(leftCols.length, rightCols.length)
+      const pairs: { left: string; right: string }[] = []
+      for (let p = 0; p < pairCount; p++) {
+        const left = (cells[leftCols[p]] || "").trim()
+        const right = (cells[rightCols[p]] || "").trim()
+        if (left || right) pairs.push({ left, right })
+      }
+      if (pairs.length < 2) {
+        errors.push(
+          `Row ${i + 1}: MATCHING needs at least 2 pairs (option_a/b + option_c/d).`
+        )
+        continue
+      }
+      if (pairs.some((p) => !p.left || !p.right)) {
+        errors.push(
+          `Row ${i + 1}: MATCHING pairs must have both a left and right value.`
+        )
+        continue
+      }
+      // Encode pairs as JSON in correctText so the import route can persist
+      // them on the question row (the backend, updated in parallel, will read
+      // matchPairs from this field when type=MATCHING).
+      rows.push({
+        question,
+        options: [],
+        correctAnswer: -1,
+        marks: parseMarks(cells, idx.marks),
+        explanation: parseExplanation(cells, idx.explanation),
+        type,
+        category: parseCategory(cells, idx.category),
+        negativeMarks: parseNegative(cells, idx.negativeMarks),
+        correctText: JSON.stringify(pairs),
+      })
+      continue
+    }
   }
 
   return { rows, errors }
+}
+
+/** Resolve a letter (A/B/C/D) or 1-based index into a 0-based option index. */
+function resolveCorrectAnswer(raw: string, optionCount: number): number {
+  if (!raw) return -1
+  if (/^[a-zA-Z]$/.test(raw)) {
+    const idx = raw.toUpperCase().charCodeAt(0) - 65
+    return idx >= 0 && idx < optionCount ? idx : -1
+  }
+  if (/^\d+$/.test(raw)) {
+    const idx = parseInt(raw, 10) - 1 // 1-based -> 0-based
+    return idx >= 0 && idx < optionCount ? idx : -1
+  }
+  return -1
+}
+
+/** Resolve TRUE/FALSE / A/B / 0/1 into a 0/1 index for the True/False options. */
+function resolveTrueFalse(raw: string): number {
+  const v = raw.toLowerCase()
+  if (v === "true" || v === "t" || v === "a" || v === "0") return 0
+  if (v === "false" || v === "f" || v === "b" || v === "1") return 1
+  return -1
+}
+
+function parseMarks(cells: string[], idx: number): number | undefined {
+  if (idx < 0) return undefined
+  const v = parseInt(cells[idx] || "1", 10)
+  return Number.isFinite(v) && v > 0 ? v : 1
+}
+
+function parseExplanation(cells: string[], idx: number): string | undefined {
+  if (idx < 0) return undefined
+  const v = cells[idx]?.trim()
+  return v || undefined
+}
+
+function parseCategory(cells: string[], idx: number): string | undefined {
+  if (idx < 0) return undefined
+  const v = cells[idx]?.trim()
+  return v || undefined
+}
+
+function parseNegative(cells: string[], idx: number): number | undefined {
+  if (idx < 0) return undefined
+  const v = parseFloat(cells[idx] || "0")
+  return Number.isFinite(v) && v > 0 ? v : 0
 }
 
 /** Split CSV text into rows of cells (handles quoted fields, escaped quotes, newlines). */
@@ -136,9 +336,20 @@ function splitCsvLines(text: string): string[][] {
 }
 
 export function buildCsvTemplate(): string {
-  return [
-    "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation",
-    "What is the capital of France?,London,Paris,Berlin,Madrid,B,1,Paris is the capital of France.",
-    "Which planet is known as the Red Planet?,Venus,Mars,Jupiter,Saturn,B,1,Mars appears red due to iron oxide.",
-  ].join("\n")
+  const header =
+    "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation,type,category,negative_marks"
+  const rows = [
+    // MCQ — classic 4-option layout, B is correct.
+    '"What is the capital of France?","London","Paris","Berlin","Madrid","B",1,"Paris is the capital of France.","MCQ","Geography",0',
+    // TRUE_FALSE — options auto-generated; correct_answer uses true/false.
+    '"The Earth revolves around the Sun.",,,,,true,1,"Heliocentric model.","TRUE_FALSE","Astronomy",0.25',
+    // FILL_BLANK — the answer is in option_a (mapped to correct_text); the
+    // correct_answer column is ignored for this type.
+    '"The chemical symbol for water is ____.","H2O",,,,,1,"Two hydrogen + one oxygen.","FILL_BLANK","Chemistry",0',
+    // MATCHING — pairs are encoded in option_a/b + option_c/d.
+    '"Match the country to its capital.","France","Paris","Japan","Tokyo",,1,"Two pairs.","MATCHING","Geography",0',
+    // CODING — reference solution goes in option_a (mapped to correct_text).
+    '"Write a function that returns 4.","function four() { return 4; }",,,,,2,"Trivial implementation.","CODING","Programming",0',
+  ]
+  return [header, ...rows].join("\n")
 }

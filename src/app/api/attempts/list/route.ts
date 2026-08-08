@@ -33,29 +33,42 @@ export async function GET(req: NextRequest) {
             select: { id: true, title: true },
           },
           quizLink: {
-            select: { slug: true },
+            select: { slug: true, publishResults: true },
           },
         },
       });
 
-      const data = attempts.map((a) => ({
-        id: a.id,
-        status: a.status,
-        score: a.score,
-        totalMarks: a.totalMarks,
-        percentage: a.percentage,
-        passed: a.passed,
-        timeTaken: a.timeTaken,
-        tabSwitches: a.tabSwitches,
-        fullscreenExits: a.fullscreenExits,
-        copyAttempts: a.copyAttempts,
-        rightClicks: a.rightClicks,
-        startedAt: a.startedAt,
-        completedAt: a.completedAt,
-        user: a.user,
-        event: a.event,
-        quizLink: a.quizLink,
-      }));
+      const data = attempts.map((a) => {
+        // For admin view: "published" = publishResults false (instant) OR publishedAt set.
+        const published =
+          !a.quizLink.publishResults || a.publishedAt !== null;
+        return {
+          id: a.id,
+          status: a.status,
+          score: a.score,
+          totalMarks: a.totalMarks,
+          percentage: a.percentage,
+          passed: a.passed,
+          timeTaken: a.timeTaken,
+          tabSwitches: a.tabSwitches,
+          fullscreenExits: a.fullscreenExits,
+          copyAttempts: a.copyAttempts,
+          rightClicks: a.rightClicks,
+          devtoolsOpen: a.devtoolsOpen,
+          screenshotAttempts: a.screenshotAttempts,
+          keyboardViolations: a.keyboardViolations,
+          faceNotDetected: a.faceNotDetected,
+          multiFaceAlerts: a.multiFaceAlerts,
+          lookAwayAlerts: a.lookAwayAlerts,
+          startedAt: a.startedAt,
+          completedAt: a.completedAt,
+          publishedAt: a.publishedAt ? a.publishedAt.toISOString() : null,
+          published,
+          user: a.user,
+          event: a.event,
+          quizLink: a.quizLink,
+        };
+      });
 
       return NextResponse.json({ attempts: data, total: data.length });
     }
@@ -70,28 +83,39 @@ export async function GET(req: NextRequest) {
           select: { id: true, title: true },
         },
         quizLink: {
-          select: { slug: true },
+          select: { slug: true, publishResults: true },
         },
       },
     });
 
-    const data = attempts.map((a) => ({
-      id: a.id,
-      status: a.status,
-      score: a.score,
-      totalMarks: a.totalMarks,
-      percentage: a.percentage,
-      passed: a.passed,
-      timeTaken: a.timeTaken,
-      tabSwitches: a.tabSwitches,
-      fullscreenExits: a.fullscreenExits,
-      copyAttempts: a.copyAttempts,
-      rightClicks: a.rightClicks,
-      startedAt: a.startedAt,
-      completedAt: a.completedAt,
-      event: a.event,
-      quizLink: a.quizLink,
-    }));
+    const data = attempts.map((a) => {
+      const published = !a.quizLink.publishResults || a.publishedAt !== null;
+      return {
+        id: a.id,
+        status: a.status,
+        score: a.score,
+        totalMarks: a.totalMarks,
+        percentage: a.percentage,
+        passed: a.passed,
+        timeTaken: a.timeTaken,
+        tabSwitches: a.tabSwitches,
+        fullscreenExits: a.fullscreenExits,
+        copyAttempts: a.copyAttempts,
+        rightClicks: a.rightClicks,
+        devtoolsOpen: a.devtoolsOpen,
+        screenshotAttempts: a.screenshotAttempts,
+        keyboardViolations: a.keyboardViolations,
+        faceNotDetected: a.faceNotDetected,
+        multiFaceAlerts: a.multiFaceAlerts,
+        lookAwayAlerts: a.lookAwayAlerts,
+        startedAt: a.startedAt,
+        completedAt: a.completedAt,
+        publishedAt: a.publishedAt ? a.publishedAt.toISOString() : null,
+        published,
+        event: a.event,
+        quizLink: a.quizLink,
+      };
+    });
 
     return NextResponse.json({ attempts: data, total: data.length });
   } catch (error) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import {
@@ -12,7 +12,12 @@ import {
   Maximize,
   Send,
   ShieldAlert,
+  ShieldCheck,
   ListChecks,
+  Flag,
+  Camera,
+  CameraOff,
+  Eye,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -38,19 +43,38 @@ import { Separator } from "@/components/ui/separator"
 
 import { cn } from "@/lib/utils"
 import { useAntiCheat } from "@/hooks/use-anti-cheat"
+import { useAiProctor } from "@/hooks/use-ai-proctor"
 import { api } from "@/components/student/api"
 import type {
   PublicQuestion,
+  SecurityConfig,
   StartAttemptResponse,
   SubmitAttemptResponse,
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
 import { QuizTimer } from "./quiz-timer"
 import { QuestionNavigator } from "./question-navigator"
-import { QuestionCard } from "./question-card"
+import { QuestionCard, type QuestionAnswer } from "./question-card"
 import { QuizResults } from "./quiz-results"
+import { WatermarkOverlay } from "./watermark-overlay"
+import { SecuritySidebar, type SecurityMetrics } from "./security-sidebar"
 
 type RunnerStatus = "loading" | "active" | "submitting" | "done" | "error"
+
+const DEFAULT_SECURITY: SecurityConfig = {
+  autoSubmitOnExit: false,
+  tabSwitchDetection: false,
+  copyPasteBlocking: false,
+  rightClickDisable: false,
+  keyboardShortcutBlocking: false,
+  devtoolsDetection: false,
+  antiScreenshot: false,
+  watermarkOverlay: false,
+  aiProctor: false,
+  aiProctorFaceDetection: false,
+  aiProctorMultiFace: false,
+  aiProctorLookAway: false,
+}
 
 interface QuizRunnerProps {
   quizLinkId: string
@@ -72,6 +96,7 @@ export function QuizRunner({
   requireFullscreen,
   timeLimit,
   quizTitle = "Quiz",
+  user,
   onExit,
 }: QuizRunnerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -85,7 +110,11 @@ export function QuizRunner({
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [questions, setQuestions] = useState<PublicQuestion[]>([])
   const [totalMarks, setTotalMarks] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, number>>({})
+  const [security, setSecurity] = useState<SecurityConfig>(DEFAULT_SECURITY)
+  const [answers, setAnswers] = useState<
+    Record<string, QuestionAnswer>
+  >({})
+  const [flagged, setFlagged] = useState<string[]>([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [direction, setDirection] = useState(1)
   const [secondsLeft, setSecondsLeft] = useState(timeLimit * 60)
@@ -95,7 +124,13 @@ export function QuizRunner({
   const [fullscreenBlocked, setFullscreenBlocked] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [securityOpen, setSecurityOpen] = useState(true)
+  const [securitySheetOpen, setSecuritySheetOpen] = useState(false)
   const [submitResult, setSubmitResult] = useState<SubmitAttemptResponse | null>(null)
+
+  // AI proctor permission gate state.
+  const [cameraGateOpen, setCameraGateOpen] = useState(false)
+  const [proctorBypassed, setProctorBypassed] = useState(false)
 
   const totalSeconds = timeLimit * 60
 
@@ -113,6 +148,11 @@ export function QuizRunner({
         setQuestions(data.questions)
         setTotalMarks(data.totalMarks)
         setSecondsLeft((data.timeLimit || timeLimit) * 60)
+        setSecurity(data.security ?? DEFAULT_SECURITY)
+        // If AI proctor is enabled, open the camera gate before activating.
+        if (data.security?.aiProctor) {
+          setCameraGateOpen(true)
+        }
         setStatus("active")
       } catch (e) {
         if (cancelled) return
@@ -124,42 +164,61 @@ export function QuizRunner({
     return () => {
       cancelled = true
     }
-  }, [quizLinkId])
+  }, [quizLinkId, timeLimit])
 
   // ----- Anti-cheat callbacks (stable via useCallback) -----
-  const handleTabSwitch = useCallback(() => {
-    toast.warning("Tab switch detected!", {
-      description: "Switching tabs is logged and may affect your score.",
+  const handleAutoSubmit = useCallback(() => {
+    toast.error("Auto-submitting quiz", {
+      description: "You exited fullscreen and did not return in time.",
     })
-  }, [])
-
-  const handleFullscreenExit = useCallback(() => {
-    if (!requireFullscreen) return
-    toast.warning("Please stay in fullscreen!", {
-      description: "Re-enter fullscreen to continue properly.",
-    })
-  }, [requireFullscreen])
-
-  const handleCopyAttempt = useCallback(() => {
-    toast.warning("Copying is disabled!", {
-      description: "This action has been logged.",
-    })
-  }, [])
-
-  const handleRightClick = useCallback(() => {
-    toast.warning("Right-click is disabled!", {
-      description: "This action has been logged.",
-    })
+    void doSubmitRef.current?.(false)
   }, [])
 
   const counters = useAntiCheat({
-    enabled: status === "active",
+    enabled: status === "active" && !cameraGateOpen,
+    config: security,
     warnBeforeUnload: status === "active",
-    onTabSwitch: handleTabSwitch,
-    onFullscreenExit: handleFullscreenExit,
-    onCopyAttempt: handleCopyAttempt,
-    onRightClick: handleRightClick,
+    onAutoSubmit: handleAutoSubmit,
   })
+
+  // ----- AI proctor — only mounted when security.aiProctor is true AND the
+  //       student has either granted camera permission or chosen to bypass.
+  //       We pass `enabled = aiProctor && !proctorBypassed` so the hook stops
+  //       the camera stream if the student later chooses to bypass.
+  const aiProctor = useAiProctor({
+    enabled:
+      security.aiProctor && !cameraGateOpen && !proctorBypassed && status === "active",
+    faceDetection: security.aiProctorFaceDetection,
+    multiFace: security.aiProctorMultiFace,
+    lookAway: security.aiProctorLookAway,
+  })
+
+  // If the proctor hook reports a camera error after the gate was closed,
+  // surface it as a non-blocking toast.
+  useEffect(() => {
+    if (aiProctor.error && status === "active") {
+      toast.error("AI proctor error", {
+        description: aiProctor.error,
+      })
+    }
+  }, [aiProctor.error, status])
+
+  // ----- Combined metrics object for the sidebar -----
+  const combinedMetrics: SecurityMetrics = useMemo(
+    () => ({
+      tabSwitches: counters.tabSwitches,
+      fullscreenExits: counters.fullscreenExits,
+      copyAttempts: counters.copyAttempts,
+      rightClicks: counters.rightClicks,
+      devtoolsOpen: counters.devtoolsOpen,
+      screenshotAttempts: counters.screenshotAttempts,
+      keyboardViolations: counters.keyboardViolations,
+      faceNotDetected: aiProctor.faceNotDetected,
+      multiFaceAlerts: aiProctor.multiFaceAlerts,
+      lookAwayAlerts: aiProctor.lookAwayAlerts,
+    }),
+    [counters, aiProctor],
+  )
 
   // ----- Track fullscreen state -----
   useEffect(() => {
@@ -194,7 +253,7 @@ export function QuizRunner({
       }
     }, 250)
     return () => clearInterval(id)
-  }, [timerStarted, status, timeLimit])
+  }, [timerStarted, status, timeLimit, totalSeconds])
 
   // ----- Submit logic -----
   const doSubmit = useCallback(
@@ -216,6 +275,13 @@ export function QuizRunner({
             fullscreenExits: counters.fullscreenExits,
             copyAttempts: counters.copyAttempts,
             rightClicks: counters.rightClicks,
+            devtoolsOpen: counters.devtoolsOpen,
+            screenshotAttempts: counters.screenshotAttempts,
+            keyboardViolations: counters.keyboardViolations,
+            faceNotDetected: aiProctor.faceNotDetected,
+            multiFaceAlerts: aiProctor.multiFaceAlerts,
+            lookAwayAlerts: aiProctor.lookAwayAlerts,
+            flaggedQuestions: flagged,
             timeTaken,
           }),
         })
@@ -234,7 +300,22 @@ export function QuizRunner({
         })
       }
     },
-    [attemptId, answers, counters, totalSeconds],
+    [
+      attemptId,
+      answers,
+      counters.tabSwitches,
+      counters.fullscreenExits,
+      counters.copyAttempts,
+      counters.rightClicks,
+      counters.devtoolsOpen,
+      counters.screenshotAttempts,
+      counters.keyboardViolations,
+      aiProctor.faceNotDetected,
+      aiProctor.multiFaceAlerts,
+      aiProctor.lookAwayAlerts,
+      flagged,
+      totalSeconds,
+    ],
   )
 
   // Keep doSubmitRef in sync so the timer interval always invokes the latest
@@ -263,13 +344,32 @@ export function QuizRunner({
     setSheetOpen(false)
   }
 
-  const selectOption = (idx: number) => {
-    if (!questions[currentIdx]) return
-    setAnswers((a) => ({ ...a, [questions[currentIdx].id]: idx }))
-  }
+  const handleAnswer = useCallback(
+    (qId: string, value: QuestionAnswer) => {
+      setAnswers((a) => ({ ...a, [qId]: value }))
+    },
+    [],
+  )
 
-  const answeredArr = questions.map((q) => answers[q.id] !== undefined)
+  const toggleFlag = useCallback((qId: string) => {
+    setFlagged((prev) =>
+      prev.includes(qId) ? prev.filter((id) => id !== qId) : [...prev, qId],
+    )
+  }, [])
+
+  const answeredArr = questions.map((q) => {
+    const a = answers[q.id]
+    if (a === undefined || a === null) return false
+    if (typeof a === "string") return a.trim().length > 0
+    if (typeof a === "number") return true
+    if (typeof a === "object") {
+      // MATCHING — answered if at least one pair is set.
+      return Object.keys(a).length > 0
+    }
+    return false
+  })
   const answeredCount = answeredArr.filter(Boolean).length
+  const flaggedArr = questions.map((q) => flagged.includes(q.id))
 
   // ----- Fullscreen control -----
   const enterFullscreen = async () => {
@@ -301,6 +401,30 @@ export function QuizRunner({
     setAwaitingFullscreen(false)
     setTimerStarted(true)
     setFullscreenBlocked(true)
+  }
+
+  // ----- Camera gate handlers (AI proctor permission flow) -----
+  const handleCameraGranted = () => {
+    setCameraGateOpen(false)
+    toast.success("AI proctoring active", {
+      description: "Camera access granted. Stay visible to the camera.",
+    })
+  }
+
+  const handleCameraError = () => {
+    // The proctor hook will set `aiProctor.error` — surface a softer prompt.
+    toast.warning("Camera unavailable", {
+      description:
+        "AI proctoring is inactive. You can continue but the quiz will be flagged for manual review.",
+    })
+  }
+
+  const handleContinueWithoutProctor = () => {
+    setProctorBypassed(true)
+    setCameraGateOpen(false)
+    toast.warning("Continuing without AI proctor", {
+      description: "Your attempt will be flagged for manual review.",
+    })
   }
 
   // ----- Render: loading -----
@@ -364,7 +488,7 @@ export function QuizRunner({
 
   // ----- Render: results -----
   if (status === "done" && submitResult && submitResult.showResults && attemptId) {
-    return <QuizResults attemptId={attemptId} onBack={onExit} />
+    return <QuizResults attemptId={attemptId} user={user} onBack={onExit} />
   }
 
   // ----- Render: submitting -----
@@ -390,6 +514,13 @@ export function QuizRunner({
       ref={containerRef}
       className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
     >
+      {/* Watermark overlay — always rendered as a sibling of the quiz content.
+          Renders nothing when security.watermarkOverlay is false. */}
+      <WatermarkOverlay
+        email={user.email}
+        enabled={security.watermarkOverlay && status === "active"}
+      />
+
       {/* Sticky top bar */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:gap-4">
@@ -401,6 +532,14 @@ export function QuizRunner({
             >
               {quizTitle}
             </span>
+            {flagged.length > 0 && (
+              <Badge
+                variant="outline"
+                className="hidden gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 sm:inline-flex"
+              >
+                <Flag className="size-3" /> {flagged.length} flagged
+              </Badge>
+            )}
           </div>
           <QuizTimer secondsLeft={secondsLeft} total={totalSeconds} />
           <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
@@ -436,8 +575,8 @@ export function QuizRunner({
         </div>
       )}
 
-      {/* Main content */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8">
+      {/* Main content — 3-column layout on xl: questions + navigator + security */}
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-7xl">
         {/* Question column */}
         <section className="flex flex-1 flex-col">
           <Card className="flex-1">
@@ -457,8 +596,10 @@ export function QuizRunner({
                       index={currentIdx}
                       total={questions.length}
                       question={currentQ}
-                      selected={currentQ ? answers[currentQ.id] : undefined}
-                      onSelect={selectOption}
+                      answer={answers[currentQ.id]}
+                      onAnswer={(v) => handleAnswer(currentQ.id, v)}
+                      isFlagged={flagged.includes(currentQ.id)}
+                      onToggleFlag={() => toggleFlag(currentQ.id)}
                     />
                   </motion.div>
                 )}
@@ -493,8 +634,8 @@ export function QuizRunner({
           </div>
         </section>
 
-        {/* Desktop navigator sidebar */}
-        <aside className="hidden w-64 shrink-0 lg:block">
+        {/* Desktop navigator sidebar (lg+) */}
+        <aside className="hidden w-64 shrink-0 lg:block xl:hidden">
           <Card className="sticky top-24">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -511,15 +652,41 @@ export function QuizRunner({
                 total={questions.length}
                 current={currentIdx}
                 answered={answeredArr}
+                flagged={flaggedArr}
                 onJump={jumpTo}
               />
             </CardContent>
           </Card>
         </aside>
+
+        {/* Security sidebar (xl+) */}
+        <SecuritySidebar
+          metrics={combinedMetrics}
+          config={security}
+          isOpen={securityOpen}
+          onToggle={() => setSecurityOpen((v) => !v)}
+          proctor={
+            security.aiProctor
+              ? {
+                  isReady: aiProctor.isReady,
+                  error: aiProctor.error,
+                }
+              : null
+          }
+          videoRef={aiProctor.videoRef}
+        />
       </main>
 
-      {/* Mobile navigator floating button */}
-      <div className="fixed bottom-4 right-4 z-20 lg:hidden">
+      {/* Mobile floating buttons: question navigator + security monitor */}
+      <div className="fixed bottom-4 right-4 z-20 flex flex-col gap-2 lg:hidden">
+        <Button
+          onClick={() => setSecuritySheetOpen(true)}
+          className="rounded-full bg-slate-700 text-white shadow-lg hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+          size="icon"
+          aria-label="Open security monitor"
+        >
+          <ShieldCheck className="size-5" />
+        </Button>
         <Button
           onClick={() => setSheetOpen(true)}
           className="rounded-full bg-emerald-600 text-white shadow-lg hover:bg-emerald-700"
@@ -530,7 +697,7 @@ export function QuizRunner({
         </Button>
       </div>
 
-      {/* Mobile navigator sheet */}
+      {/* Mobile question navigator sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
           <SheetHeader>
@@ -548,7 +715,34 @@ export function QuizRunner({
               total={questions.length}
               current={currentIdx}
               answered={answeredArr}
+              flagged={flaggedArr}
               onJump={jumpTo}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Mobile security sheet — body mirrors the desktop sidebar */}
+      <Sheet open={securitySheetOpen} onOpenChange={setSecuritySheetOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-emerald-600" /> Security Monitor
+            </SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-6 pt-2">
+            <SecuritySidebarBodyInline
+              metrics={combinedMetrics}
+              config={security}
+              proctor={
+                security.aiProctor
+                  ? {
+                      isReady: aiProctor.isReady,
+                      error: aiProctor.error,
+                    }
+                  : null
+              }
+              videoRef={aiProctor.videoRef}
             />
           </div>
         </SheetContent>
@@ -570,18 +764,60 @@ export function QuizRunner({
                 timer will start once you enter fullscreen.
               </p>
               <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                  Tab switches, copying, and right-clicks are logged.
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                  Exiting fullscreen will be recorded as a flag.
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                  Your IP and device info will be logged.
-                </li>
+                {security.tabSwitchDetection && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Tab switches are logged.
+                  </li>
+                )}
+                {security.copyPasteBlocking && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Copy / paste is blocked.
+                  </li>
+                )}
+                {security.rightClickDisable && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Right-click is disabled.
+                  </li>
+                )}
+                {security.devtoolsDetection && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Developer tools detection is active.
+                  </li>
+                )}
+                {security.antiScreenshot && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Screenshots are blocked.
+                  </li>
+                )}
+                {security.keyboardShortcutBlocking && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Browser keyboard shortcuts are blocked.
+                  </li>
+                )}
+                {security.aiProctor && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    AI proctoring is enabled (camera required).
+                  </li>
+                )}
+                {security.watermarkOverlay && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    A watermark with your email will be overlaid on the screen.
+                  </li>
+                )}
+                {security.autoSubmitOnExit && (
+                  <li className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                    Exiting fullscreen will auto-submit after 3 seconds.
+                  </li>
+                )}
               </ul>
               <div className="space-y-2">
                 <Button
@@ -605,6 +841,19 @@ export function QuizRunner({
         </div>
       )}
 
+      {/* AI Proctor camera permission gate — shown when security.aiProctor is
+          on and the camera hasn't been authorized yet. The gate prevents the
+          quiz from being interactable until the student either grants camera
+          access or chooses to continue without AI proctor (which logs the
+          bypass). */}
+      {cameraGateOpen && status === "active" && (
+        <CameraPermissionGate
+          onGranted={handleCameraGranted}
+          onError={handleCameraError}
+          onContinueWithout={handleContinueWithoutProctor}
+        />
+      )}
+
       {/* Submit confirmation dialog */}
       <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
         <AlertDialogContent>
@@ -621,6 +870,11 @@ export function QuizRunner({
                   {questions.length - answeredCount} unanswered.
                 </span>
               )}{" "}
+              {flagged.length > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {flagged.length} flagged for review.
+                </span>
+              )}{" "}
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -635,6 +889,215 @@ export function QuizRunner({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Camera permission gate — rendered as a sibling overlay when AI proctor
+// requires camera authorization. Tries getUserMedia directly; on success
+// notifies the parent via onGranted (the parent then unmounts the gate, and
+// the useAiProctor hook re-opens the stream).
+// ---------------------------------------------------------------------------
+function CameraPermissionGate({
+  onGranted,
+  onError,
+  onContinueWithout,
+}: {
+  onGranted: () => void
+  onError: () => void
+  onContinueWithout: () => void
+}) {
+  const [checking, setChecking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const requestCamera = async () => {
+    setChecking(true)
+    setError(null)
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera API not supported in this browser")
+      }
+      // Request the stream just to confirm permission. The useAiProctor hook
+      // will re-request it (browser caches the grant) when the gate closes.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240, facingMode: "user" },
+        audio: false,
+      })
+      // Stop tracks immediately — the hook will reopen its own stream.
+      stream.getTracks().forEach((t) => t.stop())
+      onGranted()
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to access camera"
+      setError(msg)
+      onError()
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
+            <Camera className="size-8 text-emerald-600" />
+          </div>
+          <CardTitle className="text-xl">Camera access required</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            This quiz uses AI proctoring. Your camera will be used to verify your
+            identity and detect potential academic dishonesty. No video is
+            recorded or transmitted — all analysis runs locally in your browser.
+          </p>
+          <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+              Face presence is checked periodically.
+            </li>
+            <li className="flex items-start gap-2">
+              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+              Multiple faces in frame trigger an alert.
+            </li>
+            <li className="flex items-start gap-2">
+              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+              Looking away from the screen is logged.
+            </li>
+          </ul>
+          {error && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              {error}
+            </p>
+          )}
+          <div className="space-y-2">
+            <Button
+              onClick={requestCamera}
+              disabled={checking}
+              className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              {checking ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Camera className="size-4" />
+              )}
+              {checking ? "Requesting…" : "Grant camera access"}
+            </Button>
+            <Button
+              onClick={onContinueWithout}
+              variant="outline"
+              className="w-full gap-1.5"
+            >
+              <CameraOff className="size-4" /> Continue without AI proctor
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Local helper that renders the body of the mobile security Sheet. The
+// SecuritySidebar component renders its own Sheet controlled by its `isOpen`
+// prop — but on mobile we want a separate Sheet that the floating button
+// controls. This inline duplicate keeps it simple and avoids circular refs.
+// ---------------------------------------------------------------------------
+function SecuritySidebarBodyInline({
+  metrics,
+  config,
+  proctor,
+  videoRef,
+}: {
+  metrics: SecurityMetrics
+  config: SecurityConfig
+  proctor: { isReady: boolean; error: string | null } | null
+  videoRef?: React.RefObject<HTMLVideoElement | null>
+}) {
+  const faceStatus: "ok" | "warn" | "off" = proctor
+    ? proctor.error
+      ? "off"
+      : proctor.isReady && metrics.faceNotDetected === 0
+        ? "ok"
+        : "warn"
+    : "off"
+  return (
+    <div className="space-y-3">
+      {config.aiProctor && proctor && (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900 dark:border-slate-700">
+          <div className="relative aspect-video w-full bg-black">
+            <video
+              ref={videoRef}
+              className="size-full object-cover"
+              muted
+              playsInline
+              autoPlay
+            />
+            <div className="absolute left-1.5 top-1.5">
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "gap-1 px-1.5 py-0.5 text-[10px] font-semibold",
+                  faceStatus === "ok"
+                    ? "bg-emerald-500/90 text-white"
+                    : faceStatus === "warn"
+                      ? "bg-amber-500/90 text-white"
+                      : "bg-red-500/90 text-white",
+                )}
+              >
+                <Camera className="size-3" />
+                {proctor.error
+                  ? "OFFLINE"
+                  : proctor.isReady
+                    ? "LIVE"
+                    : "…"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      )}
+      <Separator />
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <Metric label="Tab switches" value={metrics.tabSwitches} active={config.tabSwitchDetection} />
+        <Metric label="Fullscreen exits" value={metrics.fullscreenExits} active />
+        <Metric label="Copy attempts" value={metrics.copyAttempts} active={config.copyPasteBlocking} />
+        <Metric label="Right-clicks" value={metrics.rightClicks} active={config.rightClickDisable} />
+        <Metric label="DevTools opened" value={metrics.devtoolsOpen} active={config.devtoolsDetection} />
+        <Metric label="Screenshots" value={metrics.screenshotAttempts} active={config.antiScreenshot} />
+        <Metric label="Keyboard violations" value={metrics.keyboardViolations} active={config.keyboardShortcutBlocking} />
+        {config.aiProctor && (
+          <>
+            <Metric label="Face not detected" value={metrics.faceNotDetected} active={config.aiProctorFaceDetection} />
+            <Metric label="Multi-face alerts" value={metrics.multiFaceAlerts} active={config.aiProctorMultiFace} />
+            <Metric label="Look-aways" value={metrics.lookAwayAlerts} active={config.aiProctorLookAway} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Metric({
+  label,
+  value,
+  active,
+}: {
+  label: string
+  value: number
+  active: boolean
+}) {
+  if (!active) return null
+  const tone =
+    value === 0
+      ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+      : value <= 3
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+        : "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+  return (
+    <div className={cn("flex items-center justify-between rounded-md px-2 py-1.5", tone)}>
+      <span className="truncate">{label}</span>
+      <span className="tabular-nums font-semibold">{value}</span>
     </div>
   )
 }

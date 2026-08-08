@@ -3,7 +3,12 @@
 import { create } from "zustand"
 import type { SafeUser, ViewName, AdminTab } from "@/types"
 
-export type StudentSubView = "dashboard" | "quiz-start" | "quiz-runner"
+export type StudentSubView =
+  | "dashboard"
+  | "quiz-start"
+  | "quiz-runner"
+  | "leaderboard"
+  | "results"
 export type QuizPhase = "start" | "active" | "done"
 
 export interface QuizMeta {

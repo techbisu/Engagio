@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { parseJsonArray } from "@/lib/utils";
+import type { MatchPair } from "@/types";
 
 export async function GET(
   req: NextRequest,
@@ -11,10 +12,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
     const { id } = await params;
@@ -31,6 +29,7 @@ export async function GET(
             passThreshold: true,
             showResults: true,
             requireFullscreen: true,
+            publishResults: true,
             eventId: true,
           },
         },
@@ -41,10 +40,7 @@ export async function GET(
     });
 
     if (!attempt) {
-      return NextResponse.json(
-        { error: "Attempt not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
     }
 
     const isAdmin = session.user.role === "ADMIN";
@@ -53,6 +49,7 @@ export async function GET(
     }
 
     const questionOrder = parseJsonArray<string>(attempt.questionOrder);
+    const flaggedQuestions = parseJsonArray<string>(attempt.flaggedQuestions);
 
     // Fetch all questions referenced in this attempt
     const questions = await db.question.findMany({
@@ -65,18 +62,31 @@ export async function GET(
 
     // --- IN_PROGRESS: return questions without correctAnswer (resume view) ---
     if (attempt.status === "IN_PROGRESS") {
-      const publicQuestions = orderedQuestions.map((q, idx) => ({
-        id: q.id,
-        question: q.question,
-        options: parseJsonArray<string>(q.options),
-        marks: q.marks,
-        order: idx,
-      }));
+      const publicQuestions = orderedQuestions.map((q, idx) => {
+        let matchPairs: MatchPair[] | null = null;
+        if (q.matchPairs) {
+          try {
+            const parsed = JSON.parse(q.matchPairs);
+            matchPairs = Array.isArray(parsed) ? parsed : null;
+          } catch {
+            matchPairs = null;
+          }
+        }
+        return {
+          id: q.id,
+          question: q.question,
+          type: q.type ?? "MCQ",
+          options: parseJsonArray<string>(q.options),
+          matchPairs,
+          codeLanguage: q.codeLanguage ?? null,
+          marks: q.marks,
+          negativeMarks: q.negativeMarks ?? 0,
+          category: q.category ?? null,
+          order: idx,
+        };
+      });
 
-      const totalMarks = orderedQuestions.reduce(
-        (sum, q) => sum + q.marks,
-        0
-      );
+      const totalMarks = orderedQuestions.reduce((sum, q) => sum + q.marks, 0);
 
       return NextResponse.json({
         attemptId: attempt.id,
@@ -84,6 +94,7 @@ export async function GET(
         startedAt: attempt.startedAt,
         questionOrder,
         questions: publicQuestions,
+        flaggedQuestions,
         totalQuestions: orderedQuestions.length,
         totalMarks,
         timeLimit: attempt.quizLink.timeLimit,
@@ -95,38 +106,167 @@ export async function GET(
     }
 
     // --- COMPLETED / TIMEOUT / CHEAT_DETECTED: review payload ---
-    const answers = attempt.answers
-      ? (() => {
-          try {
-            const parsed = JSON.parse(attempt.answers);
-            return typeof parsed === "object" && parsed !== null
-              ? (parsed as Record<string, number>)
-              : {};
-          } catch {
-            return {};
-          }
-        })()
-      : {};
+    const answers: Record<string, number | string | Record<string, string>> =
+      attempt.answers
+        ? (() => {
+            try {
+              const parsed = JSON.parse(attempt.answers);
+              return typeof parsed === "object" && parsed !== null ? parsed : {};
+            } catch {
+              return {};
+            }
+          })()
+        : {};
 
     const reviewQuestions = orderedQuestions.map((q, idx) => {
       const options = parseJsonArray<string>(q.options);
-      const chosenIndex = answers[q.id];
-      const correctIndex = q.correctAnswer;
-      const isCorrect = chosenIndex === correctIndex;
-      const marksAwarded = isCorrect ? q.marks : 0;
+      let matchPairs: MatchPair[] | null = null;
+      if (q.matchPairs) {
+        try {
+          const parsed = JSON.parse(q.matchPairs);
+          matchPairs = Array.isArray(parsed) ? parsed : null;
+        } catch {
+          matchPairs = null;
+        }
+      }
+      const chosen = answers[q.id];
+      const type = q.type ?? "MCQ";
+      let isCorrect = false;
+
+      switch (type) {
+        case "MCQ":
+        case "TRUE_FALSE":
+          if (typeof chosen === "number") isCorrect = chosen === q.correctAnswer;
+          break;
+        case "FILL_BLANK":
+          if (typeof chosen === "string" && q.correctText) {
+            isCorrect =
+              chosen.trim().toLowerCase() === q.correctText.trim().toLowerCase();
+          }
+          break;
+        case "MATCHING": {
+          if (typeof chosen === "object" && chosen !== null && matchPairs) {
+            const chosenMap = chosen as Record<string, string>;
+            isCorrect = matchPairs.every((p) => chosenMap[p.left] === p.right);
+          }
+          break;
+        }
+        case "CODING": {
+          if (typeof chosen === "string" && q.correctText) {
+            const normalize = (s: string) =>
+              s.replace(/\s+/g, " ").trim().toLowerCase();
+            isCorrect = normalize(chosen) === normalize(q.correctText);
+          }
+          break;
+        }
+      }
+
+      let marksAwarded = 0;
+      if (isCorrect) {
+        marksAwarded = q.marks;
+      } else if ((q.negativeMarks ?? 0) > 0) {
+        // Wrong-answer deduction applies to MCQ/TRUE_FALSE/CODING/MATCHING/FILL_BLANK
+        // when negativeMarks > 0.
+        marksAwarded = -(q.negativeMarks ?? 0);
+      }
+
       return {
         id: q.id,
         order: idx,
+        type,
         question: q.question,
         options,
-        chosenIndex: chosenIndex === undefined ? null : chosenIndex,
-        correctIndex,
+        matchPairs,
+        correctAnswer: type === "MCQ" || type === "TRUE_FALSE" ? q.correctAnswer : null,
+        correctText: q.correctText ?? null,
+        codeLanguage: q.codeLanguage ?? null,
+        // What the student chose (shape depends on type).
+        chosenIndex:
+          type === "MCQ" || type === "TRUE_FALSE"
+            ? typeof chosen === "number"
+              ? chosen
+              : null
+            : null,
+        chosenText:
+          type === "FILL_BLANK" || type === "CODING"
+            ? typeof chosen === "string"
+              ? chosen
+              : null
+            : null,
+        chosenMatches:
+          type === "MATCHING"
+            ? typeof chosen === "object" && chosen !== null
+              ? (chosen as Record<string, string>)
+              : null
+            : null,
         isCorrect,
         marks: q.marks,
         marksAwarded,
-        explanation: q.explanation,
+        negativeMarks: q.negativeMarks ?? 0,
+        category: q.category ?? null,
+        explanation: q.explanation ?? null,
       };
     });
+
+    // ----- Per-category breakdown -----
+    const catMap = new Map<
+      string,
+      { total: number; correct: number; score: number; maxScore: number }
+    >();
+    for (const q of reviewQuestions) {
+      const cat = q.category || "Uncategorized";
+      const entry = catMap.get(cat) ?? { total: 0, correct: 0, score: 0, maxScore: 0 };
+      entry.total += 1;
+      entry.maxScore += q.marks;
+      if (q.isCorrect) entry.correct += 1;
+      entry.score += q.marksAwarded;
+      catMap.set(cat, entry);
+    }
+    const categoryStats = Array.from(catMap.entries()).map(([category, s]) => ({
+      category,
+      total: s.total,
+      correct: s.correct,
+      score: s.score,
+      maxScore: s.maxScore,
+    }));
+
+    // ----- Publish gate -----
+    // If quizLink.publishResults === true AND this attempt hasn't been published
+    // yet (and the caller is NOT an admin), hide all scoring details and only
+    // return a "pending" flag. Admin always sees the full review.
+    const isPublished = attempt.publishedAt !== null;
+    const hideForStudent =
+      attempt.quizLink.publishResults &&
+      !isPublished &&
+      !isAdmin;
+
+    const publishedAtIso = attempt.publishedAt
+      ? attempt.publishedAt.toISOString()
+      : null;
+
+    if (hideForStudent) {
+      return NextResponse.json({
+        attemptId: attempt.id,
+        status: attempt.status,
+        startedAt: attempt.startedAt,
+        completedAt: attempt.completedAt,
+        score: null,
+        totalMarks: null,
+        percentage: null,
+        passed: null,
+        timeTaken: attempt.timeTaken,
+        questionOrder,
+        questions: null,
+        categoryStats: null,
+        totalQuestions: orderedQuestions.length,
+        showResults: attempt.quizLink.showResults,
+        publishResults: true,
+        published: false,
+        publishedAt: null,
+        event: attempt.event,
+        quizLink: attempt.quizLink,
+      });
+    }
 
     return NextResponse.json({
       attemptId: attempt.id,
@@ -141,11 +281,22 @@ export async function GET(
       fullscreenExits: attempt.fullscreenExits,
       copyAttempts: attempt.copyAttempts,
       rightClicks: attempt.rightClicks,
+      devtoolsOpen: attempt.devtoolsOpen,
+      screenshotAttempts: attempt.screenshotAttempts,
+      keyboardViolations: attempt.keyboardViolations,
+      faceNotDetected: attempt.faceNotDetected,
+      multiFaceAlerts: attempt.multiFaceAlerts,
+      lookAwayAlerts: attempt.lookAwayAlerts,
       timeTaken: attempt.timeTaken,
+      flaggedQuestions,
       questionOrder,
       questions: reviewQuestions,
+      categoryStats,
       totalQuestions: orderedQuestions.length,
       showResults: attempt.quizLink.showResults,
+      publishResults: attempt.quizLink.publishResults,
+      published: isPublished || !attempt.quizLink.publishResults,
+      publishedAt: publishedAtIso,
       event: attempt.event,
       quizLink: attempt.quizLink,
     });

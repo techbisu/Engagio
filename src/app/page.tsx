@@ -27,6 +27,7 @@ import { StudentShell } from "@/components/student/student-shell"
 import { StudentDashboard } from "@/components/student/student-dashboard"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
+import { Leaderboard } from "@/components/student/leaderboard"
 
 /**
  * Helper: GET /api/me → returns { id, email, name, image, role } or null.
@@ -174,6 +175,15 @@ export default function Home() {
     [setQuizSlug, setStudentSubView, setView],
   )
 
+  const handleViewLeaderboard = React.useCallback(
+    (slug: string) => {
+      setQuizSlug(slug)
+      setStudentSubView("leaderboard")
+      setView("student")
+    },
+    [setQuizSlug, setStudentSubView, setView],
+  )
+
   const handleQuizBegin = React.useCallback(
     (meta: {
       quizLink: { id: string }
@@ -254,8 +264,24 @@ export default function Home() {
           }}
         />
       )
+    } else if (studentSubView === "leaderboard" && quizSlug) {
+      content = (
+        <Leaderboard
+          slug={quizSlug}
+          onBack={() => {
+            setQuizSlug(null)
+            setStudentSubView("dashboard")
+          }}
+        />
+      )
     } else {
-      content = <StudentDashboard user={user} onStartQuiz={handleStartQuiz} />
+      content = (
+        <StudentDashboard
+          user={user}
+          onStartQuiz={handleStartQuiz}
+          onViewLeaderboard={handleViewLeaderboard}
+        />
+      )
     }
     return (
       <StudentShell

@@ -12,6 +12,7 @@ import {
   PlayCircle,
   Sparkles,
   Trophy,
+  Users,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -39,10 +40,12 @@ const DEMO_SLUG = "R85XSX"
 interface StudentDashboardProps {
   user: SafeUser
   onStartQuiz: (slug: string) => void
+  onViewLeaderboard: (slug: string) => void
 }
 
-export function StudentDashboard({ user, onStartQuiz }: StudentDashboardProps) {
+export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: StudentDashboardProps) {
   const [slugInput, setSlugInput] = React.useState("")
+  const [leaderboardInput, setLeaderboardInput] = React.useState("")
 
   const { data, isLoading, isError, error } = useQuery<AttemptListResponse>({
     // Include user.id in the key so the cache is per-user (avoids showing
@@ -69,6 +72,13 @@ export function StudentDashboard({ user, onStartQuiz }: StudentDashboardProps) {
     const slug = normalizeSlug(slugInput)
     if (!slug) return
     onStartQuiz(slug)
+  }
+
+  const handleLeaderboard = (e: React.FormEvent) => {
+    e.preventDefault()
+    const slug = normalizeSlug(leaderboardInput)
+    if (!slug) return
+    onViewLeaderboard(slug)
   }
 
   return (
@@ -149,6 +159,55 @@ export function StudentDashboard({ user, onStartQuiz }: StudentDashboardProps) {
                 className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
               >
                 <Sparkles className="size-4" /> Try the demo quiz ({DEMO_SLUG})
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* View leaderboard */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
+              <Trophy className="size-4" />
+            </span>
+            <div>
+              <CardTitle>View Leaderboard</CardTitle>
+              <CardDescription>
+                Enter a quiz code to see the top 20 scores for that quiz.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLeaderboard} className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex-1">
+                <Label htmlFor="leaderboard-slug" className="sr-only">
+                  Quiz code for leaderboard
+                </Label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="leaderboard-slug"
+                    value={leaderboardInput}
+                    onChange={(e) => setLeaderboardInput(e.target.value)}
+                    placeholder={`e.g. ${DEMO_SLUG}`}
+                    className="pl-9"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+              <Button
+                type="submit"
+                disabled={!leaderboardInput.trim()}
+                variant="outline"
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/40 sm:w-auto"
+              >
+                <Trophy className="size-4" /> View Leaderboard
               </Button>
             </div>
           </form>

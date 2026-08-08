@@ -2,26 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { parseJsonArray } from "@/lib/utils";
-import type { QuestionDto } from "@/types";
+import { parseJsonArray, stringifyJson } from "@/lib/utils";
+import {
+  toQuestionDto,
+  isValidQuestionType,
+} from "@/lib/question-mapper";
+import type { MatchPair } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
   return (session?.user as any)?.role === "ADMIN";
-}
-
-function toQuestionDto(q: any): QuestionDto {
-  return {
-    id: q.id,
-    eventId: q.eventId,
-    question: q.question,
-    options: parseJsonArray<string>(q.options),
-    correctAnswer: q.correctAnswer,
-    marks: q.marks,
-    order: q.order,
-    explanation: q.explanation ?? null,
-    createdAt: q.createdAt.toISOString(),
-  };
 }
 
 /** GET /api/questions?eventId=xxx — list questions for an event (admin only). */
@@ -51,6 +41,173 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/** Normalize + validate the question payload for both POST and PATCH. */
+function buildQuestionData(body: any, existing?: any) {
+  const type = body.type ?? existing?.type ?? "MCQ";
+  if (!isValidQuestionType(type)) {
+    return { error: `type must be one of MCQ|TRUE_FALSE|FILL_BLANK|MATCHING|CODING (got "${type}")` };
+  }
+
+  const questionText =
+    typeof body.question === "string" && body.question.trim()
+      ? body.question.trim()
+      : existing?.question;
+
+  if (questionText === undefined || !questionText) {
+    return { error: "question is required" };
+  }
+
+  // ----- Resolve options -----
+  let options: string[] | null = null;
+  if (Array.isArray(body.options)) {
+    options = body.options
+      .filter((o: unknown) => typeof o === "string" && o.trim())
+      .map((o: string) => o.trim());
+  } else if (existing?.options) {
+    options = parseJsonArray<string>(existing.options);
+  }
+
+  // ----- Resolve correctAnswer -----
+  let correctAnswer: number | null = null;
+  if (body.correctAnswer !== undefined && body.correctAnswer !== null) {
+    const n = Number(body.correctAnswer);
+    if (Number.isInteger(n) && n >= 0) correctAnswer = n;
+    else return { error: "correctAnswer must be a non-negative integer index" };
+  } else if (existing !== undefined) {
+    correctAnswer = existing.correctAnswer;
+  }
+
+  // ----- Resolve correctText -----
+  let correctText: string | null = null;
+  if (typeof body.correctText === "string") {
+    correctText = body.correctText.trim() ? body.correctText.trim() : null;
+  } else if (body.correctText === null) {
+    correctText = null;
+  } else if (existing !== undefined) {
+    correctText = existing.correctText;
+  }
+
+  // ----- Resolve matchPairs -----
+  let matchPairs: MatchPair[] | null = null;
+  if (Array.isArray(body.matchPairs)) {
+    if (!body.matchPairs.every((p: any) => p && typeof p.left === "string" && typeof p.right === "string")) {
+      return { error: "matchPairs items must be { left: string, right: string }" };
+    }
+    matchPairs = body.matchPairs.map((p: any) => ({ left: p.left, right: p.right }));
+  } else if (body.matchPairs === null) {
+    matchPairs = null;
+  } else if (existing !== undefined && existing.matchPairs) {
+    try {
+      const parsed = JSON.parse(existing.matchPairs);
+      matchPairs = Array.isArray(parsed) ? (parsed as MatchPair[]) : null;
+    } catch {
+      matchPairs = null;
+    }
+  }
+
+  // ----- Resolve codeLanguage -----
+  let codeLanguage: string | null = null;
+  if (typeof body.codeLanguage === "string") {
+    codeLanguage = body.codeLanguage.trim() ? body.codeLanguage.trim() : null;
+  } else if (body.codeLanguage === null) {
+    codeLanguage = null;
+  } else if (existing !== undefined) {
+    codeLanguage = existing.codeLanguage;
+  }
+
+  // ----- Per-type validation -----
+  switch (type) {
+    case "MCQ": {
+      if (!options || options.length < 2) {
+        return { error: "MCQ requires options (min 2)" };
+      }
+      if (correctAnswer === null || correctAnswer >= options.length) {
+        return { error: "correctAnswer must be a valid index into options" };
+      }
+      break;
+    }
+    case "TRUE_FALSE": {
+      // Auto-generate True/False options if not provided.
+      if (!options || options.length === 0) {
+        options = ["True", "False"];
+      } else if (options.length !== 2) {
+        // If admin passed something, insist on 2.
+        return { error: "TRUE_FALSE must have exactly 2 options (or none — auto-generated)" };
+      }
+      if (correctAnswer === null || (correctAnswer !== 0 && correctAnswer !== 1)) {
+        return { error: "TRUE_FALSE correctAnswer must be 0 (True) or 1 (False)" };
+      }
+      break;
+    }
+    case "FILL_BLANK": {
+      if (!correctText || !correctText.trim()) {
+        return { error: "FILL_BLANK requires correctText" };
+      }
+      options = []; // no options for fill-blank
+      break;
+    }
+    case "MATCHING": {
+      if (!matchPairs || matchPairs.length < 2) {
+        return { error: "MATCHING requires matchPairs (min 2 pairs)" };
+      }
+      options = [];
+      break;
+    }
+    case "CODING": {
+      if (!correctText || !correctText.trim()) {
+        return { error: "CODING requires correctText (reference solution)" };
+      }
+      if (!codeLanguage) {
+        return { error: "CODING requires codeLanguage" };
+      }
+      options = [];
+      break;
+    }
+  }
+
+  // ----- Resolve marks / negativeMarks / category / explanation -----
+  const marks =
+    typeof body.marks === "number" && body.marks > 0
+      ? Math.floor(body.marks)
+      : existing !== undefined
+      ? existing.marks
+      : 1;
+  const negativeMarks =
+    typeof body.negativeMarks === "number" && body.negativeMarks >= 0
+      ? Math.floor(body.negativeMarks)
+      : existing !== undefined
+      ? existing.negativeMarks ?? 0
+      : 0;
+  const category =
+    typeof body.category === "string"
+      ? body.category.trim() || null
+      : body.category === null
+      ? null
+      : existing?.category ?? null;
+  const explanation =
+    typeof body.explanation === "string"
+      ? body.explanation.trim() || null
+      : body.explanation === null
+      ? null
+      : existing?.explanation ?? null;
+
+  return {
+    data: {
+      type,
+      question: questionText,
+      options: JSON.stringify(options ?? []),
+      correctAnswer: correctAnswer ?? 0,
+      correctText,
+      matchPairs: matchPairs ? stringifyJson(matchPairs) : null,
+      codeLanguage,
+      marks,
+      negativeMarks,
+      category,
+      explanation,
+    },
+  };
+}
+
 /** POST /api/questions — create a question (admin only). */
 export async function POST(req: NextRequest) {
   try {
@@ -58,41 +215,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { eventId, question, options, correctAnswer, marks, explanation } = body || {};
+    const { eventId } = body || {};
 
     if (!eventId || typeof eventId !== "string") {
       return NextResponse.json({ error: "eventId is required" }, { status: 400 });
-    }
-    if (!question || typeof question !== "string" || !question.trim()) {
-      return NextResponse.json({ error: "question is required" }, { status: 400 });
-    }
-    if (!Array.isArray(options) || options.length < 2) {
-      return NextResponse.json(
-        { error: "options must be an array with at least 2 items" },
-        { status: 400 }
-      );
-    }
-    if (!options.every((o) => typeof o === "string" && o.trim())) {
-      return NextResponse.json(
-        { error: "all options must be non-empty strings" },
-        { status: 400 }
-      );
-    }
-    const correctIdx = Number(correctAnswer);
-    if (
-      !Number.isInteger(correctIdx) ||
-      correctIdx < 0 ||
-      correctIdx >= options.length
-    ) {
-      return NextResponse.json(
-        { error: "correctAnswer must be a valid index into options" },
-        { status: 400 }
-      );
     }
 
     const event = await db.event.findUnique({ where: { id: eventId } });
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    const result = buildQuestionData(body);
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
     // Determine next order index for this event.
@@ -106,15 +242,8 @@ export async function POST(req: NextRequest) {
     const created = await db.question.create({
       data: {
         eventId,
-        question: question.trim(),
-        options: JSON.stringify(options.map((o: string) => o.trim())),
-        correctAnswer: correctIdx,
-        marks: typeof marks === "number" && marks > 0 ? Math.floor(marks) : 1,
+        ...result.data,
         order: nextOrder,
-        explanation:
-          typeof explanation === "string" && explanation.trim()
-            ? explanation.trim()
-            : null,
       },
     });
     return NextResponse.json(toQuestionDto(created), { status: 201 });

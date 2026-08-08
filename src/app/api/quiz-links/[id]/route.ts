@@ -2,37 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import type { QuizLinkDto } from "@/types";
+import { toQuizLinkDto } from "@/app/api/quiz-links/route";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
   return (session?.user as any)?.role === "ADMIN";
-}
-
-function toQuizLinkDto(link: any): QuizLinkDto {
-  return {
-    id: link.id,
-    eventId: link.eventId,
-    slug: link.slug,
-    isActive: link.isActive,
-    shuffleQuestions: link.shuffleQuestions,
-    shuffleOptions: link.shuffleOptions,
-    timeLimit: link.timeLimit,
-    maxAttempts: link.maxAttempts,
-    showResults: link.showResults,
-    passThreshold: link.passThreshold,
-    requireFullscreen: link.requireFullscreen,
-    createdAt: link.createdAt.toISOString(),
-    expiresAt: link.expiresAt ? link.expiresAt.toISOString() : null,
-    event: link.event
-      ? {
-          id: link.event.id,
-          title: link.event.title,
-          description: link.event.description,
-          image: link.event.image ?? null,
-        }
-      : undefined,
-  };
 }
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -79,27 +53,72 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       shuffleOptions,
       timeLimit,
       maxAttempts,
+      questionCount,
       showResults,
+      publishResults,
       passThreshold,
       requireFullscreen,
+      autoSubmitOnExit,
+      tabSwitchDetection,
+      copyPasteBlocking,
+      rightClickDisable,
+      keyboardShortcutBlocking,
+      devtoolsDetection,
+      antiScreenshot,
+      watermarkOverlay,
+      aiProctor,
+      aiProctorFaceDetection,
+      aiProctorMultiFace,
+      aiProctorLookAway,
       expiresAt,
     } = body || {};
 
     const data: Record<string, unknown> = {};
-    if (typeof isActive === "boolean") data.isActive = isActive;
-    if (typeof shuffleQuestions === "boolean") data.shuffleQuestions = shuffleQuestions;
-    if (typeof shuffleOptions === "boolean") data.shuffleOptions = shuffleOptions;
-    if (typeof showResults === "boolean") data.showResults = showResults;
-    if (typeof requireFullscreen === "boolean") data.requireFullscreen = requireFullscreen;
+
+    // Boolean toggles — only set when present and a boolean.
+    const boolToggles: Record<string, unknown> = {
+      isActive,
+      shuffleQuestions,
+      shuffleOptions,
+      showResults,
+      publishResults,
+      requireFullscreen,
+      autoSubmitOnExit,
+      tabSwitchDetection,
+      copyPasteBlocking,
+      rightClickDisable,
+      keyboardShortcutBlocking,
+      devtoolsDetection,
+      antiScreenshot,
+      watermarkOverlay,
+      aiProctor,
+      aiProctorFaceDetection,
+      aiProctorMultiFace,
+      aiProctorLookAway,
+    };
+    for (const [key, val] of Object.entries(boolToggles)) {
+      if (typeof val === "boolean") data[key] = val;
+    }
+
+    // Numeric fields
     if (typeof timeLimit === "number" && timeLimit >= 0) {
       data.timeLimit = Math.floor(timeLimit);
     }
     if (typeof maxAttempts === "number" && maxAttempts >= 0) {
       data.maxAttempts = Math.floor(maxAttempts);
     }
+    if (
+      typeof questionCount === "number" &&
+      Number.isInteger(questionCount) &&
+      questionCount >= 0
+    ) {
+      data.questionCount = questionCount;
+    }
     if (typeof passThreshold === "number" && passThreshold >= 0 && passThreshold <= 100) {
       data.passThreshold = Math.floor(passThreshold);
     }
+
+    // expiresAt: null clears it; otherwise validate the Date.
     if (expiresAt !== undefined) {
       if (expiresAt === null || expiresAt === "") {
         data.expiresAt = null;

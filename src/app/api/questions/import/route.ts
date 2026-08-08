@@ -16,6 +16,11 @@ async function requireAdmin(): Promise<boolean> {
  *  - multipart/form-data with fields `eventId` and `file` (CSV text file)
  *  - application/json with `{ eventId, csvText }`
  *
+ * CSV format (header row required):
+ *   question, option_a, option_b, option_c, option_d, correct_answer, marks, explanation,
+ *   type, category, negative_marks
+ * The last three columns are optional (defaults: MCQ / null / 0).
+ *
  * Returns `{ imported: number, errors: string[] }`.
  */
 export async function POST(req: NextRequest) {
@@ -80,9 +85,15 @@ export async function POST(req: NextRequest) {
           data: {
             eventId,
             question: row.question,
+            type: row.type ?? "MCQ",
             options: JSON.stringify(row.options),
             correctAnswer: row.correctAnswer,
             marks: typeof row.marks === "number" && row.marks > 0 ? Math.floor(row.marks) : 1,
+            negativeMarks:
+              typeof row.negativeMarks === "number" && row.negativeMarks >= 0
+                ? Math.floor(row.negativeMarks)
+                : 0,
+            category: row.category || null,
             order: nextOrder++,
             explanation: row.explanation || null,
           },

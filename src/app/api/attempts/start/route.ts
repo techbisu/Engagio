@@ -118,22 +118,32 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch all questions for the event, ordered by `order` then createdAt
-    const questions = await db.question.findMany({
+    const allQuestions = await db.question.findMany({
       where: { eventId: quizLink.eventId },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     });
 
-    if (questions.length === 0) {
+    if (allQuestions.length === 0) {
       return NextResponse.json(
         { error: "This quiz has no questions yet" },
         { status: 400 }
       );
     }
 
-    // Shuffle question order if enabled (options not shuffled — see note in spec)
+    // ----- Pick N random questions if questionCount > 0 -----
+    // If questionCount is 0 or > total available, use all questions.
+    let selectedQuestions = allQuestions;
+    if (
+      quizLink.questionCount > 0 &&
+      quizLink.questionCount < allQuestions.length
+    ) {
+      selectedQuestions = shuffleArray(allQuestions).slice(0, quizLink.questionCount);
+    }
+
+    // Shuffle question order if enabled
     const orderedQuestions = quizLink.shuffleQuestions
-      ? shuffleArray(questions)
-      : questions;
+      ? shuffleArray(selectedQuestions)
+      : selectedQuestions;
 
     const questionOrderIds = orderedQuestions.map((q) => q.id);
 
@@ -151,16 +161,32 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Build public questions (no correctAnswer)
-    const publicQuestions = orderedQuestions.map((q, idx) => ({
-      id: q.id,
-      question: q.question,
-      options: parseJsonArray<string>(q.options),
-      marks: q.marks,
-      order: idx,
-    }));
+    // Build public questions (no correctAnswer / correctText).
+    const publicQuestions = orderedQuestions.map((q, idx) => {
+      let matchPairs: { left: string; right: string }[] | null = null;
+      if (q.matchPairs) {
+        try {
+          const parsed = JSON.parse(q.matchPairs);
+          matchPairs = Array.isArray(parsed) ? parsed : null;
+        } catch {
+          matchPairs = null;
+        }
+      }
+      return {
+        id: q.id,
+        question: q.question,
+        type: q.type ?? "MCQ",
+        options: parseJsonArray<string>(q.options),
+        matchPairs,
+        codeLanguage: q.codeLanguage ?? null,
+        marks: q.marks,
+        negativeMarks: q.negativeMarks ?? 0,
+        category: q.category ?? null,
+        order: idx,
+      };
+    });
 
-    const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+    const totalMarks = orderedQuestions.reduce((sum, q) => sum + q.marks, 0);
 
     return NextResponse.json({
       attemptId: attempt.id,
@@ -168,10 +194,25 @@ export async function POST(req: NextRequest) {
       questions: publicQuestions,
       timeLimit: quizLink.timeLimit,
       maxAttempts: quizLink.maxAttempts,
-      totalQuestions: questions.length,
+      totalQuestions: orderedQuestions.length,
       totalMarks,
       event: quizLink.event,
       requireFullscreen: quizLink.requireFullscreen,
+      // Security config — the client activates each feature based on these.
+      security: {
+        autoSubmitOnExit: quizLink.autoSubmitOnExit,
+        tabSwitchDetection: quizLink.tabSwitchDetection,
+        copyPasteBlocking: quizLink.copyPasteBlocking,
+        rightClickDisable: quizLink.rightClickDisable,
+        keyboardShortcutBlocking: quizLink.keyboardShortcutBlocking,
+        devtoolsDetection: quizLink.devtoolsDetection,
+        antiScreenshot: quizLink.antiScreenshot,
+        watermarkOverlay: quizLink.watermarkOverlay,
+        aiProctor: quizLink.aiProctor,
+        aiProctorFaceDetection: quizLink.aiProctorFaceDetection,
+        aiProctorMultiFace: quizLink.aiProctorMultiFace,
+        aiProctorLookAway: quizLink.aiProctorLookAway,
+      },
       passThreshold: quizLink.passThreshold,
     });
   } catch (error) {

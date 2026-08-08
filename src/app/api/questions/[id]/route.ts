@@ -2,26 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { parseJsonArray } from "@/lib/utils";
-import type { QuestionDto } from "@/types";
+import { toQuestionDto, isValidQuestionType } from "@/lib/question-mapper";
+import { parseJsonArray, stringifyJson } from "@/lib/utils";
+import type { MatchPair } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
   return (session?.user as any)?.role === "ADMIN";
-}
-
-function toQuestionDto(q: any): QuestionDto {
-  return {
-    id: q.id,
-    eventId: q.eventId,
-    question: q.question,
-    options: parseJsonArray<string>(q.options),
-    correctAnswer: q.correctAnswer,
-    marks: q.marks,
-    order: q.order,
-    explanation: q.explanation ?? null,
-    createdAt: q.createdAt.toISOString(),
-  };
 }
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -39,41 +26,225 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
 
     const body = await req.json();
-    const { question, options, correctAnswer, marks, explanation, order } = body || {};
+
+    // Determine the effective type (new one if provided, else existing).
+    const type = body.type !== undefined ? body.type : existing.type;
+    if (body.type !== undefined && !isValidQuestionType(type)) {
+      return NextResponse.json(
+        { error: `type must be one of MCQ|TRUE_FALSE|FILL_BLANK|MATCHING|CODING (got "${body.type}")` },
+        { status: 400 }
+      );
+    }
 
     const data: Record<string, unknown> = {};
-    if (typeof question === "string" && question.trim()) data.question = question.trim();
-    if (typeof explanation === "string") data.explanation = explanation.trim() || null;
-    if (typeof marks === "number" && marks > 0) data.marks = Math.floor(marks);
-    if (typeof order === "number" && Number.isInteger(order)) data.order = order;
 
-    // Validate options + correctAnswer together if either is provided.
-    const effectiveOptions =
-      Array.isArray(options) && options.length >= 2
-        ? options.map((o: string) => o.trim()).filter(Boolean)
-        : parseJsonArray<string>(existing.options);
-    if (Array.isArray(options)) {
-      if (effectiveOptions.length < 2) {
-        return NextResponse.json(
-          { error: "options must have at least 2 non-empty items" },
-          { status: 400 }
-        );
-      }
-      data.options = JSON.stringify(effectiveOptions);
+    // ---- Type ----
+    if (body.type !== undefined) data.type = type;
+
+    // ---- question text ----
+    if (typeof body.question === "string" && body.question.trim()) {
+      data.question = body.question.trim();
     }
-    if (correctAnswer !== undefined) {
-      const correctIdx = Number(correctAnswer);
+
+    // ---- explanation ----
+    if (typeof body.explanation === "string") {
+      data.explanation = body.explanation.trim() || null;
+    } else if (body.explanation === null) {
+      data.explanation = null;
+    }
+
+    // ---- marks / negativeMarks ----
+    if (typeof body.marks === "number" && body.marks > 0) {
+      data.marks = Math.floor(body.marks);
+    }
+    if (typeof body.negativeMarks === "number" && body.negativeMarks >= 0) {
+      data.negativeMarks = Math.floor(body.negativeMarks);
+    }
+
+    // ---- order ----
+    if (typeof body.order === "number" && Number.isInteger(body.order)) {
+      data.order = body.order;
+    }
+
+    // ---- category ----
+    if (typeof body.category === "string") {
+      data.category = body.category.trim() || null;
+    } else if (body.category === null) {
+      data.category = null;
+    }
+
+    // ---- codeLanguage ----
+    if (typeof body.codeLanguage === "string") {
+      data.codeLanguage = body.codeLanguage.trim() || null;
+    } else if (body.codeLanguage === null) {
+      data.codeLanguage = null;
+    }
+
+    // ---- correctText ----
+    if (typeof body.correctText === "string") {
+      data.correctText = body.correctText.trim() || null;
+    } else if (body.correctText === null) {
+      data.correctText = null;
+    }
+
+    // ---- matchPairs ----
+    if (Array.isArray(body.matchPairs)) {
       if (
-        !Number.isInteger(correctIdx) ||
-        correctIdx < 0 ||
-        correctIdx >= effectiveOptions.length
+        !body.matchPairs.every(
+          (p: any) => p && typeof p.left === "string" && typeof p.right === "string"
+        )
       ) {
         return NextResponse.json(
-          { error: "correctAnswer must be a valid index into options" },
+          { error: "matchPairs items must be { left: string, right: string }" },
           { status: 400 }
         );
       }
-      data.correctAnswer = correctIdx;
+      const pairs: MatchPair[] = body.matchPairs.map((p: any) => ({
+        left: p.left,
+        right: p.right,
+      }));
+      data.matchPairs = pairs.length > 0 ? stringifyJson(pairs) : null;
+    } else if (body.matchPairs === null) {
+      data.matchPairs = null;
+    }
+
+    // ---- options + correctAnswer (validated jointly per-type) ----
+    // Build the effective options for validation against correctAnswer.
+    let effectiveOptions: string[] = parseJsonArray<string>(existing.options);
+    if (Array.isArray(body.options)) {
+      effectiveOptions = body.options
+        .filter((o: unknown) => typeof o === "string" && o.trim())
+        .map((o: string) => o.trim());
+    }
+
+    // Compute the effective correctAnswer (the new one if provided, else existing).
+    const effectiveCorrectAnswer =
+      body.correctAnswer !== undefined && body.correctAnswer !== null
+        ? Number(body.correctAnswer)
+        : existing.correctAnswer;
+
+    // Per-type validation, applying auto-generation where appropriate.
+    switch (type) {
+      case "MCQ": {
+        if (effectiveOptions.length < 2) {
+          return NextResponse.json(
+            { error: "MCQ requires options (min 2 non-empty)" },
+            { status: 400 }
+          );
+        }
+        if (
+          !Number.isInteger(effectiveCorrectAnswer) ||
+          effectiveCorrectAnswer < 0 ||
+          effectiveCorrectAnswer >= effectiveOptions.length
+        ) {
+          return NextResponse.json(
+            { error: "correctAnswer must be a valid index into options" },
+            { status: 400 }
+          );
+        }
+        if (Array.isArray(body.options)) data.options = JSON.stringify(effectiveOptions);
+        if (body.correctAnswer !== undefined) data.correctAnswer = effectiveCorrectAnswer;
+        // If switching to MCQ from another type, clear matchPairs/correctText/codeLanguage.
+        if (existing.type !== "MCQ") {
+          data.matchPairs = null;
+          data.correctText = null;
+          data.codeLanguage = null;
+        }
+        break;
+      }
+      case "TRUE_FALSE": {
+        let opts = effectiveOptions;
+        if (opts.length === 0) opts = ["True", "False"];
+        if (opts.length !== 2) {
+          return NextResponse.json(
+            { error: "TRUE_FALSE must have exactly 2 options (or none — auto-generated)" },
+            { status: 400 }
+          );
+        }
+        if (effectiveCorrectAnswer !== 0 && effectiveCorrectAnswer !== 1) {
+          return NextResponse.json(
+            { error: "TRUE_FALSE correctAnswer must be 0 (True) or 1 (False)" },
+            { status: 400 }
+          );
+        }
+        // Always (re)store the canonical True/False options.
+        data.options = JSON.stringify(opts);
+        data.correctAnswer = effectiveCorrectAnswer;
+        if (existing.type !== "TRUE_FALSE") {
+          data.matchPairs = null;
+          data.correctText = null;
+          data.codeLanguage = null;
+        }
+        break;
+      }
+      case "FILL_BLANK": {
+        const effectiveCorrectText =
+          typeof body.correctText === "string"
+            ? body.correctText.trim() || null
+            : existing.correctText;
+        if (!effectiveCorrectText) {
+          return NextResponse.json(
+            { error: "FILL_BLANK requires correctText" },
+            { status: 400 }
+          );
+        }
+        data.options = JSON.stringify([]);
+        data.matchPairs = null;
+        data.codeLanguage = null;
+        // correctAnswer ignored for FILL_BLANK; reset to 0 for safety.
+        data.correctAnswer = 0;
+        break;
+      }
+      case "MATCHING": {
+        let pairs: MatchPair[] = [];
+        if (Array.isArray(body.matchPairs) && body.matchPairs.length > 0) {
+          pairs = body.matchPairs.map((p: any) => ({ left: p.left, right: p.right }));
+        } else if (existing.matchPairs) {
+          try {
+            const parsed = JSON.parse(existing.matchPairs);
+            if (Array.isArray(parsed)) pairs = parsed as MatchPair[];
+          } catch {
+            /* ignore */
+          }
+        }
+        if (pairs.length < 2) {
+          return NextResponse.json(
+            { error: "MATCHING requires matchPairs (min 2 pairs)" },
+            { status: 400 }
+          );
+        }
+        data.options = JSON.stringify([]);
+        data.correctText = null;
+        data.codeLanguage = null;
+        data.correctAnswer = 0;
+        break;
+      }
+      case "CODING": {
+        const effectiveCorrectText =
+          typeof body.correctText === "string"
+            ? body.correctText.trim() || null
+            : existing.correctText;
+        const effectiveCodeLanguage =
+          typeof body.codeLanguage === "string"
+            ? body.codeLanguage.trim() || null
+            : existing.codeLanguage;
+        if (!effectiveCorrectText) {
+          return NextResponse.json(
+            { error: "CODING requires correctText (reference solution)" },
+            { status: 400 }
+          );
+        }
+        if (!effectiveCodeLanguage) {
+          return NextResponse.json(
+            { error: "CODING requires codeLanguage" },
+            { status: 400 }
+          );
+        }
+        data.options = JSON.stringify([]);
+        data.matchPairs = null;
+        data.correctAnswer = 0;
+        break;
+      }
     }
 
     const updated = await db.question.update({ where: { id }, data });

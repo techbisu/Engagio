@@ -87,9 +87,20 @@ model Question {
   id            String   @id @default(cuid())
   eventId       String
   question      String
-  options       String   // JSON-encoded string[] of options
-  correctAnswer Int     // index into options
+  // Type of question. MCQ = standard multiple-choice (options + correctAnswer index).
+  // TRUE_FALSE = 2 options auto-generated (True/False), correctAnswer 0 or 1.
+  // FILL_BLANK = no options; `correctAnswer` is ignored; `correctText` holds the answer.
+  // MATCHING = `matchPairs` JSON holds [{left, right}] pairs; student matches them.
+  // CODING = `correctText` holds a reference solution; `codeLanguage` holds the language.
+  type          String   @default("MCQ") // MCQ | TRUE_FALSE | FILL_BLANK | MATCHING | CODING
+  options       String   // JSON-encoded string[] of options (MCQ/TRUE_FALSE; empty for others)
+  correctAnswer Int      @default(0) // index into options (MCQ/TRUE_FALSE); ignored otherwise
+  correctText   String?  // FILL_BLANK / CODING: the expected text answer
+  matchPairs    String?  // MATCHING: JSON [{left, right}]
+  codeLanguage  String?  // CODING: javascript | python | etc.
   marks         Int      @default(1)
+  negativeMarks Int      @default(0) // marks deducted on wrong answer (MCQ/TRUE_FALSE)
+  category      String?  // e.g. "React", "DSA", "Aptitude" — for per-category analysis
   order         Int      @default(0)
   explanation   String?
   createdAt     DateTime @default(now())
@@ -97,6 +108,7 @@ model Question {
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
+  @@index([category])
 }
 
 model QuizLink {
@@ -108,9 +120,31 @@ model QuizLink {
   shuffleOptions  Boolean  @default(false)
   timeLimit       Int      @default(30) // minutes; 0 = no limit
   maxAttempts     Int      @default(1) // 0 = unlimited
+  // If > 0, pick this many questions randomly from the event's question bank
+  // (instead of using all questions). 0 = use all.
+  questionCount   Int      @default(0)
   showResults     Boolean  @default(true)
+  // When false, results are hidden until an admin publishes them
+  // (publishQuizLink / publish endpoint sets publishedAt on each attempt).
+  publishResults  Boolean  @default(false)
   passThreshold   Int      @default(40) // percentage
-  requireFullscreen Boolean @default(true)
+
+  // ---- Security toggles (all per-quiz-link) ----
+  requireFullscreen    Boolean @default(true)
+  autoSubmitOnExit     Boolean @default(true) // auto-submit when fullscreen exited
+  tabSwitchDetection   Boolean @default(true)
+  copyPasteBlocking    Boolean @default(true)
+  rightClickDisable    Boolean @default(true)
+  keyboardShortcutBlocking Boolean @default(true)
+  devtoolsDetection    Boolean @default(true)
+  antiScreenshot       Boolean @default(true)
+  watermarkOverlay     Boolean @default(true)
+  // AI Proctor master toggle + 4 sub-toggles
+  aiProctor            Boolean @default(false)
+  aiProctorFaceDetection Boolean @default(true)
+  aiProctorMultiFace   Boolean @default(true)
+  aiProctorLookAway    Boolean @default(true)
+
   createdAt       DateTime @default(now())
   expiresAt       DateTime?
 
@@ -125,19 +159,32 @@ model QuizAttempt {
   userId          String
   quizLinkId      String
   eventId         String
-  answers         String?  // JSON-encoded { questionId: selectedIndex }
+  answers         String?  // JSON-encoded { questionId: selectedIndex | string | {left:right} }
   score           Int?
   totalMarks      Int?
   percentage      Int?
   passed          Boolean?
+  // Anti-cheat violation counters (sent on submit)
   tabSwitches     Int      @default(0)
   fullscreenExits Int      @default(0)
   copyAttempts    Int      @default(0)
   rightClicks     Int      @default(0)
+  devtoolsOpen    Int      @default(0)
+  screenshotAttempts Int   @default(0)
+  keyboardViolations Int   @default(0)
+  // AI Proctor violation counts (if aiProctor enabled)
+  faceNotDetected Int      @default(0)
+  multiFaceAlerts Int      @default(0)
+  lookAwayAlerts  Int      @default(0)
   timeTaken       Int?     // seconds
   questionOrder   String?  // JSON-encoded questionId[]
+  // JSON-encoded string[] of questionIds the student flagged for review
+  flaggedQuestions String?
   startedAt       DateTime @default(now())
   completedAt     DateTime?
+  // When null, the attempt's results are hidden from the student (if the
+  // quiz link has publishResults=true). Admin sets this via the publish endpoint.
+  publishedAt     DateTime?
   status          String   @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | CHEAT_DETECTED | TIMEOUT
   ipAddress       String?
   userAgent       String?
