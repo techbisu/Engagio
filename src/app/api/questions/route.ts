@@ -6,8 +6,9 @@ import { parseJsonArray, stringifyJson } from "@/lib/utils";
 import {
   toQuestionDto,
   isValidQuestionType,
+  isValidDifficulty,
 } from "@/lib/question-mapper";
-import type { MatchPair } from "@/types";
+import type { MatchPair, QuestionDifficulty } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
@@ -191,6 +192,40 @@ function buildQuestionData(body: any, existing?: any) {
       ? null
       : existing?.explanation ?? null;
 
+  // ----- Resolve imageUrl (base64 data URL, optional) -----
+  let imageUrl: string | null = null;
+  if (typeof body.imageUrl === "string") {
+    // Accept only data URLs (base64) — no external URLs to keep storage local.
+    imageUrl = body.imageUrl.startsWith("data:image/")
+      ? body.imageUrl
+      : body.imageUrl.trim() || null;
+  } else if (body.imageUrl === null) {
+    imageUrl = null;
+  } else if (existing !== undefined) {
+    imageUrl = existing.imageUrl ?? null;
+  }
+
+  // ----- Resolve difficulty (EASY | MEDIUM | HARD) -----
+  let difficulty: QuestionDifficulty = "MEDIUM";
+  if (isValidDifficulty(body.difficulty)) {
+    difficulty = body.difficulty;
+  } else if (existing !== undefined && existing.difficulty) {
+    difficulty = existing.difficulty;
+  }
+
+  // ----- Resolve tags (JSON-encoded string[]) -----
+  let tags: string[] | null = null;
+  if (Array.isArray(body.tags)) {
+    tags = body.tags
+      .filter((t: unknown) => typeof t === "string" && t.trim())
+      .map((t: string) => t.trim())
+      .slice(0, 50); // sanity cap
+  } else if (body.tags === null) {
+    tags = null;
+  } else if (existing !== undefined && existing.tags) {
+    tags = parseJsonArray<string>(existing.tags);
+  }
+
   return {
     data: {
       type,
@@ -204,6 +239,9 @@ function buildQuestionData(body: any, existing?: any) {
       negativeMarks,
       category,
       explanation,
+      imageUrl,
+      difficulty,
+      tags: tags ? JSON.stringify(tags) : null,
     },
   };
 }

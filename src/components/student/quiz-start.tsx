@@ -37,6 +37,7 @@ import {
 import { api } from "./api"
 import type { AttemptListResponse, QuizLinkBySlugResponse } from "./api"
 import { RegistrationForm } from "./registration-form"
+import { PaymentScreen } from "./payment-screen"
 import { cn } from "@/lib/utils"
 import type { SafeUser } from "@/types"
 
@@ -47,6 +48,15 @@ interface RegCheckResponse {
     createdAt: string
     data: Record<string, unknown>
   }
+}
+
+interface PaymentStatusResponse {
+  registration: {
+    id: string
+    paymentStatus: "NONE" | "PENDING_VERIFICATION" | "COMPLETED" | "REJECTED"
+    rejectionReason?: string | null
+  } | null
+  paymentStatus: "NONE" | "PENDING_VERIFICATION" | "COMPLETED" | "REJECTED"
 }
 
 export interface QuizStartProps {
@@ -99,6 +109,39 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     !!meta?.requireRegistration &&
     !isRegistered &&
     regCheckQuery.isFetched
+
+  // ---- Payment gate ---------------------------------------------------
+  // The event requires manual payment when:
+  //   - The event's paymentMethod is "MANUAL" AND
+  //   - The paymentAmount is > 0 (or there's any payment config at all).
+  // We only render the PaymentScreen when the student is past the
+  // registration gate (either registered already, or registration isn't
+  // required at all — in which case we can't have a `Registration` row yet,
+  // so payment can't apply; treat as no payment required).
+  const eventRequiresPayment =
+    !!meta?.event?.id &&
+    (meta.event?.paymentMethod === "MANUAL") &&
+    !!isRegistered
+
+  const paymentStatusQuery = useQuery<PaymentStatusResponse>({
+    queryKey: ["payment-status", meta?.event?.id],
+    queryFn: () =>
+      api<PaymentStatusResponse>(
+        `/api/registrations/payment?eventId=${encodeURIComponent(meta!.event!.id)}`,
+      ),
+    enabled: eventRequiresPayment && !!user,
+    retry: false,
+  })
+
+  const paymentStatus = paymentStatusQuery.data?.paymentStatus ?? "NONE"
+  // Render the PaymentScreen when:
+  //   - event requires payment AND
+  //   - we have fetched the payment status (don't flash) AND
+  //   - paymentStatus is not COMPLETED.
+  const needsPayment =
+    eventRequiresPayment &&
+    paymentStatusQuery.isFetched &&
+    paymentStatus !== "COMPLETED"
 
   const usedAttempts = React.useMemo(() => {
     if (!attemptsData?.attempts || !meta) return 0
@@ -178,6 +221,36 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
         onRegistered={() => {
           // No-op: the form already invalidates the query; the parent
           // re-renders automatically when the refetch resolves.
+        }}
+        onBack={onBack}
+      />
+    )
+  }
+
+  // Payment gate: render the PaymentScreen instead of the pre-quiz card
+  // when the event requires MANUAL payment AND the student's registration
+  // is not yet COMPLETED. After payment verification (onPaid), we
+  // invalidate the payment-status query and fall through to the pre-quiz
+  // card below.
+  if (needsPayment && meta.event) {
+    const ev = meta.event
+    return (
+      <PaymentScreen
+        eventId={ev.id}
+        eventTitle={ev.title}
+        paymentAmount={ev.paymentAmount ?? 0}
+        paymentCurrency={ev.paymentCurrency ?? "INR"}
+        paymentInstructions={ev.paymentInstructions ?? null}
+        upiId={ev.upiId ?? null}
+        upiLink={ev.upiLink ?? null}
+        qrCodeUrl={ev.qrCodeUrl ?? null}
+        requireTransactionRef={ev.requireTransactionRef ?? true}
+        requireScreenshot={ev.requireScreenshot ?? true}
+        onPaid={() => {
+          // Invalidate the payment-status query so it refetches and
+          // (assuming the admin approved) `paymentStatus` flips to
+          // COMPLETED, which makes `needsPayment` false.
+          paymentStatusQuery.refetch()
         }}
         onBack={onBack}
       />
@@ -328,7 +401,11 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
               <TooltipTrigger asChild>
                 <Button
                   onClick={() => meta && onBegin(meta)}
-                  disabled={maxReached || checkingRegistration}
+                  disabled={
+                    maxReached ||
+                    checkingRegistration ||
+                    (eventRequiresPayment && paymentStatusQuery.isLoading)
+                  }
                   className="bg-emerald-600 text-white hover:bg-emerald-700 sm:order-2"
                 >
                   {maxReached ? (
@@ -339,6 +416,11 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
                     <>
                       <Loader2 className="size-4 animate-spin" /> Checking…
                     </>
+                  ) : eventRequiresPayment &&
+                    paymentStatusQuery.isLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Checking payment…
+                    </>
                   ) : (
                     <>
                       <PlayCircle className="size-4" /> Begin Quiz
@@ -348,6 +430,9 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
               </TooltipTrigger>
               {checkingRegistration && (
                 <TooltipContent>Checking registration…</TooltipContent>
+              )}
+              {eventRequiresPayment && paymentStatusQuery.isLoading && (
+                <TooltipContent>Checking payment status…</TooltipContent>
               )}
             </Tooltip>
           </div>

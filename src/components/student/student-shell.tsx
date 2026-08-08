@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { GraduationCap, Home, LogOut } from "lucide-react"
+import { Award, GraduationCap, Home, LogOut } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,7 @@ interface StudentShellProps {
   user: SafeUser
   onSignOut: () => void
   onNavigateHome: () => void
+  onNavigateMyCertificates?: () => void
   children: React.ReactNode
 }
 
@@ -30,6 +31,7 @@ export function StudentShell({
   user,
   onSignOut,
   onNavigateHome,
+  onNavigateMyCertificates,
   children,
 }: StudentShellProps) {
   const greetingName = user.name?.split(" ")[0] || user.email.split("@")[0]
@@ -55,6 +57,19 @@ export function StudentShell({
             >
               <GraduationCap className="size-3" /> Student
             </Badge>
+
+            {onNavigateMyCertificates && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onNavigateMyCertificates}
+                className="hidden border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-950/40 sm:inline-flex"
+              >
+                <Award className="size-4" />
+                <span className="hidden md:inline">My Certificates</span>
+                <span className="md:hidden">Certificates</span>
+              </Button>
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -90,6 +105,12 @@ export function StudentShell({
                   <Home className="text-emerald-600" aria-hidden="true" />
                   <span>Dashboard</span>
                 </DropdownMenuItem>
+                {onNavigateMyCertificates && (
+                  <DropdownMenuItem onClick={onNavigateMyCertificates}>
+                    <Award className="text-emerald-600" aria-hidden="true" />
+                    <span>My Certificates</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={onSignOut}>
                   <LogOut aria-hidden="true" />

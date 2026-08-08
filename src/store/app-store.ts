@@ -9,6 +9,7 @@ export type StudentSubView =
   | "quiz-runner"
   | "leaderboard"
   | "results"
+  | "certificates"
 export type QuizPhase = "start" | "active" | "done"
 
 export interface QuizMeta {
@@ -46,6 +47,10 @@ interface AppState {
   lastAttemptId: string | null
   setLastAttemptId: (id: string | null) => void
 
+  // Public verify-token (when visiting /?verify=TOKEN)
+  verifyToken: string | null
+  setVerifyToken: (t: string | null) => void
+
   // Reset to landing
   reset: () => void
 }
@@ -72,6 +77,9 @@ export const useAppStore = create<AppState>((set) => ({
   lastAttemptId: null,
   setLastAttemptId: (lastAttemptId) => set({ lastAttemptId }),
 
+  verifyToken: null,
+  setVerifyToken: (verifyToken) => set({ verifyToken }),
+
   reset: () =>
     set({
       view: "landing",
@@ -80,6 +88,7 @@ export const useAppStore = create<AppState>((set) => ({
       quizSlug: null,
       quizMeta: null,
       lastAttemptId: null,
+      verifyToken: null,
     }),
 }))
 
@@ -89,36 +98,71 @@ export const useAppStore = create<AppState>((set) => ({
  *   ?view=admin      → admin panel (will require login)
  *   ?view=login      → login page
  *   ?view=student    → student dashboard (will require login)
+ *   ?verify=TOKEN    → public verification page (no login needed)
  */
 export function parseInitialRoute(): {
   view: ViewName
   quizSlug: string | null
   adminTab: AdminTab
+  verifyToken: string | null
 } {
   if (typeof window === "undefined") {
-    return { view: "landing", quizSlug: null, adminTab: "dashboard" }
+    return {
+      view: "landing",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+    }
   }
   const params = new URLSearchParams(window.location.search)
   const quiz = params.get("quiz")
   const view = params.get("view") as ViewName | null
   const tab = params.get("tab") as AdminTab | null
+  const verify = params.get("verify")
 
+  // Public verify deep-link takes priority — no auth required.
+  if (verify) {
+    return {
+      view: "verify",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: verify,
+    }
+  }
   if (quiz) {
-    return { view: "quiz", quizSlug: quiz, adminTab: "dashboard" }
+    return {
+      view: "quiz",
+      quizSlug: quiz,
+      adminTab: "dashboard",
+      verifyToken: null,
+    }
   }
   if (view === "admin" || view === "login" || view === "student") {
-    return { view, quizSlug: null, adminTab: tab || "dashboard" }
+    return {
+      view,
+      quizSlug: null,
+      adminTab: tab || "dashboard",
+      verifyToken: null,
+    }
   }
-  return { view: "landing", quizSlug: null, adminTab: "dashboard" }
+  return {
+    view: "landing",
+    quizSlug: null,
+    adminTab: "dashboard",
+    verifyToken: null,
+  }
 }
 
 /** Update URL without scrolling, so deep links stay shareable. */
-export function syncUrl(view: ViewName, opts?: { quizSlug?: string | null }) {
+export function syncUrl(view: ViewName, opts?: { quizSlug?: string | null; verifyToken?: string | null }) {
   if (typeof window === "undefined") return
   const url = new URL(window.location.href)
   url.searchParams.delete("quiz")
   url.searchParams.delete("view")
-  if (view === "quiz" && opts?.quizSlug) {
+  url.searchParams.delete("verify")
+  if (view === "verify" && opts?.verifyToken) {
+    url.searchParams.set("verify", opts.verifyToken)
+  } else if (view === "quiz" && opts?.quizSlug) {
     url.searchParams.set("quiz", opts.quizSlug)
   } else if (view === "admin" || view === "login" || view === "student") {
     url.searchParams.set("view", view)

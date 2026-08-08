@@ -7,6 +7,7 @@ export type ViewName =
   | "student"
   | "quiz"
   | "results"
+  | "verify"
 
 export type AdminTab =
   | "dashboard"
@@ -15,6 +16,8 @@ export type AdminTab =
   | "links"
   | "attempts"
   | "users"
+  | "payments"
+  | "certificates"
 
 export type Role = "ADMIN" | "STUDENT"
 
@@ -32,6 +35,13 @@ export interface SafeUser {
   role: Role
 }
 
+export type PaymentMethod = "FREE" | "RAZORPAY" | "STRIPE" | "MANUAL"
+export type PaymentStatus = "NONE" | "PENDING_VERIFICATION" | "COMPLETED" | "REJECTED"
+export type CertTemplate = "classic" | "modern" | "elegant" | "bold" | "minimal"
+export type CertIssueCondition = "PARTICIPATION" | "COMPLETED" | "PASSED"
+export type CertStatus = "VALID" | "REVOKED"
+export type QuestionDifficulty = "EASY" | "MEDIUM" | "HARD"
+
 export interface EventDto {
   id: string
   title: string
@@ -47,6 +57,27 @@ export interface EventDto {
   attemptCount?: number
   registrationCount?: number
   fieldCount?: number
+  // Payment
+  paymentMethod: PaymentMethod
+  paymentAmount: number // paise (INR) or cents
+  paymentCurrency: string
+  paymentInstructions?: string | null
+  upiId?: string | null
+  upiLink?: string | null
+  qrCodeUrl?: string | null
+  requireTransactionRef: boolean
+  requireScreenshot: boolean
+  // Certificate
+  certEnabled: boolean
+  certTemplate: CertTemplate
+  certIssueCondition: CertIssueCondition
+  certPassingScore: number
+  certOrgName?: string | null
+  certSigneeName?: string | null
+  certSigneeTitle?: string | null
+  certSigneeImage?: string | null
+  certLogo?: string | null
+  certificateCount?: number
 }
 
 export type EventFieldType =
@@ -79,6 +110,14 @@ export interface RegistrationDto {
   data: Record<string, string | number | boolean>
   createdAt: string
   user?: { name: string | null; email: string; image?: string | null }
+  // Payment tracking
+  paymentStatus: PaymentStatus
+  paymentMethod?: string | null
+  transactionReference?: string | null
+  screenshotUrl?: string | null
+  verifiedBy?: string | null
+  verifiedAt?: string | null
+  rejectionReason?: string | null
 }
 
 export type QuestionType = "MCQ" | "TRUE_FALSE" | "FILL_BLANK" | "MATCHING" | "CODING"
@@ -103,6 +142,9 @@ export interface QuestionDto {
   category?: string | null
   order: number
   explanation?: string | null
+  imageUrl?: string | null
+  difficulty: QuestionDifficulty
+  tags: string[]
   createdAt: string
 }
 
@@ -151,6 +193,9 @@ export interface PublicQuestion {
   negativeMarks: number
   category?: string | null
   order: number
+  imageUrl?: string | null
+  difficulty: QuestionDifficulty
+  tags: string[]
 }
 
 export interface QuizAttemptDto {
@@ -204,6 +249,10 @@ export interface CsvRow {
   negativeMarks?: number
   /** Optional correct text (FILL_BLANK / CODING reference solution). */
   correctText?: string
+  /** Optional difficulty (default MEDIUM). */
+  difficulty?: QuestionDifficulty
+  /** Optional tags (comma-separated in CSV). */
+  tags?: string[]
 }
 
 export interface QuizConfig {
@@ -214,4 +263,31 @@ export interface QuizConfig {
   showResults: boolean
   passThreshold: number
   requireFullscreen: boolean
+}
+
+export interface CertificateDto {
+  id: string
+  eventId: string
+  userId: string
+  attemptId?: string | null
+  certificateNumber: string
+  verificationToken: string
+  template: CertTemplate
+  recipientName: string
+  issuedAt: string
+  status: CertStatus
+  certificateUrl?: string | null
+  createdAt: string
+  event?: {
+    id: string
+    title: string
+    certOrgName?: string | null
+    certSigneeName?: string | null
+    certSigneeTitle?: string | null
+    certSigneeImage?: string | null
+    certLogo?: string | null
+    certTemplate?: CertTemplate | null
+    certPassingScore?: number | null
+  }
+  user?: { name: string | null; email: string }
 }

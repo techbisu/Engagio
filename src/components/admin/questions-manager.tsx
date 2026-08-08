@@ -18,6 +18,10 @@ import {
   ListChecks,
   Type as TypeIcon,
   ToggleLeft,
+  ImagePlus,
+  FunctionSquare,
+  Loader2,
+  RefreshCw,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -62,11 +66,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { cn, truncate } from "@/lib/utils"
 import { parseCsvQuestions, buildCsvTemplate } from "@/lib/csv"
 
 import { api } from "./api"
-import type { QuestionDto, QuestionType, MatchPair } from "@/types"
+import type { QuestionDto, QuestionType, MatchPair, QuestionDifficulty } from "@/types"
 
 interface QuestionsManagerProps {
   eventId: string
@@ -127,6 +136,60 @@ const TYPE_ORDER: QuestionType[] = [
   "CODING",
 ]
 
+const DIFFICULTY_INFO: Record<
+  QuestionDifficulty,
+  { label: string; badgeClass: string }
+> = {
+  EASY: {
+    label: "Easy",
+    badgeClass:
+      "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30 border-0",
+  },
+  MEDIUM: {
+    label: "Medium",
+    badgeClass:
+      "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30 border-0",
+  },
+  HARD: {
+    label: "Hard",
+    badgeClass:
+      "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/30 border-0",
+  },
+}
+
+const DIFFICULTY_ORDER: QuestionDifficulty[] = ["EASY", "MEDIUM", "HARD"]
+
+/**
+ * Lightweight Unicode math symbols — no KaTeX / MathJax / LaTeX.
+ * Each group is a row of clickable buttons that insert at the cursor.
+ */
+const MATH_SYMBOL_GROUPS: { name: string; symbols: string[] }[] = [
+  {
+    name: "Arithmetic",
+    symbols: ["+", "−", "×", "÷", "±", "=", "≠", "<", ">", "≤", "≥", "≈"],
+  },
+  {
+    name: "Math",
+    symbols: ["√", "∑", "∏", "∫", "∞", "≈", "∝", "∂", "∇", "∈", "∉", "∅"],
+  },
+  {
+    name: "Greek",
+    symbols: ["α", "β", "γ", "δ", "θ", "λ", "μ", "π", "σ", "Ω", "φ", "ψ"],
+  },
+  {
+    name: "Superscript",
+    symbols: ["⁰", "¹", "²", "³", "⁴", "⁵", "ⁿ", "⁺", "⁻"],
+  },
+  {
+    name: "Subscript",
+    symbols: ["₀", "₁", "₂", "₃", "₄", "ₙ", "ₓ"],
+  },
+  {
+    name: "Fractions",
+    symbols: ["½", "⅓", "⅔", "¼", "¾", "⅛", "⅜"],
+  },
+]
+
 const CODE_LANGUAGES = [
   "javascript",
   "typescript",
@@ -150,6 +213,69 @@ function formatNegative(n: number): string {
   return rounded.toString()
 }
 
+/**
+ * Compress an image File into a JPEG data URL.
+ * - Resizes to fit within maxW×maxH (maintains aspect ratio).
+ * - Re-encodes as JPEG at the given quality.
+ * - If the result is still larger than maxBytes, iteratively drops quality
+ *   (then dimensions) until it fits.
+ * No external service / cloud upload — base64 stored in DB.
+ */
+function compressImage(
+  file: File,
+  maxW = 800,
+  maxH = 600,
+  quality = 0.8,
+  maxBytes = 200 * 1024
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+        if (width > maxW) {
+          height = height * (maxW / width)
+          width = maxW
+        }
+        if (height > maxH) {
+          width = width * (maxH / height)
+          height = maxH
+        }
+        const canvas = document.createElement("canvas")
+        canvas.width = Math.max(1, Math.round(width))
+        canvas.height = Math.max(1, Math.round(height))
+        const ctx = canvas.getContext("2d")
+        if (!ctx) {
+          reject(new Error("Canvas context unavailable"))
+          return
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        let q = quality
+        let dataUrl = canvas.toDataURL("image/jpeg", q)
+        while (dataUrl.length > maxBytes && q > 0.3) {
+          q = Math.max(0.3, q - 0.1)
+          dataUrl = canvas.toDataURL("image/jpeg", q)
+        }
+        // Last resort: shrink dimensions.
+        if (dataUrl.length > maxBytes) {
+          const scale = 0.7
+          canvas.width = Math.max(1, Math.round(canvas.width * scale))
+          canvas.height = Math.max(1, Math.round(canvas.height * scale))
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          dataUrl = canvas.toDataURL("image/jpeg", 0.5)
+        }
+        resolve(dataUrl)
+      }
+      img.onerror = () => reject(new Error("Could not decode image"))
+      img.src = e.target?.result as string
+    }
+    reader.onerror = () => reject(new Error("Could not read file"))
+    reader.readAsDataURL(file)
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Form state
 // ---------------------------------------------------------------------------
@@ -166,6 +292,9 @@ interface QuestionFormState {
   negativeMarks: number
   category: string
   explanation: string
+  imageUrl: string | null // base64 data URL (compressed client-side)
+  difficulty: QuestionDifficulty // EASY | MEDIUM | HARD
+  tags: string[] // free-form tags
 }
 
 function emptyForm(): QuestionFormState {
@@ -184,6 +313,9 @@ function emptyForm(): QuestionFormState {
     negativeMarks: 0,
     category: "",
     explanation: "",
+    imageUrl: null,
+    difficulty: "MEDIUM",
+    tags: [],
   }
 }
 
@@ -209,6 +341,9 @@ function formFromQuestion(q: QuestionDto): QuestionFormState {
     negativeMarks: q.negativeMarks ?? 0,
     category: q.category || "",
     explanation: q.explanation || "",
+    imageUrl: q.imageUrl || null,
+    difficulty: q.difficulty || "MEDIUM",
+    tags: Array.isArray(q.tags) ? [...q.tags] : [],
   }
 }
 
@@ -222,6 +357,9 @@ function formToPayload(form: QuestionFormState, eventId: string) {
     negativeMarks: form.negativeMarks,
     category: form.category.trim() || null,
     explanation: form.explanation.trim() || null,
+    imageUrl: form.imageUrl || null,
+    difficulty: form.difficulty,
+    tags: form.tags,
   }
 
   if (form.type === "MCQ") {
@@ -408,6 +546,14 @@ export function QuestionsManager({
       ).sort((a, b) => a.localeCompare(b)),
     [questions]
   )
+  // All tags used across this event's questions — for autocomplete.
+  const allTags = React.useMemo(
+    () =>
+      Array.from(
+        new Set(questions.flatMap((q) => q.tags || []))
+      ).sort((a, b) => a.localeCompare(b)),
+    [questions]
+  )
 
   return (
     <div className="space-y-5">
@@ -514,6 +660,7 @@ export function QuestionsManager({
             setForm={setForm}
             errors={errors}
             categories={categories}
+            allTags={allTags}
           />
 
           <DialogFooter>
@@ -608,9 +755,14 @@ function QuestionsTable({
         {questions.map((q, i) => {
           const info = TYPE_INFO[q.type] || TYPE_INFO.MCQ
           const Icon = info.icon
+          const diffInfo =
+            DIFFICULTY_INFO[(q.difficulty as QuestionDifficulty) || "MEDIUM"] ||
+            DIFFICULTY_INFO.MEDIUM
           const hasNegative =
             (q.type === "MCQ" || q.type === "TRUE_FALSE") &&
             (q.negativeMarks ?? 0) > 0
+          const visibleTags = (q.tags || []).slice(0, 2)
+          const extraTags = Math.max(0, (q.tags?.length || 0) - 2)
           return (
             <TableRow key={q.id} className="hover:bg-muted/40">
               <TableCell className="text-center text-muted-foreground tabular-nums">
@@ -618,6 +770,30 @@ function QuestionsTable({
               </TableCell>
               <TableCell className="min-w-[200px] max-w-[480px]">
                 <p className="text-sm line-clamp-2">{truncate(q.question, 160)}</p>
+                {q.imageUrl && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400">
+                    <ImagePlus className="size-3" />
+                    image attached
+                  </span>
+                )}
+                {visibleTags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {visibleTags.map((t, ti) => (
+                      <Badge
+                        key={`${t}-${ti}`}
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 font-normal text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-500/30"
+                      >
+                        #{t}
+                      </Badge>
+                    ))}
+                    {extraTags > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        +{extraTags}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {q.explanation && (
                   <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                     {q.explanation}
@@ -625,10 +801,20 @@ function QuestionsTable({
                 )}
               </TableCell>
               <TableCell className="text-center hidden sm:table-cell">
-                <Badge className={cn("font-medium", info.badgeClass)}>
-                  <Icon className="size-3" />
-                  {info.label}
-                </Badge>
+                <div className="flex flex-col items-center gap-1">
+                  <Badge className={cn("font-medium", info.badgeClass)}>
+                    <Icon className="size-3" />
+                    {info.label}
+                  </Badge>
+                  <Badge
+                    className={cn(
+                      "text-[10px] px-1.5 py-0 font-normal",
+                      diffInfo.badgeClass
+                    )}
+                  >
+                    {diffInfo.label}
+                  </Badge>
+                </div>
               </TableCell>
               <TableCell className="text-center hidden md:table-cell">
                 {q.category ? (
@@ -689,12 +875,38 @@ function QuestionForm({
   setForm,
   errors,
   categories,
+  allTags,
 }: {
   form: QuestionFormState
   setForm: React.Dispatch<React.SetStateAction<QuestionFormState>>
   errors: Record<string, string>
   categories: string[]
+  allTags: string[]
 }) {
+  const questionRef = React.useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * Insert a math symbol at the cursor position in the question textarea.
+   * Falls back to appending if the ref is unavailable (e.g. during SSR).
+   */
+  function insertSymbol(sym: string) {
+    const ta = questionRef.current
+    if (!ta) {
+      setForm((f) => ({ ...f, question: f.question + sym }))
+      return
+    }
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const newText =
+      form.question.slice(0, start) + sym + form.question.slice(end)
+    setForm((f) => ({ ...f, question: newText }))
+    // Restore focus & cursor after React re-renders.
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(start + sym.length, start + sym.length)
+    })
+  }
+
   return (
     <div className="space-y-4">
       {/* Question Type */}
@@ -725,20 +937,37 @@ function QuestionForm({
         </Select>
       </div>
 
-      {/* Question text — common to all types */}
+      {/* Question text + math symbol picker + image upload */}
       <div className="space-y-1.5">
-        <Label htmlFor="q-text">Question *</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="q-text">Question *</Label>
+          <MathSymbolPicker onInsert={insertSymbol} />
+        </div>
         <Textarea
+          ref={questionRef}
           id="q-text"
           rows={3}
           value={form.question}
           onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-          placeholder="What is the capital of France?"
+          placeholder="What is the capital of France?  —  you can insert √, ∑, π, ², ½…"
           aria-invalid={!!errors.question}
         />
         {errors.question && (
           <p className="text-xs text-rose-500">{errors.question}</p>
         )}
+      </div>
+
+      {/* Image upload */}
+      <div className="space-y-1.5">
+        <Label>Question Image (optional)</Label>
+        <QuestionImageUpload
+          imageUrl={form.imageUrl}
+          onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+        />
+        <p className="text-xs text-muted-foreground">
+          Attach a diagram, screenshot, or figure. Max 800×600, auto-compressed
+          to a JPEG data URL.
+        </p>
       </div>
 
       {/* Type-specific fields */}
@@ -758,8 +987,8 @@ function QuestionForm({
         <CodingFields form={form} setForm={setForm} errors={errors} />
       )}
 
-      {/* Common fields: marks, negative marks, category, explanation */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Common fields: marks, difficulty, negative marks, category */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="q-marks">Marks *</Label>
           <Input
@@ -780,9 +1009,43 @@ function QuestionForm({
           )}
         </div>
 
+        <div className="space-y-1.5">
+          <Label htmlFor="q-diff">Difficulty</Label>
+          <Select
+            value={form.difficulty}
+            onValueChange={(v) =>
+              setForm((f) => ({ ...f, difficulty: v as QuestionDifficulty }))
+            }
+          >
+            <SelectTrigger id="q-diff" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DIFFICULTY_ORDER.map((d) => {
+                const info = DIFFICULTY_INFO[d]
+                return (
+                  <SelectItem key={d} value={d}>
+                    <span
+                      className={cn(
+                        "mr-1 inline-flex size-2 rounded-full",
+                        d === "EASY"
+                          ? "bg-emerald-500"
+                          : d === "MEDIUM"
+                          ? "bg-amber-500"
+                          : "bg-rose-500"
+                      )}
+                    />
+                    <span className="font-medium">{info.label}</span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
         {(form.type === "MCQ" || form.type === "TRUE_FALSE") && (
           <div className="space-y-1.5">
-            <Label htmlFor="q-neg">Negative marks</Label>
+            <Label htmlFor="q-neg">Negative</Label>
             <Input
               id="q-neg"
               type="number"
@@ -801,7 +1064,7 @@ function QuestionForm({
               <p className="text-xs text-rose-500">{errors.negativeMarks}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Subtracted on wrong answer. 0 = no penalty.
+                Wrong-answer penalty.
               </p>
             )}
           </div>
@@ -830,11 +1093,20 @@ function QuestionForm({
               <option key={c} value={c} />
             ))}
           </datalist>
-          <p className="text-xs text-muted-foreground">
-            Tag for filtering &amp; analytics. Reuse an existing tag or type a
-            new one.
+          <p className="text-xs text-muted-foreground hidden sm:block">
+            Reuse or create.
           </p>
         </div>
+      </div>
+
+      {/* Tags input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="q-tags">Tags</Label>
+        <TagsInput
+          tags={form.tags}
+          onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+          allTags={allTags}
+        />
       </div>
 
       <div className="space-y-1.5">
@@ -1139,6 +1411,302 @@ function CodingFields({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Math symbol picker, image upload, tags input — shared form widgets
+// ---------------------------------------------------------------------------
+
+/**
+ * Lightweight Unicode math symbol picker.
+ * - No KaTeX / MathJax / LaTeX — just raw Unicode chars.
+ * - A compact "Σ" toggle opens a popover with a tabbed group selector.
+ * - Clicking a symbol calls onInsert(sym) and closes the popover.
+ */
+function MathSymbolPicker({ onInsert }: { onInsert: (sym: string) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const [group, setGroup] = React.useState(MATH_SYMBOL_GROUPS[0].name)
+  const current =
+    MATH_SYMBOL_GROUPS.find((g) => g.name === group) || MATH_SYMBOL_GROUPS[0]
+
+  function handleInsert(sym: string) {
+    onInsert(sym)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          aria-label="Insert math symbol"
+        >
+          <FunctionSquare className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span className="font-semibold tracking-wide">Σ</span>
+          <span className="hidden sm:inline">Math</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-80 p-3 outline-none"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">
+              Insert at cursor
+            </p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {MATH_SYMBOL_GROUPS.map((g) => (
+              <button
+                key={g.name}
+                type="button"
+                onClick={() => setGroup(g.name)}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  g.name === group
+                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                )}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-6 gap-1">
+            {current.symbols.map((sym) => (
+              <button
+                key={sym}
+                type="button"
+                onClick={() => handleInsert(sym)}
+                className="aspect-square rounded-md border border-slate-200 bg-background text-base leading-none hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 dark:border-slate-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400 transition-colors"
+                title={`Insert ${sym}`}
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * Image upload + client-side compression.
+ * Stores a base64 JPEG data URL in form state — no external service.
+ */
+function QuestionImageUpload({
+  imageUrl,
+  onChange,
+}: {
+  imageUrl: string | null
+  onChange: (url: string | null) => void
+}) {
+  const [loading, setLoading] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  async function handleFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file")
+      return
+    }
+    setLoading(true)
+    try {
+      const compressed = await compressImage(file)
+      onChange(compressed)
+      toast.success("Image attached")
+    } catch (e) {
+      toast.error("Could not process image: " + (e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) handleFile(f)
+          // Reset so selecting the same file again still triggers onChange.
+          e.target.value = ""
+        }}
+      />
+      {imageUrl ? (
+        <div className="flex flex-wrap items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <img
+            src={imageUrl}
+            alt="Question attachment preview"
+            className="h-24 w-auto max-w-[200px] rounded-md bg-slate-50 object-contain dark:bg-slate-900"
+          />
+          <div className="flex flex-col gap-1.5">
+            <Badge
+              variant="outline"
+              className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+            >
+              <CheckCircle2 className="size-3" />
+              Attached
+            </Badge>
+            <div className="flex flex-wrap gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3" />
+                )}
+                Replace
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10"
+                onClick={() => onChange(null)}
+                disabled={loading}
+              >
+                <Trash2 className="size-3" />
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 gap-1.5"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ImagePlus className="size-4 text-emerald-600 dark:text-emerald-400" />
+          )}
+          Upload image
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Comma/Enter-separated tag input with chips and autocomplete.
+ * - Enter or comma commits the current draft as a chip.
+ * - Backspace on an empty draft removes the last chip.
+ * - Autocomplete suggestions come from the event's existing tags.
+ */
+function TagsInput({
+  tags,
+  onChange,
+  allTags,
+}: {
+  tags: string[]
+  onChange: (tags: string[]) => void
+  allTags: string[]
+}) {
+  const [draft, setDraft] = React.useState("")
+
+  function commitTag(raw: string) {
+    const tag = raw.trim().replace(/,+$/g, "").trim()
+    if (!tag) {
+      setDraft("")
+      return
+    }
+    if (tags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
+      setDraft("")
+      return
+    }
+    onChange([...tags, tag])
+    setDraft("")
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault()
+      commitTag(draft)
+    } else if (e.key === "Backspace" && !draft && tags.length > 0) {
+      onChange(tags.slice(0, -1))
+    }
+  }
+
+  function removeTag(i: number) {
+    onChange(tags.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+        {tags.map((tag, i) => (
+          <Badge
+            key={`${tag}-${i}`}
+            variant="secondary"
+            className="gap-1 border-0 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30"
+          >
+            <span className="text-xs">#</span>
+            {tag}
+            <button
+              type="button"
+              onClick={() => removeTag(i)}
+              className="ml-0.5 inline-flex size-3.5 items-center justify-center rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+              aria-label={`Remove tag ${tag}`}
+            >
+              <X className="size-3" />
+            </button>
+          </Badge>
+        ))}
+        <input
+          list="q-tag-options"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => commitTag(draft)}
+          placeholder={
+            tags.length === 0
+              ? "Type a tag, press Enter or comma to add…"
+              : "Add another…"
+          }
+          className="min-w-[140px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          aria-label="Add tag"
+        />
+        <datalist id="q-tag-options">
+          {allTags.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Press <kbd className="rounded border px-1">Enter</kbd> or{" "}
+        <kbd className="rounded border px-1">,</kbd> to add a tag. Suggestions
+        appear from existing tags in this event.
+      </p>
     </div>
   )
 }

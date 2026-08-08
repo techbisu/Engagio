@@ -29,6 +29,17 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
             description: true,
             image: true,
             requireRegistration: true,
+            // Payment config — surfaced so the student's PaymentScreen
+            // can render UPI ID / QR / amount without an extra round-trip.
+            paymentMethod: true,
+            paymentAmount: true,
+            paymentCurrency: true,
+            paymentInstructions: true,
+            upiId: true,
+            upiLink: true,
+            qrCodeUrl: true,
+            requireTransactionRef: true,
+            requireScreenshot: true,
           },
         },
       },
@@ -57,6 +68,17 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
             title: link.event.title,
             description: link.event.description,
             image: link.event.image ?? null,
+            // Payment configuration — exposed so the student's PaymentScreen
+            // can render UPI ID / QR / amount without an extra API call.
+            paymentMethod: link.event.paymentMethod ?? "FREE",
+            paymentAmount: link.event.paymentAmount ?? 0,
+            paymentCurrency: link.event.paymentCurrency ?? "INR",
+            paymentInstructions: link.event.paymentInstructions ?? null,
+            upiId: link.event.upiId ?? null,
+            upiLink: link.event.upiLink ?? null,
+            qrCodeUrl: link.event.qrCodeUrl ?? null,
+            requireTransactionRef: link.event.requireTransactionRef ?? true,
+            requireScreenshot: link.event.requireScreenshot ?? true,
           }
         : null,
       questionCount,

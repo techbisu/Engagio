@@ -12,6 +12,8 @@ import {
   LogOut,
   ShieldCheck,
   ChevronRight,
+  ReceiptIndianRupee,
+  Award,
 } from "lucide-react"
 
 import { cn, initials } from "@/lib/utils"
@@ -42,6 +44,8 @@ import { AttemptsTable } from "./attempts-table"
 import { UsersList } from "./users-list"
 import { RegistrationFormBuilder } from "./registration-form-builder"
 import { RegistrationsList } from "./registrations-list"
+import { CertificatesPanel } from "./certificates-panel"
+import { PaymentsPanel } from "./payments-panel"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -64,7 +68,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "questions", label: "Questions", icon: FileQuestion, description: "Per-event questions" },
   { id: "links", label: "Quiz Links", icon: Link2, description: "Shareable quiz URLs" },
   { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All student attempts" },
+  { id: "payments", label: "Payments", icon: ReceiptIndianRupee, description: "Verify manual UPI payments" },
   { id: "users", label: "Users", icon: Users, description: "Registered students" },
+  { id: "certificates", label: "Certificates", icon: Award, description: "Issue & verify certificates" },
 ]
 
 const TAB_LABEL: Record<AdminTab, string> = {
@@ -73,7 +79,9 @@ const TAB_LABEL: Record<AdminTab, string> = {
   questions: "Questions",
   links: "Quiz Links",
   attempts: "Attempts",
+  payments: "Payments",
   users: "Users",
+  certificates: "Certificates",
 }
 
 export function AdminShell({
@@ -392,7 +400,11 @@ export function AdminShell({
               />
             )}
 
+            {tab === "payments" && <PaymentsPanel />}
+
             {tab === "users" && <UsersList />}
+
+            {tab === "certificates" && <CertificatesPanel />}
           </div>
         </main>
       </div>

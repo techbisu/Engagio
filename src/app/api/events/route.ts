@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import type { EventDto } from "@/types";
+import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 /** Check the session for an admin role. Returns true if the caller is an admin. */
 async function requireAdmin(): Promise<boolean> {
@@ -27,6 +27,27 @@ function toEventDto(e: any): EventDto {
     attemptCount: e._count?.attempts ?? 0,
     registrationCount: e._count?.registrations ?? 0,
     fieldCount: e._count?.fields ?? 0,
+    certificateCount: e._count?.certificates ?? 0,
+    // Payment
+    paymentMethod: (e.paymentMethod ?? "FREE") as PaymentMethod,
+    paymentAmount: e.paymentAmount ?? 0,
+    paymentCurrency: e.paymentCurrency ?? "INR",
+    paymentInstructions: e.paymentInstructions ?? null,
+    upiId: e.upiId ?? null,
+    upiLink: e.upiLink ?? null,
+    qrCodeUrl: e.qrCodeUrl ?? null,
+    requireTransactionRef: e.requireTransactionRef ?? true,
+    requireScreenshot: e.requireScreenshot ?? true,
+    // Certificate
+    certEnabled: e.certEnabled ?? false,
+    certTemplate: (e.certTemplate ?? "modern") as CertTemplate,
+    certIssueCondition: (e.certIssueCondition ?? "COMPLETED") as CertIssueCondition,
+    certPassingScore: e.certPassingScore ?? 60,
+    certOrgName: e.certOrgName ?? null,
+    certSigneeName: e.certSigneeName ?? null,
+    certSigneeTitle: e.certSigneeTitle ?? null,
+    certSigneeImage: e.certSigneeImage ?? null,
+    certLogo: e.certLogo ?? null,
   };
 }
 
@@ -45,6 +66,7 @@ export async function GET() {
             quizLinks: true,
             registrations: true,
             fields: true,
+            certificates: true,
           },
         },
       },
@@ -67,7 +89,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { title, description, image, startDate, endDate, isActive, requireRegistration } = body || {};
+    const { title, description, image, startDate, endDate, isActive, requireRegistration,
+            paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
+            certEnabled, certTemplate, certIssueCondition, certPassingScore, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -102,6 +126,26 @@ export async function POST(req: NextRequest) {
         endDate: end,
         isActive: typeof isActive === "boolean" ? isActive : true,
         requireRegistration: typeof requireRegistration === "boolean" ? requireRegistration : false,
+        // Payment
+        paymentMethod: typeof paymentMethod === "string" ? paymentMethod : "FREE",
+        paymentAmount: typeof paymentAmount === "number" ? paymentAmount : 0,
+        paymentCurrency: typeof paymentCurrency === "string" ? paymentCurrency : "INR",
+        paymentInstructions: typeof paymentInstructions === "string" ? paymentInstructions : null,
+        upiId: typeof upiId === "string" ? upiId : null,
+        upiLink: typeof upiLink === "string" ? upiLink : null,
+        qrCodeUrl: typeof qrCodeUrl === "string" ? qrCodeUrl : null,
+        requireTransactionRef: typeof requireTransactionRef === "boolean" ? requireTransactionRef : true,
+        requireScreenshot: typeof requireScreenshot === "boolean" ? requireScreenshot : true,
+        // Certificate
+        certEnabled: typeof certEnabled === "boolean" ? certEnabled : false,
+        certTemplate: typeof certTemplate === "string" ? certTemplate : "modern",
+        certIssueCondition: typeof certIssueCondition === "string" ? certIssueCondition : "COMPLETED",
+        certPassingScore: typeof certPassingScore === "number" ? certPassingScore : 60,
+        certOrgName: typeof certOrgName === "string" ? certOrgName : null,
+        certSigneeName: typeof certSigneeName === "string" ? certSigneeName : null,
+        certSigneeTitle: typeof certSigneeTitle === "string" ? certSigneeTitle : null,
+        certSigneeImage: typeof certSigneeImage === "string" ? certSigneeImage : null,
+        certLogo: typeof certLogo === "string" ? certLogo : null,
       },
       include: {
         _count: {
@@ -111,6 +155,7 @@ export async function POST(req: NextRequest) {
             quizLinks: true,
             registrations: true,
             fields: true,
+            certificates: true,
           },
         },
       },

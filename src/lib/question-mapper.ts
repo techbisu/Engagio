@@ -1,5 +1,10 @@
 import { parseJsonArray } from "@/lib/utils";
-import type { QuestionDto, MatchPair, QuestionType } from "@/types";
+import type {
+  QuestionDto,
+  MatchPair,
+  QuestionType,
+  QuestionDifficulty,
+} from "@/types";
 
 /** Shared mapper — converts a Prisma Question row into a QuestionDto. */
 export function toQuestionDto(q: any): QuestionDto {
@@ -27,6 +32,9 @@ export function toQuestionDto(q: any): QuestionDto {
     category: q.category ?? null,
     order: q.order,
     explanation: q.explanation ?? null,
+    imageUrl: q.imageUrl ?? null,
+    difficulty: (q.difficulty as QuestionDifficulty) ?? "MEDIUM",
+    tags: parseJsonArray<string>(q.tags),
     createdAt: q.createdAt.toISOString(),
   };
 }
@@ -41,4 +49,17 @@ export const VALID_QUESTION_TYPES: QuestionType[] = [
 
 export function isValidQuestionType(t: unknown): t is QuestionType {
   return typeof t === "string" && (VALID_QUESTION_TYPES as string[]).includes(t);
+}
+
+export const VALID_DIFFICULTIES: QuestionDifficulty[] = [
+  "EASY",
+  "MEDIUM",
+  "HARD",
+];
+
+export function isValidDifficulty(d: unknown): d is QuestionDifficulty {
+  return (
+    typeof d === "string" &&
+    (VALID_DIFFICULTIES as string[]).includes(d)
+  );
 }

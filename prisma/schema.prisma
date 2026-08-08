@@ -24,6 +24,7 @@ model User {
   sessions       Session[]
   attempts       QuizAttempt[]
   registrations  Registration[]
+  certificates   Certificate[]
 }
 
 model Account {
@@ -70,39 +71,62 @@ model Event {
   startDate   DateTime
   endDate     DateTime
   isActive    Boolean  @default(true)
-  // When true, students must fill out the event registration form
-  // before they can attempt any quiz link for this event.
   requireRegistration Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // ---- Payment Configuration ----
+  // FREE | RAZORPAY | STRIPE | MANUAL
+  paymentMethod        String   @default("FREE")
+  paymentAmount        Int      @default(0) // in smallest currency unit (paise for INR)
+  paymentCurrency      String   @default("INR")
+  paymentInstructions  String?  // shown to student before payment
+  upiId                String?  // e.g. event@upi
+  upiLink              String?  // UPI intent link
+  qrCodeUrl            String?  // base64 data URL or external URL
+  requireTransactionRef Boolean @default(true)
+  requireScreenshot    Boolean  @default(true)
+
+  // ---- Certificate Configuration ----
+  certEnabled          Boolean  @default(false)
+  certTemplate         String   @default("modern") // classic|modern|elegant|bold|minimal
+  certIssueCondition   String   @default("COMPLETED") // PARTICIPATION|COMPLETED|PASSED
+  certPassingScore     Int      @default(60)
+  certOrgName          String?
+  certSigneeName       String?
+  certSigneeTitle      String?
+  certSigneeImage      String?  // base64 data URL of signature image
+  certLogo            String?  // base64 data URL of org logo
 
   questions      Question[]
   quizLinks      QuizLink[]
   attempts       QuizAttempt[]
   fields         EventField[]
   registrations  Registration[]
+  certificates   Certificate[]
 }
 
 model Question {
   id            String   @id @default(cuid())
   eventId       String
   question      String
-  // Type of question. MCQ = standard multiple-choice (options + correctAnswer index).
-  // TRUE_FALSE = 2 options auto-generated (True/False), correctAnswer 0 or 1.
-  // FILL_BLANK = no options; `correctAnswer` is ignored; `correctText` holds the answer.
-  // MATCHING = `matchPairs` JSON holds [{left, right}] pairs; student matches them.
-  // CODING = `correctText` holds a reference solution; `codeLanguage` holds the language.
   type          String   @default("MCQ") // MCQ | TRUE_FALSE | FILL_BLANK | MATCHING | CODING
-  options       String   // JSON-encoded string[] of options (MCQ/TRUE_FALSE; empty for others)
-  correctAnswer Int      @default(0) // index into options (MCQ/TRUE_FALSE); ignored otherwise
-  correctText   String?  // FILL_BLANK / CODING: the expected text answer
-  matchPairs    String?  // MATCHING: JSON [{left, right}]
-  codeLanguage  String?  // CODING: javascript | python | etc.
+  options       String   // JSON-encoded string[] of options
+  correctAnswer Int      @default(0)
+  correctText   String?
+  matchPairs    String?
+  codeLanguage  String?
   marks         Int      @default(1)
-  negativeMarks Int      @default(0) // marks deducted on wrong answer (MCQ/TRUE_FALSE)
-  category      String?  // e.g. "React", "DSA", "Aptitude" — for per-category analysis
+  negativeMarks Int      @default(0)
+  category      String?
   order         Int      @default(0)
   explanation   String?
+  // NEW: optional question image (base64 data URL — lightweight, no external storage)
+  imageUrl      String?
+  // NEW: difficulty for filtering/analysis
+  difficulty    String   @default("MEDIUM") // EASY | MEDIUM | HARD
+  // NEW: tags for flexible labeling (JSON string[])
+  tags          String?  // JSON-encoded string[]
   createdAt     DateTime @default(now())
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -220,6 +244,7 @@ model EventField {
 
 // One registration per (event, user). `data` stores the submitted answers
 // as JSON: { [fieldId]: string | number | boolean }
+// Also tracks manual payment verification status.
 model Registration {
   id        String   @id @default(cuid())
   eventId   String
@@ -227,11 +252,46 @@ model Registration {
   data      String   // JSON-encoded { [fieldId]: value }
   createdAt DateTime @default(now())
 
+  // ---- Payment tracking (for MANUAL payment mode) ----
+  // NONE | PENDING_VERIFICATION | COMPLETED | REJECTED
+  paymentStatus        String   @default("NONE")
+  paymentMethod        String?  // MANUAL | RAZORPAY | STRIPE
+  transactionReference String?  // UTR / transaction ID entered by student
+  screenshotUrl        String?  // base64 data URL of payment screenshot
+  verifiedBy           String?  // admin userId who approved/rejected
+  verifiedAt           DateTime?
+  rejectionReason      String?
+
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // A user can register for an event only once.
   @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([paymentStatus])
+}
+
+// Certificate issued to a participant. certificateNumber is human-readable
+// (e.g. EVT-2026-A8F42K). verificationToken is a separate long random string
+// used in the public verification URL (/?verify=TOKEN).
+model Certificate {
+  id                String   @id @default(cuid())
+  eventId           String
+  userId            String
+  attemptId         String?
+  certificateNumber String   @unique // e.g. EVT-2026-A8F42K
+  verificationToken String   @unique // 32-char hex for /verify/[token]
+  template          String   @default("modern") // classic|modern|elegant|bold|minimal
+  recipientName     String
+  issuedAt          DateTime @default(now())
+  status            String   @default("VALID") // VALID | REVOKED
+  certificateUrl    String?  // optional: generated PNG data URL (can be regenerated)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([eventId])
   @@index([userId])
 }

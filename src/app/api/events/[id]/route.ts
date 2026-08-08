@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import type { EventDto } from "@/types";
+import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
@@ -30,6 +30,25 @@ function toEventDto(e: any): EventDto {
     attemptCount: e._count?.attempts ?? 0,
     registrationCount: e._count?.registrations ?? 0,
     fieldCount: e._count?.fields ?? 0,
+    certificateCount: e._count?.certificates ?? 0,
+    paymentMethod: (e.paymentMethod ?? "FREE") as PaymentMethod,
+    paymentAmount: e.paymentAmount ?? 0,
+    paymentCurrency: e.paymentCurrency ?? "INR",
+    paymentInstructions: e.paymentInstructions ?? null,
+    upiId: e.upiId ?? null,
+    upiLink: e.upiLink ?? null,
+    qrCodeUrl: e.qrCodeUrl ?? null,
+    requireTransactionRef: e.requireTransactionRef ?? true,
+    requireScreenshot: e.requireScreenshot ?? true,
+    certEnabled: e.certEnabled ?? false,
+    certTemplate: (e.certTemplate ?? "modern") as CertTemplate,
+    certIssueCondition: (e.certIssueCondition ?? "COMPLETED") as CertIssueCondition,
+    certPassingScore: e.certPassingScore ?? 60,
+    certOrgName: e.certOrgName ?? null,
+    certSigneeName: e.certSigneeName ?? null,
+    certSigneeTitle: e.certSigneeTitle ?? null,
+    certSigneeImage: e.certSigneeImage ?? null,
+    certLogo: e.certLogo ?? null,
   };
 }
 
@@ -52,6 +71,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
             quizLinks: true,
             registrations: true,
             fields: true,
+            certificates: true,
           },
         },
       },
@@ -80,7 +100,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const body = await req.json();
-    const { title, description, image, startDate, endDate, isActive, requireRegistration } = body || {};
+    const { title, description, image, startDate, endDate, isActive, requireRegistration,
+            paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
+            certEnabled, certTemplate, certIssueCondition, certPassingScore, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
 
     const data: Record<string, unknown> = {};
     if (typeof title === "string" && title.trim()) data.title = title.trim();
@@ -88,6 +110,26 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     if (typeof image === "string") data.image = image.trim() || null;
     if (typeof isActive === "boolean") data.isActive = isActive;
     if (typeof requireRegistration === "boolean") data.requireRegistration = requireRegistration;
+    // Payment
+    if (typeof paymentMethod === "string") data.paymentMethod = paymentMethod;
+    if (typeof paymentAmount === "number") data.paymentAmount = paymentAmount;
+    if (typeof paymentCurrency === "string") data.paymentCurrency = paymentCurrency;
+    if (typeof paymentInstructions === "string") data.paymentInstructions = paymentInstructions || null;
+    if (typeof upiId === "string") data.upiId = upiId || null;
+    if (typeof upiLink === "string") data.upiLink = upiLink || null;
+    if (typeof qrCodeUrl === "string") data.qrCodeUrl = qrCodeUrl || null;
+    if (typeof requireTransactionRef === "boolean") data.requireTransactionRef = requireTransactionRef;
+    if (typeof requireScreenshot === "boolean") data.requireScreenshot = requireScreenshot;
+    // Certificate
+    if (typeof certEnabled === "boolean") data.certEnabled = certEnabled;
+    if (typeof certTemplate === "string") data.certTemplate = certTemplate;
+    if (typeof certIssueCondition === "string") data.certIssueCondition = certIssueCondition;
+    if (typeof certPassingScore === "number") data.certPassingScore = certPassingScore;
+    if (typeof certOrgName === "string") data.certOrgName = certOrgName || null;
+    if (typeof certSigneeName === "string") data.certSigneeName = certSigneeName || null;
+    if (typeof certSigneeTitle === "string") data.certSigneeTitle = certSigneeTitle || null;
+    if (typeof certSigneeImage === "string") data.certSigneeImage = certSigneeImage || null;
+    if (typeof certLogo === "string") data.certLogo = certLogo || null;
 
     let start = existing.startDate;
     let end = existing.endDate;
@@ -125,6 +167,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
             quizLinks: true,
             registrations: true,
             fields: true,
+            certificates: true,
           },
         },
       },

@@ -55,7 +55,11 @@ import {
 import { cn, formatDate, truncate } from "@/lib/utils"
 
 import { api } from "./api"
-import type { EventDto } from "@/types"
+import {
+  PaymentConfig,
+  type PaymentConfigValue,
+} from "./payment-config"
+import type { EventDto, PaymentMethod } from "@/types"
 
 interface EventsManagerProps {
   onManageQuestions?: (eventId: string, eventTitle: string) => void
@@ -72,6 +76,16 @@ interface EventFormState {
   startDate: string
   endDate: string
   isActive: boolean
+  // Payment configuration (kept in form state so we can PATCH it back).
+  paymentMethod: PaymentMethod
+  paymentAmount: number // paise
+  paymentCurrency: string
+  paymentInstructions: string
+  upiId: string
+  upiLink: string
+  qrCodeUrl: string
+  requireTransactionRef: boolean
+  requireScreenshot: boolean
 }
 
 const emptyForm: EventFormState = {
@@ -81,6 +95,15 @@ const emptyForm: EventFormState = {
   startDate: new Date().toISOString().slice(0, 10),
   endDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
   isActive: true,
+  paymentMethod: "FREE",
+  paymentAmount: 0,
+  paymentCurrency: "INR",
+  paymentInstructions: "",
+  upiId: "",
+  upiLink: "",
+  qrCodeUrl: "",
+  requireTransactionRef: true,
+  requireScreenshot: true,
 }
 
 export function EventsManager({
@@ -114,6 +137,16 @@ export function EventsManager({
           startDate: new Date(payload.startDate).toISOString(),
           endDate: new Date(payload.endDate).toISOString(),
           isActive: payload.isActive,
+          // Payment config
+          paymentMethod: payload.paymentMethod,
+          paymentAmount: payload.paymentAmount,
+          paymentCurrency: payload.paymentCurrency,
+          paymentInstructions: payload.paymentInstructions || null,
+          upiId: payload.upiId || null,
+          upiLink: payload.upiLink || null,
+          qrCodeUrl: payload.qrCodeUrl || null,
+          requireTransactionRef: payload.requireTransactionRef,
+          requireScreenshot: payload.requireScreenshot,
         }),
       }),
     onSuccess: () => {
@@ -136,6 +169,17 @@ export function EventsManager({
           startDate: new Date(payload.startDate).toISOString(),
           endDate: new Date(payload.endDate).toISOString(),
           isActive: payload.isActive,
+          // Payment config (always sent so a switch from MANUAL → FREE clears
+          // UPI fields back to null server-side).
+          paymentMethod: payload.paymentMethod,
+          paymentAmount: payload.paymentAmount,
+          paymentCurrency: payload.paymentCurrency,
+          paymentInstructions: payload.paymentInstructions || null,
+          upiId: payload.upiId || null,
+          upiLink: payload.upiLink || null,
+          qrCodeUrl: payload.qrCodeUrl || null,
+          requireTransactionRef: payload.requireTransactionRef,
+          requireScreenshot: payload.requireScreenshot,
         }),
       }),
     onSuccess: () => {
@@ -176,6 +220,16 @@ export function EventsManager({
       startDate: (ev.startDate || "").slice(0, 10),
       endDate: (ev.endDate || "").slice(0, 10),
       isActive: ev.isActive,
+      // Hydrate payment config from the event DTO (defaults to FREE/empty).
+      paymentMethod: ev.paymentMethod ?? "FREE",
+      paymentAmount: ev.paymentAmount ?? 0,
+      paymentCurrency: ev.paymentCurrency ?? "INR",
+      paymentInstructions: ev.paymentInstructions ?? "",
+      upiId: ev.upiId ?? "",
+      upiLink: ev.upiLink ?? "",
+      qrCodeUrl: ev.qrCodeUrl ?? "",
+      requireTransactionRef: ev.requireTransactionRef ?? true,
+      requireScreenshot: ev.requireScreenshot ?? true,
     })
     setErrors({})
     setDialogOpen(true)
@@ -411,7 +465,7 @@ export function EventsManager({
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Edit Event" : "Create Event"}
@@ -510,6 +564,38 @@ export function EventsManager({
                 id="ev-active"
                 checked={form.isActive}
                 onCheckedChange={(v) => setForm({ ...form, isActive: v })}
+              />
+            </div>
+
+            {/* Payment configuration */}
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+              <h4 className="mb-3 text-sm font-semibold">Payment</h4>
+              <PaymentConfig
+                event={{
+                  paymentMethod: form.paymentMethod,
+                  paymentAmount: form.paymentAmount,
+                  paymentCurrency: form.paymentCurrency,
+                  paymentInstructions: form.paymentInstructions,
+                  upiId: form.upiId,
+                  upiLink: form.upiLink,
+                  qrCodeUrl: form.qrCodeUrl,
+                  requireTransactionRef: form.requireTransactionRef,
+                  requireScreenshot: form.requireScreenshot,
+                }}
+                onChange={(value: PaymentConfigValue) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    paymentMethod: value.paymentMethod,
+                    paymentAmount: value.paymentAmount,
+                    paymentCurrency: value.paymentCurrency,
+                    paymentInstructions: value.paymentInstructions,
+                    upiId: value.upiId,
+                    upiLink: value.upiLink,
+                    qrCodeUrl: value.qrCodeUrl,
+                    requireTransactionRef: value.requireTransactionRef,
+                    requireScreenshot: value.requireScreenshot,
+                  }))
+                }
               />
             </div>
           </div>

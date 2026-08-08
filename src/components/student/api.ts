@@ -1,6 +1,11 @@
 "use client"
 
-import type { QuizLinkDto, MatchPair, QuestionType } from "@/types"
+import type {
+  QuizLinkDto,
+  MatchPair,
+  QuestionType,
+  PaymentMethod,
+} from "@/types"
 
 /**
  * Shared fetch helper for the student-facing API surface.
@@ -37,6 +42,17 @@ export interface QuizLinkBySlugResponse {
     title: string
     description?: string | null
     image?: string | null
+    // Payment config (returned by /api/quiz-links/by-slug/[slug]).
+    // Present when the by-slug endpoint includes the event's payment fields.
+    paymentMethod?: PaymentMethod
+    paymentAmount?: number
+    paymentCurrency?: string
+    paymentInstructions?: string | null
+    upiId?: string | null
+    upiLink?: string | null
+    qrCodeUrl?: string | null
+    requireTransactionRef?: boolean
+    requireScreenshot?: boolean
   } | null
   questionCount: number
   timeLimit: number

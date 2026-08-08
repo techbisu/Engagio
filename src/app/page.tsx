@@ -28,6 +28,8 @@ import { StudentDashboard } from "@/components/student/student-dashboard"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
 import { Leaderboard } from "@/components/student/leaderboard"
+import { MyCertificates } from "@/components/student/my-certificates"
+import { VerifyCertificate } from "@/components/cert/verify-certificate"
 
 /**
  * Helper: GET /api/me → returns { id, email, name, image, role } or null.
@@ -60,6 +62,8 @@ export default function Home() {
     setQuizMeta,
     user,
     setUser,
+    verifyToken,
+    setVerifyToken,
   } = useAppStore()
 
   React.useEffect(() => {
@@ -68,8 +72,9 @@ export default function Home() {
     setView(initial.view)
     setAdminTab(initial.adminTab)
     if (initial.quizSlug) setQuizSlug(initial.quizSlug)
+    if (initial.verifyToken) setVerifyToken(initial.verifyToken)
     setHydrated(true)
-  }, [hydrated, setView, setAdminTab, setQuizSlug])
+  }, [hydrated, setView, setAdminTab, setQuizSlug, setVerifyToken])
 
   // --- Session sync -------------------------------------------------------
   // We use NextAuth's useSession for live auth state changes (e.g., after
@@ -95,8 +100,8 @@ export default function Home() {
 
   // --- URL sync ----------------------------------------------------------
   React.useEffect(() => {
-    syncUrl(view, { quizSlug })
-  }, [view, quizSlug])
+    syncUrl(view, { quizSlug, verifyToken })
+  }, [view, quizSlug, verifyToken])
 
   // --- Routing guards ----------------------------------------------------
   // If user lands on a protected view without a session, redirect to login.
@@ -211,6 +216,16 @@ export default function Home() {
     setView("student")
   }, [setQuizMeta, setQuizSlug, setStudentSubView, setView])
 
+  const handleNavigateMyCertificates = React.useCallback(() => {
+    setStudentSubView("certificates")
+    setView("student")
+  }, [setStudentSubView, setView])
+
+  const handleExitVerify = React.useCallback(() => {
+    setVerifyToken(null)
+    setView("landing")
+  }, [setVerifyToken, setView])
+
   // --- Render ------------------------------------------------------------
   if (sessionStatus === "loading" && !hydrated) {
     // Initial paint: minimal shell to avoid hydration mismatch
@@ -221,6 +236,11 @@ export default function Home() {
         </div>
       </div>
     )
+  }
+
+  // PUBLIC VERIFY VIEW — no auth required, full-screen, no header/footer chrome.
+  if (view === "verify" && verifyToken) {
+    return <VerifyCertificate token={verifyToken} onExit={handleExitVerify} />
   }
 
   // ADMIN VIEW
@@ -274,6 +294,8 @@ export default function Home() {
           }}
         />
       )
+    } else if (studentSubView === "certificates") {
+      content = <MyCertificates />
     } else {
       content = (
         <StudentDashboard
@@ -288,6 +310,7 @@ export default function Home() {
         user={user}
         onSignOut={handleSignOut}
         onNavigateHome={() => setView("landing")}
+        onNavigateMyCertificates={handleNavigateMyCertificates}
       >
         {content}
       </StudentShell>

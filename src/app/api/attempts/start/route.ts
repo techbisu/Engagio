@@ -92,7 +92,11 @@ export async function POST(req: NextRequest) {
       // above only selected id/title/description).
       const event = await db.event.findUnique({
         where: { id: quizLink.eventId },
-        select: { requireRegistration: true },
+        select: {
+          requireRegistration: true,
+          // Payment enforcement — re-fetched together to avoid a second round-trip.
+          paymentMethod: true,
+        },
       });
       if (event?.requireRegistration) {
         const registration = await db.registration.findUnique({
@@ -102,7 +106,7 @@ export async function POST(req: NextRequest) {
               userId: session.user.id,
             },
           },
-          select: { id: true },
+          select: { id: true, paymentStatus: true },
         });
         if (!registration) {
           return NextResponse.json(
@@ -113,6 +117,27 @@ export async function POST(req: NextRequest) {
             },
             { status: 403 }
           );
+        }
+        // Payment gate — for MANUAL payment events, the registration must
+        // have paymentStatus = "COMPLETED" before the student can start.
+        // PENDING_VERIFICATION / REJECTED / NONE all block the attempt.
+        if (event.paymentMethod === "MANUAL") {
+          if (registration.paymentStatus !== "COMPLETED") {
+            return NextResponse.json(
+              {
+                error:
+                  registration.paymentStatus === "PENDING_VERIFICATION"
+                    ? "Your payment is pending verification. Please wait for the organizer to approve it."
+                    : registration.paymentStatus === "REJECTED"
+                      ? "Your payment was rejected. Please resubmit your payment proof."
+                      : "Payment required before you can start the quiz.",
+                code: "PAYMENT_REQUIRED",
+                paymentStatus: registration.paymentStatus,
+                eventId: quizLink.eventId,
+              },
+              { status: 403 }
+            );
+          }
         }
       }
     }

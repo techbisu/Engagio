@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { toQuestionDto, isValidQuestionType } from "@/lib/question-mapper";
+import {
+  toQuestionDto,
+  isValidQuestionType,
+  isValidDifficulty,
+} from "@/lib/question-mapper";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
-import type { MatchPair } from "@/types";
+import type { MatchPair, QuestionDifficulty } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
@@ -106,6 +110,43 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       data.matchPairs = pairs.length > 0 ? stringifyJson(pairs) : null;
     } else if (body.matchPairs === null) {
       data.matchPairs = null;
+    }
+
+    // ---- imageUrl (base64 data URL, optional) ----
+    if (typeof body.imageUrl === "string") {
+      data.imageUrl = body.imageUrl.startsWith("data:image/")
+        ? body.imageUrl
+        : body.imageUrl.trim() || null;
+    } else if (body.imageUrl === null) {
+      data.imageUrl = null;
+    }
+
+    // ---- difficulty (EASY | MEDIUM | HARD) ----
+    if (body.difficulty !== undefined) {
+      if (body.difficulty === null) {
+        data.difficulty = "MEDIUM";
+      } else if (isValidDifficulty(body.difficulty)) {
+        data.difficulty = body.difficulty as QuestionDifficulty;
+      } else {
+        return NextResponse.json(
+          {
+            error:
+              "difficulty must be one of EASY|MEDIUM|HARD",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ---- tags (JSON string[]) ----
+    if (Array.isArray(body.tags)) {
+      const tags: string[] = body.tags
+        .filter((t: unknown) => typeof t === "string" && t.trim())
+        .map((t: string) => t.trim())
+        .slice(0, 50);
+      data.tags = tags.length > 0 ? JSON.stringify(tags) : null;
+    } else if (body.tags === null) {
+      data.tags = null;
     }
 
     // ---- options + correctAnswer (validated jointly per-type) ----
