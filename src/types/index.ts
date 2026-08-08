@@ -8,12 +8,15 @@ export type ViewName =
   | "quiz"
   | "results"
   | "verify"
+  | "activity"
+  | "live-display"
 
 export type AdminTab =
   | "dashboard"
   | "events"
   | "questions"
   | "links"
+  | "activities"
   | "attempts"
   | "users"
   | "payments"
@@ -307,4 +310,139 @@ export interface CertificateDto {
     certPassingScore?: number | null
   }
   user?: { name: string | null; email: string }
+}
+
+// ─── Activity System ────────────────────────────────────────────────────────
+
+export type ActivityType =
+  | "QUIZ"
+  | "LIVE_QUIZ"
+  | "POLL"
+  | "SURVEY"
+  | "FEEDBACK"
+  | "Q_AND_A"
+  | "VOTING"
+  | "KNOWLEDGE_CHECK"
+  | "PRE_POST_ASSESSMENT"
+
+export type ActivityStatus =
+  | "DRAFT"
+  | "SCHEDULED"
+  | "LIVE"
+  | "CLOSED"
+  | "COMPLETED"
+
+export type ActivityQuestionType =
+  | "SINGLE_CHOICE"
+  | "MULTIPLE_CHOICE"
+  | "RATING"
+  | "TEXT"
+  | "NUMBER"
+  | "YES_NO"
+  | "OPEN"
+
+export interface ActivitySettings {
+  allowMultiple?: boolean
+  anonymous?: boolean
+  showResults?: boolean
+  hideResultsUntilClosed?: boolean
+  maxResponses?: number
+  speedBonus?: boolean
+  timePerQuestion?: number
+}
+
+export interface ActivityQuestionDto {
+  id: string
+  activityId: string
+  text: string
+  type: ActivityQuestionType
+  options: string[]
+  required: boolean
+  sortOrder: number
+  createdAt: string
+}
+
+export interface ActivityDto {
+  id: string
+  eventId: string
+  type: ActivityType
+  title: string
+  description?: string | null
+  status: ActivityStatus
+  isEnabled: boolean
+  sortOrder: number
+  startsAt?: string | null
+  endsAt?: string | null
+  settings: ActivitySettings
+  quizLinkId?: string | null
+  session?: string | null
+  slug?: string | null
+  createdBy?: string | null
+  createdAt: string
+  updatedAt: string
+  // Computed counts
+  questionCount?: number
+  responseCount?: number
+  participationCount?: number
+  // For QUIZ type: link to the quiz link
+  quizLink?: { id: string; slug: string; timeLimit: number } | null
+}
+
+export interface ActivityResponseDto {
+  id: string
+  activityId: string
+  questionId?: string | null
+  participantId?: string | null
+  participantName?: string | null
+  selectedOptions: number[]
+  text?: string | null
+  numberValue?: number | null
+  ratingValue?: number | null
+  metadata: {
+    upvotes?: number
+    approved?: boolean
+    pinned?: boolean
+    answered?: boolean
+    hidden?: boolean
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ActivityParticipationDto {
+  id: string
+  activityId: string
+  participantId: string
+  status: "STARTED" | "COMPLETED" | "ABANDONED"
+  startedAt: string
+  completedAt?: string | null
+}
+
+// Poll/Survey result aggregation
+export interface PollOptionResult {
+  index: number
+  label: string
+  count: number
+  percentage: number
+}
+
+export interface ActivityResultsDto {
+  activityId: string
+  type: ActivityType
+  totalResponses: number
+  totalParticipants?: number
+  // For polls/voting: per-option breakdown
+  options?: PollOptionResult[]
+  // For Q&A: list of questions with upvote counts
+  questions?: ActivityResponseDto[]
+  // For surveys: per-question breakdown
+  questionResults?: Array<{
+    questionId: string
+    questionText: string
+    questionType: ActivityQuestionType
+    optionResults?: PollOptionResult[]
+    averageRating?: number
+    textResponses?: string[]
+    responseCount: number
+  }>
 }

@@ -110,6 +110,7 @@ model Event {
   fields         EventField[]
   registrations  Registration[]
   certificates   Certificate[]
+  activities     Activity[]
 }
 
 model Question {
@@ -320,4 +321,116 @@ model Certificate {
 
   @@index([eventId])
   @@index([userId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ACTIVITY SYSTEM — extensible activity types per event
+// The existing Quiz/Assessment system (QuizLink → QuizAttempt) remains intact.
+// For QUIZ-type activities, `quizLinkId` links the Activity to the existing
+// assessment. For other types (POLL, SURVEY, Q_AND_A, VOTING, etc.), the
+// ActivityQuestion + ActivityResponse models below handle the data.
+// ────────────────────────────────────────────────────────────────────────────
+
+model Activity {
+  id          String   @id @default(cuid())
+  eventId     String
+  // QUIZ | LIVE_QUIZ | POLL | SURVEY | FEEDBACK | Q_AND_A | VOTING | KNOWLEDGE_CHECK | PRE_POST_ASSESSMENT
+  type        String   @default("POLL")
+  title       String
+  description String?
+  // DRAFT | SCHEDULED | LIVE | CLOSED | COMPLETED
+  status      String   @default("DRAFT")
+  isEnabled   Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  // Optional scheduling
+  startsAt    DateTime?
+  endsAt      DateTime?
+  // JSON: type-specific settings (e.g., { allowMultiple: true, anonymous: true, showResults: true })
+  settings    String   @default("{}")
+  // For QUIZ type: links to the existing QuizLink (nullable — most types don't use this)
+  quizLinkId  String?
+  // Optional session grouping (just a string label for MVP — not a separate model)
+  session     String?
+  // QR/shareable short code for participant access
+  slug        String?  @unique
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  questions    ActivityQuestion[]
+  responses    ActivityResponse[]
+  participations ActivityParticipation[]
+
+  @@index([eventId])
+  @@index([type])
+  @@index([status])
+}
+
+// Questions for non-quiz activities (polls, surveys, Q&A, voting).
+// For QUIZ-type activities, the existing Question model is used via quizLinkId.
+model ActivityQuestion {
+  id          String   @id @default(cuid())
+  activityId  String
+  text        String
+  // For polls/surveys: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "RATING" | "TEXT" | "NUMBER" | "YES_NO"
+  // For Q&A: "OPEN" (free-text question submission)
+  // For voting: "SINGLE_CHOICE" (the candidates)
+  type        String   @default("SINGLE_CHOICE")
+  // JSON string[] of options (for choice-based types)
+  options     String?
+  required    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  activity   Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  responses  ActivityResponse[]
+
+  @@index([activityId])
+}
+
+// Individual participant responses to activity questions.
+// For Q&A: the `text` field holds the submitted question, and `metadata` holds upvotes.
+// For polls/voting: `selectedOptions` holds the chosen option indices.
+// For surveys: `selectedOptions`, `text`, `numberValue`, or `ratingValue` depending on question type.
+model ActivityResponse {
+  id              String   @id @default(cuid())
+  activityId      String
+  questionId      String?
+  participantId   String?
+  participantName String?  // for anonymous responses
+  // The response payload — which fields are used depends on the activity type + question type
+  selectedOptions String?  // JSON number[] of option indices
+  text            String?  // for TEXT / OPEN (Q&A) questions
+  numberValue     Int?
+  ratingValue     Int?     // 1-5 for RATING questions
+  // Metadata JSON (e.g., { upvotes: 5, approved: true, pinned: false, status: "PENDING" })
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  activity   Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  question   ActivityQuestion? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([activityId])
+  @@index([questionId])
+  @@index([participantId])
+}
+
+// Lightweight participation tracking (which participant joined which activity).
+// Does NOT duplicate quiz attempts — QUIZ activities use QuizAttempt.
+model ActivityParticipation {
+  id            String   @id @default(cuid())
+  activityId    String
+  participantId String
+  // STARTED | COMPLETED | ABANDONED
+  status        String   @default("STARTED")
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, participantId])
+  @@index([activityId])
+  @@index([participantId])
 }

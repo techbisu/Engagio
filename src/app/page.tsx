@@ -39,6 +39,9 @@ import { Leaderboard } from "@/components/student/leaderboard"
 import { MyCertificates } from "@/components/student/my-certificates"
 import { VerifyCertificate } from "@/components/cert/verify-certificate"
 
+import { ActivityJoin } from "@/components/activities/activity-join"
+import { LiveDisplay } from "@/components/activities/live-display"
+
 /**
  * Helper: GET /api/me → returns { id, email, name, image, role } or null.
  * Used as the source of truth for the current user on the client.
@@ -72,6 +75,11 @@ export default function Home() {
     setUser,
     verifyToken,
     setVerifyToken,
+    activitySlug,
+    setActivitySlug,
+    liveActivityId,
+    liveActivityType,
+    setLiveActivity,
   } = useAppStore()
 
   React.useEffect(() => {
@@ -81,8 +89,18 @@ export default function Home() {
     setAdminTab(initial.adminTab)
     if (initial.quizSlug) setQuizSlug(initial.quizSlug)
     if (initial.verifyToken) setVerifyToken(initial.verifyToken)
+    if (initial.activitySlug) setActivitySlug(initial.activitySlug)
+    if (initial.liveActivityId) setLiveActivity(initial.liveActivityId)
     setHydrated(true)
-  }, [hydrated, setView, setAdminTab, setQuizSlug, setVerifyToken])
+  }, [
+    hydrated,
+    setView,
+    setAdminTab,
+    setQuizSlug,
+    setVerifyToken,
+    setActivitySlug,
+    setLiveActivity,
+  ])
 
   // --- Session sync -------------------------------------------------------
   // We use NextAuth's useSession for live auth state changes (e.g., after
@@ -108,8 +126,13 @@ export default function Home() {
 
   // --- URL sync ----------------------------------------------------------
   React.useEffect(() => {
-    syncUrl(view, { quizSlug, verifyToken })
-  }, [view, quizSlug, verifyToken])
+    syncUrl(view, {
+      quizSlug,
+      verifyToken,
+      activitySlug,
+      liveActivityId,
+    })
+  }, [view, quizSlug, verifyToken, activitySlug, liveActivityId])
 
   // --- Routing guards ----------------------------------------------------
   // If user lands on a protected view without a session, redirect to login.
@@ -122,6 +145,10 @@ export default function Home() {
     // Quiz view: show login first if not authed; the quiz-start screen
     // will be rendered after auth.
     if (!isAuthed && view === "quiz") {
+      setView("login")
+    }
+    // Activity view: same login-first pattern as the quiz deep-link.
+    if (!isAuthed && view === "activity") {
       setView("login")
     }
   }, [view, user, sessionStatus, setView])
@@ -153,6 +180,8 @@ export default function Home() {
           if (quizSlug) {
             setStudentSubView("quiz-start")
             setView("student")
+          } else if (activitySlug) {
+            setView("activity")
           } else {
             setStudentSubView("dashboard")
             setView("student")
@@ -163,7 +192,7 @@ export default function Home() {
         meQuery.refetch()
       }
     },
-    [meQuery, setView, setStudentSubView, setUser, quizSlug],
+    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug],
   )
 
   const handleNavigate = React.useCallback(
@@ -234,6 +263,41 @@ export default function Home() {
     setView("landing")
   }, [setVerifyToken, setView])
 
+  // --- Activity handlers -------------------------------------------------
+  const handleActivityExit = React.useCallback(() => {
+    setActivitySlug(null)
+    setView("landing")
+  }, [setActivitySlug, setView])
+
+  const handleActivityQuizRedirect = React.useCallback(
+    (quizSlugValue: string) => {
+      // Switch to the existing quiz deep-link flow.
+      setActivitySlug(null)
+      setQuizSlug(quizSlugValue)
+      setStudentSubView("quiz-start")
+      setView("student")
+    },
+    [setActivitySlug, setQuizSlug, setStudentSubView, setView],
+  )
+
+  const handleOpenLiveDisplay = React.useCallback(
+    (activityId: string, type?: import("@/types").ActivityType) => {
+      setLiveActivity(activityId, type ?? null)
+      setView("live-display")
+    },
+    [setLiveActivity, setView],
+  )
+
+  const handleExitLiveDisplay = React.useCallback(() => {
+    setLiveActivity(null, null)
+    // If we came from an activity join, go back there; otherwise go home.
+    if (activitySlug) {
+      setView("activity")
+    } else {
+      setView("landing")
+    }
+  }, [setLiveActivity, activitySlug, setView])
+
   // --- Render ------------------------------------------------------------
   if (sessionStatus === "loading" && !hydrated) {
     // Initial paint: minimal shell to avoid hydration mismatch
@@ -243,6 +307,18 @@ export default function Home() {
           <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         </div>
       </div>
+    )
+  }
+
+  // PUBLIC LIVE-DISPLAY VIEW — no auth required, full-screen projector view,
+  // no shell, no header, no footer.
+  if (view === "live-display" && liveActivityId) {
+    return (
+      <LiveDisplay
+        activityId={liveActivityId}
+        type={liveActivityType ?? undefined}
+        onExit={handleExitLiveDisplay}
+      />
     )
   }
 
@@ -264,7 +340,7 @@ export default function Home() {
     )
   }
 
-  // STUDENT VIEW (dashboard + quiz-start + quiz-runner)
+  // STUDENT VIEW (dashboard + quiz-start + quiz-runner + activity)
   if (view === "student" && user) {
     let content: React.ReactNode
     if (studentSubView === "quiz-runner" && quizMeta) {
@@ -304,6 +380,16 @@ export default function Home() {
       )
     } else if (studentSubView === "certificates") {
       content = <MyCertificates />
+    } else if (studentSubView === "activity" && activitySlug) {
+      content = (
+        <ActivityJoin
+          slug={activitySlug}
+          user={user}
+          onExit={handleActivityExit}
+          onOpenLiveDisplay={handleOpenLiveDisplay}
+          onQuizRedirect={handleActivityQuizRedirect}
+        />
+      )
     } else {
       content = (
         <StudentDashboard
@@ -323,6 +409,30 @@ export default function Home() {
         {content}
       </StudentShell>
     )
+  }
+
+  // ACTIVITY deep-link view: requires auth. If authed, render the
+  // ActivityJoin component inside the StudentShell so the participant has
+  // normal chrome + sign-out.
+  if (view === "activity" && activitySlug) {
+    if (user) {
+      return (
+        <StudentShell
+          user={user}
+          onSignOut={handleSignOut}
+          onNavigateHome={() => setView("landing")}
+        >
+          <ActivityJoin
+            slug={activitySlug}
+            user={user}
+            onExit={handleActivityExit}
+            onOpenLiveDisplay={handleOpenLiveDisplay}
+            onQuizRedirect={handleActivityQuizRedirect}
+          />
+        </StudentShell>
+      )
+    }
+    // Not authed — fall through to login (guard already redirected).
   }
 
   // QUIZ deep-link view: requires auth. If authed, route to participant quiz-start.

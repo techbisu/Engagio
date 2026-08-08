@@ -1,7 +1,7 @@
 "use client"
 
 import { create } from "zustand"
-import type { SafeUser, ViewName, AdminTab } from "@/types"
+import type { SafeUser, ViewName, AdminTab, ActivityType } from "@/types"
 
 export type StudentSubView =
   | "dashboard"
@@ -10,6 +10,7 @@ export type StudentSubView =
   | "leaderboard"
   | "results"
   | "certificates"
+  | "activity"
 export type QuizPhase = "start" | "active" | "done"
 
 export interface QuizMeta {
@@ -51,6 +52,15 @@ interface AppState {
   verifyToken: string | null
   setVerifyToken: (t: string | null) => void
 
+  // Activity deep-link (?activity=SLUG) — renders the participant activity join
+  activitySlug: string | null
+  setActivitySlug: (slug: string | null) => void
+
+  // Live-display deep-link (?live=ID) — renders the projector view full-screen
+  liveActivityId: string | null
+  liveActivityType: ActivityType | null
+  setLiveActivity: (id: string | null, type?: ActivityType | null) => void
+
   // Reset to landing
   reset: () => void
 }
@@ -80,6 +90,14 @@ export const useAppStore = create<AppState>((set) => ({
   verifyToken: null,
   setVerifyToken: (verifyToken) => set({ verifyToken }),
 
+  activitySlug: null,
+  setActivitySlug: (activitySlug) => set({ activitySlug }),
+
+  liveActivityId: null,
+  liveActivityType: null,
+  setLiveActivity: (id, type = null) =>
+    set({ liveActivityId: id, liveActivityType: type }),
+
   reset: () =>
     set({
       view: "landing",
@@ -89,6 +107,9 @@ export const useAppStore = create<AppState>((set) => ({
       quizMeta: null,
       lastAttemptId: null,
       verifyToken: null,
+      activitySlug: null,
+      liveActivityId: null,
+      liveActivityType: null,
     }),
 }))
 
@@ -99,12 +120,16 @@ export const useAppStore = create<AppState>((set) => ({
  *   ?view=login      → login page
  *   ?view=student    → student dashboard (will require login)
  *   ?verify=TOKEN    → public verification page (no login needed)
+ *   ?activity=SLUG   → participant activity join view (will require login)
+ *   ?live=ID         → projector live-display view (no auth — public audience view)
  */
 export function parseInitialRoute(): {
   view: ViewName
   quizSlug: string | null
   adminTab: AdminTab
   verifyToken: string | null
+  activitySlug: string | null
+  liveActivityId: string | null
 } {
   if (typeof window === "undefined") {
     return {
@@ -112,6 +137,8 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: null,
+      activitySlug: null,
+      liveActivityId: null,
     }
   }
   const params = new URLSearchParams(window.location.search)
@@ -119,6 +146,8 @@ export function parseInitialRoute(): {
   const view = params.get("view") as ViewName | null
   const tab = params.get("tab") as AdminTab | null
   const verify = params.get("verify")
+  const activity = params.get("activity")
+  const live = params.get("live")
 
   // Public verify deep-link takes priority — no auth required.
   if (verify) {
@@ -127,6 +156,29 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: verify,
+      activitySlug: null,
+      liveActivityId: null,
+    }
+  }
+  // Public live-display deep-link — no auth required (projector view).
+  if (live) {
+    return {
+      view: "live-display",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      activitySlug: null,
+      liveActivityId: live,
+    }
+  }
+  if (activity) {
+    return {
+      view: "activity",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      activitySlug: activity,
+      liveActivityId: null,
     }
   }
   if (quiz) {
@@ -135,6 +187,8 @@ export function parseInitialRoute(): {
       quizSlug: quiz,
       adminTab: "dashboard",
       verifyToken: null,
+      activitySlug: null,
+      liveActivityId: null,
     }
   }
   if (view === "admin" || view === "login" || view === "student") {
@@ -143,6 +197,8 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: tab || "dashboard",
       verifyToken: null,
+      activitySlug: null,
+      liveActivityId: null,
     }
   }
   return {
@@ -150,20 +206,36 @@ export function parseInitialRoute(): {
     quizSlug: null,
     adminTab: "dashboard",
     verifyToken: null,
+    activitySlug: null,
+    liveActivityId: null,
   }
 }
 
 /** Update URL without scrolling, so deep links stay shareable. */
-export function syncUrl(view: ViewName, opts?: { quizSlug?: string | null; verifyToken?: string | null }) {
+export function syncUrl(
+  view: ViewName,
+  opts?: {
+    quizSlug?: string | null
+    verifyToken?: string | null
+    activitySlug?: string | null
+    liveActivityId?: string | null
+  },
+) {
   if (typeof window === "undefined") return
   const url = new URL(window.location.href)
   url.searchParams.delete("quiz")
   url.searchParams.delete("view")
   url.searchParams.delete("verify")
+  url.searchParams.delete("activity")
+  url.searchParams.delete("live")
   if (view === "verify" && opts?.verifyToken) {
     url.searchParams.set("verify", opts.verifyToken)
   } else if (view === "quiz" && opts?.quizSlug) {
     url.searchParams.set("quiz", opts.quizSlug)
+  } else if (view === "activity" && opts?.activitySlug) {
+    url.searchParams.set("activity", opts.activitySlug)
+  } else if (view === "live-display" && opts?.liveActivityId) {
+    url.searchParams.set("live", opts.liveActivityId)
   } else if (view === "admin" || view === "login" || view === "student") {
     url.searchParams.set("view", view)
   }

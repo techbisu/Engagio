@@ -15,6 +15,7 @@ import {
   ReceiptIndianRupee,
   Award,
   Trophy,
+  Sparkles,
 } from "lucide-react"
 
 import { cn, initials } from "@/lib/utils"
@@ -48,6 +49,7 @@ import { RegistrationsList } from "./registrations-list"
 import { CertificatesPanel } from "./certificates-panel"
 import { PaymentsPanel } from "./payments-panel"
 import { ResultsCertDashboard } from "./results-cert-dashboard"
+import { ActivitiesPanel } from "./activities/activities-panel"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -69,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "events", label: "Events", icon: CalendarDays, description: "Manage quiz events" },
   { id: "questions", label: "Questions", icon: FileQuestion, description: "Per-event questions" },
   { id: "links", label: "Quiz Links", icon: Link2, description: "Shareable quiz URLs" },
+  { id: "activities", label: "Activities", icon: Sparkles, description: "Polls, surveys, Q&A, voting" },
   { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All participant attempts" },
   { id: "payments", label: "Payments", icon: ReceiptIndianRupee, description: "Verify manual UPI payments" },
   { id: "results", label: "Results & Certs", icon: Trophy, description: "Publish results + issue certificates" },
@@ -81,6 +84,7 @@ const TAB_LABEL: Record<AdminTab, string> = {
   events: "Events",
   questions: "Questions",
   links: "Quiz Links",
+  activities: "Activities",
   attempts: "Attempts",
   payments: "Payments",
   results: "Results & Certs",
@@ -128,6 +132,13 @@ export function AdminShell({
   const [attemptsPreselectedSlug, setAttemptsPreselectedSlug] = React.useState<
     string | undefined
   >(undefined)
+
+  // Sub-view state for Activities panel (event context). Set from the events
+  // manager "Manage Activities" action, or from the activities tab itself.
+  const [activitiesCtx, setActivitiesCtx] = React.useState<{
+    eventId: string
+    eventTitle: string
+  } | null>(null)
 
   const changeTab = React.useCallback(
     (next: AdminTab) => {
@@ -187,6 +198,15 @@ export function AdminShell({
       setAttemptsEventId(undefined)
       setAttemptsPreselectedSlug(slug)
       changeTab("attempts")
+    },
+    [changeTab]
+  )
+
+  const handleManageQuizLinks = React.useCallback(
+    (_quizLinkId: string) => {
+      // For now we just switch to the links tab; the link manager shows the
+      // full list, and the user can pick the quiz link by its ID prefix.
+      changeTab("links")
     },
     [changeTab]
   )
@@ -394,6 +414,22 @@ export function AdminShell({
               <LinksManager
                 preselectedEventId={linkPreselectedEventId}
                 onViewAttempts={(slug) => handleViewAttempts(slug)}
+              />
+            )}
+
+            {tab === "activities" && (
+              <ActivitiesPanel
+                eventId={activitiesCtx?.eventId}
+                eventTitle={activitiesCtx?.eventTitle}
+                onBack={
+                  activitiesCtx
+                    ? () => {
+                        setActivitiesCtx(null)
+                        changeTab("events")
+                      }
+                    : undefined
+                }
+                onManageQuizLinks={handleManageQuizLinks}
               />
             )}
 
