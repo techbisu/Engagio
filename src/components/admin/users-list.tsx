@@ -37,15 +37,23 @@ interface UserRow {
 export function UsersList() {
   const [search, setSearch] = React.useState("")
 
-  const { data, isLoading, isError, error } = useQuery<QuizAttemptDto[]>({
+  const { data, isLoading, isError, error } = useQuery<{
+    attempts: QuizAttemptDto[]
+    total: number
+  }>({
     queryKey: ["attempts", "all"],
-    queryFn: () => api<QuizAttemptDto[]>(`/api/attempts/list?all=true`),
+    queryFn: () =>
+      api<{ attempts: QuizAttemptDto[]; total: number }>(
+        `/api/attempts/list?all=true`
+      ),
   })
 
+  const attemptsList = data?.attempts ?? []
+
   const users = React.useMemo<UserRow[]>(() => {
-    if (!data) return []
+    if (!attemptsList) return []
     const map = new Map<string, UserRow>()
-    for (const a of data) {
+    for (const a of attemptsList) {
       const email = a.user?.email || "unknown@example.com"
       const existing = map.get(email)
       if (existing) {
@@ -66,7 +74,7 @@ export function UsersList() {
     return Array.from(map.values()).sort(
       (a, b) => b.attemptCount - a.attemptCount
     )
-  }, [data])
+  }, [attemptsList])
 
   const filtered = React.useMemo(() => {
     if (!search) return users

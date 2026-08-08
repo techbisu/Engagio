@@ -116,19 +116,24 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
   const effectiveEventId =
     eventFilter && eventFilter !== "ALL" ? eventFilter : undefined
 
-  const { data, isLoading, isError, error } = useQuery<QuizAttemptDto[]>({
+  const { data, isLoading, isError, error } = useQuery<{
+    attempts: QuizAttemptDto[]
+    total: number
+  }>({
     queryKey: ["attempts", "all", effectiveEventId],
     queryFn: () =>
-      api<QuizAttemptDto[]>(
+      api<{ attempts: QuizAttemptDto[]; total: number }>(
         `/api/attempts/list?all=true${
           effectiveEventId ? `&eventId=${effectiveEventId}` : ""
         }`
       ),
   })
 
+  const attemptsList = data?.attempts ?? []
+
   const filtered = React.useMemo(() => {
-    if (!data) return []
-    return data.filter((a) => {
+    if (!attemptsList) return []
+    return attemptsList.filter((a) => {
       if (
         preselectedSlug &&
         a.quizLink?.slug &&
@@ -145,7 +150,7 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       }
       return true
     })
-  }, [data, statusFilter, search, preselectedSlug])
+  }, [attemptsList, statusFilter, search, preselectedSlug])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)

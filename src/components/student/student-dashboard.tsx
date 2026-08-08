@@ -41,11 +41,13 @@ interface StudentDashboardProps {
   onStartQuiz: (slug: string) => void
 }
 
-export function StudentDashboard({ user: _user, onStartQuiz }: StudentDashboardProps) {
+export function StudentDashboard({ user, onStartQuiz }: StudentDashboardProps) {
   const [slugInput, setSlugInput] = React.useState("")
 
   const { data, isLoading, isError, error } = useQuery<AttemptListResponse>({
-    queryKey: ["attempts", "list"],
+    // Include user.id in the key so the cache is per-user (avoids showing
+    // a previous user's attempts after sign-out + sign-in as someone else).
+    queryKey: ["attempts", "list", user.id],
     queryFn: () => api<AttemptListResponse>("/api/attempts/list"),
   })
 

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useSession, signOut } from "next-auth/react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   useAppStore,
@@ -113,31 +113,43 @@ export default function Home() {
   }, [view, user, sessionStatus, setView])
 
   // --- Handlers ----------------------------------------------------------
+  const queryClient = useQueryClient()
+
   const handleSignOut = React.useCallback(async () => {
     await signOut({ redirect: false })
+    // Clear ALL cached queries so the next user doesn't see the previous
+    // user's data (attempts, analytics, etc.).
+    queryClient.clear()
     setUser(null)
     setView("landing")
-  }, [setUser, setView])
+  }, [setUser, setView, queryClient])
 
   const handleLoginSuccess = React.useCallback(
-    (role: string) => {
-      // Refresh /api/me so we pick up the freshly-issued session & role.
-      meQuery.refetch()
-      if (role === "ADMIN") {
-        setView("admin")
-      } else {
-        // If a quiz slug is pending, send the student directly to the
-        // pre-quiz screen; otherwise show the dashboard.
-        if (quizSlug) {
-          setStudentSubView("quiz-start")
-          setView("student")
+    async (role: string) => {
+      // Fetch the freshly-issued session user BEFORE switching views so the
+      // protected-view guard doesn't bounce us back to login.
+      const me = await fetchMe()
+      if (me) {
+        setUser(me)
+        // Refetch the React Query cache so useSession-derived queries stay in sync.
+        meQuery.refetch()
+        if (me.role === "ADMIN" || role === "ADMIN") {
+          setView("admin")
         } else {
-          setStudentSubView("dashboard")
-          setView("student")
+          if (quizSlug) {
+            setStudentSubView("quiz-start")
+            setView("student")
+          } else {
+            setStudentSubView("dashboard")
+            setView("student")
+          }
         }
+      } else {
+        // Couldn't fetch /me — fall back to the React Query refetch path.
+        meQuery.refetch()
       }
     },
-    [meQuery, setView, setStudentSubView, quizSlug],
+    [meQuery, setView, setStudentSubView, setUser, quizSlug],
   )
 
   const handleNavigate = React.useCallback(

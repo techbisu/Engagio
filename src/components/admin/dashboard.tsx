@@ -57,19 +57,25 @@ export function Dashboard({
   })
 
   // Recent attempts (separate query for richer data — analytics may only return ids).
-  const recentQuery = useQuery<QuizAttemptDto[]>({
+  // The API returns `{ attempts: QuizAttemptDto[], total: number }`.
+  const recentQuery = useQuery<{ attempts: QuizAttemptDto[]; total: number }>({
     queryKey: ["attempts", "recent"],
     queryFn: () =>
-      api<QuizAttemptDto[]>(`/api/attempts/list?all=true&limit=5`),
+      api<{ attempts: QuizAttemptDto[]; total: number }>(
+        `/api/attempts/list?all=true&limit=5`,
+      ),
     retry: 1,
   })
+  const recentAttempts = recentQuery.data?.attempts ?? []
 
   const a = data
   const totalAttempts = a?.totalAttempts ?? 0
   const completed = a?.completedAttempts ?? 0
-  const cheat = a?.cheatDetected ?? 0
+  // Backwards-compat field aliases — the API returns `cheatDetectedAttempts`
+  // and `averageScore`, but older Dashboards expected `cheatDetected`/`avgScore`.
+  const cheat = (a as any)?.cheatDetected ?? (a as any)?.cheatDetectedAttempts ?? 0
   const passRate = a?.passRate ?? null
-  const avgScore = a?.avgScore ?? null
+  const avgScore = (a as any)?.avgScore ?? (a as any)?.averageScore ?? null
 
   // Build attempts-over-time series — use provided series, else aggregate from
   // recent attempts (fallback), else generate an empty 14-day window.
@@ -80,7 +86,7 @@ export function Dashboard({
         attempts: d.count,
       }))
     }
-    if (recentQuery.data && recentQuery.data.length > 0) {
+    if (recentAttempts.length > 0) {
       // Bucket by day for last 14 days
       const buckets: Record<string, number> = {}
       const today = new Date()
@@ -88,7 +94,7 @@ export function Dashboard({
         const d = subDays(today, i)
         buckets[format(d, "yyyy-MM-dd")] = 0
       }
-      for (const at of recentQuery.data) {
+      for (const at of recentAttempts) {
         const key = format(parseISO(at.startedAt), "yyyy-MM-dd")
         if (key in buckets) buckets[key]++
       }
@@ -102,7 +108,7 @@ export function Dashboard({
       const d = subDays(new Date(), 13 - i)
       return { date: format(d, "MMM d"), attempts: 0 }
     })
-  }, [a, recentQuery.data])
+  }, [a, recentAttempts])
 
   // Score buckets — use provided, else mock empty 5 buckets
   const scoreBuckets = React.useMemo(() => {
@@ -116,7 +122,13 @@ export function Dashboard({
     ]
   }, [a])
 
-  const topEvents = a?.topEvents ?? []
+  // Top events: normalize `eventId` → `id` for rendering keys (the API
+  // returns `eventId`, but the legacy type used `id`).
+  const topEvents = (a?.topEvents ?? []).map((e: any) => ({
+    id: e.id ?? e.eventId,
+    title: e.title,
+    attemptCount: e.attemptCount,
+  }))
 
   if (isError) {
     return (
@@ -321,13 +333,13 @@ export function Dashboard({
               <p className="text-sm text-rose-500">
                 Failed to load attempts.
               </p>
-            ) : !recentQuery.data || recentQuery.data.length === 0 ? (
+            ) : recentAttempts.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 No attempts yet.
               </div>
             ) : (
               <ul className="divide-y">
-                {recentQuery.data.slice(0, 5).map((at) => (
+                {recentAttempts.slice(0, 5).map((at) => (
                   <li
                     key={at.id}
                     className="flex items-center gap-3 py-2.5"
