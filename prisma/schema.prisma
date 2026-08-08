@@ -84,6 +84,7 @@ model Event {
   upiId                String?  // e.g. event@upi
   upiLink              String?  // UPI intent link
   qrCodeUrl            String?  // base64 data URL or external URL
+  qrCodePublicId       String?  // Cloudinary public_id for deletion/migration
   requireTransactionRef Boolean @default(true)
   requireScreenshot    Boolean  @default(true)
 
@@ -92,11 +93,16 @@ model Event {
   certTemplate         String   @default("modern") // classic|modern|elegant|bold|minimal
   certIssueCondition   String   @default("COMPLETED") // PARTICIPATION|COMPLETED|PASSED
   certPassingScore     Int      @default(60)
+  // NEW: auto-generate certificates when participant becomes eligible
+  // (after result is shown immediately OR after admin publishes result)
+  certAutoGenerate     Boolean  @default(false)
   certOrgName          String?
   certSigneeName       String?
   certSigneeTitle      String?
-  certSigneeImage      String?  // base64 data URL of signature image
-  certLogo            String?  // base64 data URL of org logo
+  certSigneeImage      String?  // Cloudinary URL (or base64 fallback)
+  certSigneeImagePublicId String? // Cloudinary public_id for deletion
+  certLogo            String?  // Cloudinary URL (or base64 fallback)
+  certLogoPublicId    String? // Cloudinary public_id for deletion
 
   questions      Question[]
   quizLinks      QuizLink[]
@@ -121,11 +127,12 @@ model Question {
   category      String?
   order         Int      @default(0)
   explanation   String?
-  // NEW: optional question image (base64 data URL — lightweight, no external storage)
+  // Optional question image (Cloudinary URL, or base64 fallback when Cloudinary not configured)
   imageUrl      String?
-  // NEW: difficulty for filtering/analysis
+  imageUrlPublicId String? // Cloudinary public_id for deletion/migration
+  // Difficulty for filtering/analysis
   difficulty    String   @default("MEDIUM") // EASY | MEDIUM | HARD
-  // NEW: tags for flexible labeling (JSON string[])
+  // Tags for flexible labeling (JSON string[])
   tags          String?  // JSON-encoded string[]
   createdAt     DateTime @default(now())
 
@@ -148,9 +155,16 @@ model QuizLink {
   // (instead of using all questions). 0 = use all.
   questionCount   Int      @default(0)
   showResults     Boolean  @default(true)
-  // When false, results are hidden until an admin publishes them
+  // When true, results are hidden until an admin publishes them
   // (publishQuizLink / publish endpoint sets publishedAt on each attempt).
+  // This is the "Result Visibility" setting: showResults=true = immediate, false = publish later.
   publishResults  Boolean  @default(false)
+  // NEW: send email notification to participant when results are published.
+  // Independent of publishResults — only fires when publishing actually happens.
+  emailOnPublish     Boolean  @default(true)
+  // NEW: enable the public leaderboard for this quiz link.
+  // Independent of result visibility.
+  leaderboardEnabled Boolean  @default(true)
   passThreshold   Int      @default(40) // percentage
 
   // ---- Security toggles (all per-quiz-link) ----
@@ -282,10 +296,22 @@ model Certificate {
   certificateNumber String   @unique // e.g. EVT-2026-A8F42K
   verificationToken String   @unique // 32-char hex for /verify/[token]
   template          String   @default("modern") // classic|modern|elegant|bold|minimal
+  // How this certificate was issued — PARTICIPATION | COMPLETED | PASSED
+  eligibilityType   String   @default("COMPLETED")
   recipientName     String
   issuedAt          DateTime @default(now())
+  issuedBy          String?  // admin userId who issued (null if auto-generated)
   status            String   @default("VALID") // VALID | REVOKED
-  certificateUrl    String?  // optional: generated PNG data URL (can be regenerated)
+  // Cloudinary storage for the generated PNG (URL + public_id for deletion/migration)
+  certificateUrl    String?  // Cloudinary URL (or base64 fallback when not configured)
+  certificatePublicId String? // Cloudinary public_id
+  // Generation provenance
+  generatedAutomatically Boolean @default(false) // true if auto-generated, false if manual
+  manualOverride    Boolean  @default(false) // true if admin overrode eligibility
+  // Revocation tracking
+  revokedAt         DateTime?
+  revokedBy         String?  // admin userId who revoked
+  revocationReason  String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

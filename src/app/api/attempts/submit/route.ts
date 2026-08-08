@@ -270,6 +270,15 @@ export async function POST(req: NextRequest) {
         data: { publishedAt: new Date() },
       });
       publishedAt = updated2.publishedAt ? updated2.publishedAt.toISOString() : null;
+
+      // Auto-generate certificate if the event has certAutoGenerate enabled.
+      // (For instant results, eligibility is checked at this point.)
+      try {
+        const { autoGenerateCertificates } = await import("@/lib/cert-service");
+        await autoGenerateCertificates(attempt.eventId);
+      } catch (e) {
+        console.error("[submit] auto-cert-generation error:", e);
+      }
     } else if (updated.publishedAt) {
       publishedAt = updated.publishedAt.toISOString();
     }

@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ReceiptIndianRupee,
   Award,
+  Trophy,
 } from "lucide-react"
 
 import { cn, initials } from "@/lib/utils"
@@ -46,6 +47,7 @@ import { RegistrationFormBuilder } from "./registration-form-builder"
 import { RegistrationsList } from "./registrations-list"
 import { CertificatesPanel } from "./certificates-panel"
 import { PaymentsPanel } from "./payments-panel"
+import { ResultsCertDashboard } from "./results-cert-dashboard"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -69,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "links", label: "Quiz Links", icon: Link2, description: "Shareable quiz URLs" },
   { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All student attempts" },
   { id: "payments", label: "Payments", icon: ReceiptIndianRupee, description: "Verify manual UPI payments" },
+  { id: "results", label: "Results & Certs", icon: Trophy, description: "Publish results + issue certificates" },
   { id: "users", label: "Users", icon: Users, description: "Registered students" },
   { id: "certificates", label: "Certificates", icon: Award, description: "Issue & verify certificates" },
 ]
@@ -80,6 +83,7 @@ const TAB_LABEL: Record<AdminTab, string> = {
   links: "Quiz Links",
   attempts: "Attempts",
   payments: "Payments",
+  results: "Results & Certs",
   users: "Users",
   certificates: "Certificates",
 }
@@ -401,6 +405,8 @@ export function AdminShell({
             )}
 
             {tab === "payments" && <PaymentsPanel />}
+
+            {tab === "results" && <ResultsCertDashboard />}
 
             {tab === "users" && <UsersList />}
 

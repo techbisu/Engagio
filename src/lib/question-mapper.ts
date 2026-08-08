@@ -33,6 +33,7 @@ export function toQuestionDto(q: any): QuestionDto {
     order: q.order,
     explanation: q.explanation ?? null,
     imageUrl: q.imageUrl ?? null,
+    imageUrlPublicId: q.imageUrlPublicId ?? null,
     difficulty: (q.difficulty as QuestionDifficulty) ?? "MEDIUM",
     tags: parseJsonArray<string>(q.tags),
     createdAt: q.createdAt.toISOString(),

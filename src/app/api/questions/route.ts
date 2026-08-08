@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
+import { uploadFile } from "@/lib/storage";
 import {
   toQuestionDto,
   isValidQuestionType,
@@ -192,10 +193,13 @@ function buildQuestionData(body: any, existing?: any) {
       ? null
       : existing?.explanation ?? null;
 
-  // ----- Resolve imageUrl (base64 data URL, optional) -----
+  // ----- Resolve imageUrl (base64 data URL or external URL; optional) -----
+  // NOTE: if the value is a base64 data URL, it will be uploaded to Cloudinary
+  // by the POST handler after this helper returns. We keep both `imageUrl`
+  // (raw value as-provided) and `imageUrlPublicId` (null initially — set by
+  // the POST handler after upload) here so the persistence shape matches.
   let imageUrl: string | null = null;
   if (typeof body.imageUrl === "string") {
-    // Accept only data URLs (base64) — no external URLs to keep storage local.
     imageUrl = body.imageUrl.startsWith("data:image/")
       ? body.imageUrl
       : body.imageUrl.trim() || null;
@@ -204,6 +208,12 @@ function buildQuestionData(body: any, existing?: any) {
   } else if (existing !== undefined) {
     imageUrl = existing.imageUrl ?? null;
   }
+  const imageUrlPublicId =
+    imageUrl === null
+      ? null
+      : existing !== undefined
+      ? (existing.imageUrlPublicId ?? null)
+      : null;
 
   // ----- Resolve difficulty (EASY | MEDIUM | HARD) -----
   let difficulty: QuestionDifficulty = "MEDIUM";
@@ -240,6 +250,7 @@ function buildQuestionData(body: any, existing?: any) {
       category,
       explanation,
       imageUrl,
+      imageUrlPublicId,
       difficulty,
       tags: tags ? JSON.stringify(tags) : null,
     },
@@ -269,6 +280,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
+    // If the admin uploaded a new question image (base64 data URL), upload it
+    // to the storage provider (Cloudinary if configured, else base64 fallback).
+    // The returned `url` (Cloudinary URL or base64 data URL) is what we persist;
+    // the returned `publicId` lets us delete the asset later if replaced.
+    const data = { ...result.data };
+    if (data.imageUrl && data.imageUrl.startsWith("data:image/")) {
+      const uploaded = await uploadFile(data.imageUrl, "image/jpeg", {
+        folder: "questions",
+        transformations: ["w_800", "h_600", "c_fit", "q_auto", "f_auto"],
+      });
+      data.imageUrl = uploaded.url;
+      data.imageUrlPublicId = uploaded.publicId;
+    }
+
     // Determine next order index for this event.
     const lastQuestion = await db.question.findFirst({
       where: { eventId },
@@ -280,7 +305,7 @@ export async function POST(req: NextRequest) {
     const created = await db.question.create({
       data: {
         eventId,
-        ...result.data,
+        ...data,
         order: nextOrder,
       },
     });

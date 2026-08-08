@@ -31,8 +31,15 @@ import {
   UserCheck,
   Users,
   Eye,
-  Lock,
   Megaphone,
+  Mail,
+  Trophy,
+  Award,
+  ChevronDown,
+  X,
+  Cloud,
+  Info,
+  Zap,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -92,6 +99,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Separator } from "@/components/ui/separator"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn, truncate } from "@/lib/utils"
 
 import { api } from "./api"
@@ -117,6 +130,9 @@ interface LinkFormState {
   shuffleOptions: boolean
   showResults: boolean
   publishResults: boolean
+  // Independent of result visibility:
+  emailOnPublish: boolean
+  leaderboardEnabled: boolean
   timeLimit: number
   maxAttempts: number
   questionCount: number
@@ -152,6 +168,8 @@ const emptyForm: LinkFormState = {
   shuffleOptions: false,
   showResults: true,
   publishResults: false,
+  emailOnPublish: true,
+  leaderboardEnabled: true,
   timeLimit: 30,
   maxAttempts: 1,
   questionCount: 0,
@@ -182,6 +200,8 @@ function buildPayload(form: LinkFormState) {
     shuffleOptions: form.shuffleOptions,
     showResults: form.showResults,
     publishResults: form.publishResults,
+    emailOnPublish: form.emailOnPublish,
+    leaderboardEnabled: form.leaderboardEnabled,
     questionCount: form.questionCount,
     timeLimit: form.timeLimit,
     maxAttempts: form.maxAttempts,
@@ -249,6 +269,28 @@ export function LinksManager({
   const [form, setForm] = React.useState<LinkFormState>(emptyForm)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [deleteTarget, setDeleteTarget] = React.useState<QuizLinkRow | null>(null)
+  const [bannerDismissed, setBannerDismissed] = React.useState(false)
+
+  // Storage/email provider status — fetched once when the dialog opens.
+  // Used to surface the storage + email config banner at the top of the dialog.
+  const [statusBanner, setStatusBanner] = React.useState<{
+    storage?: { configured: boolean; provider: string; cloudName?: string }
+    email?: { configured: boolean; provider: string; from?: string }
+  } | null>(null)
+  const statusFetchedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!dialogOpen || statusFetchedRef.current) return
+    statusFetchedRef.current = true
+    api<{
+      storage: { configured: boolean; provider: string; cloudName?: string }
+      email: { configured: boolean; provider: string; from?: string }
+    }>("/api/admin/storage-status")
+      .then((data) => setStatusBanner(data))
+      .catch(() => {
+        // Endpoint missing in older deployments — banner just won't render.
+        setStatusBanner(null)
+      })
+  }, [dialogOpen])
 
   const createMutation = useMutation({
     mutationFn: (payload: LinkFormState) =>
@@ -320,6 +362,8 @@ export function LinksManager({
       shuffleOptions: l.shuffleOptions,
       showResults: l.showResults,
       publishResults: l.publishResults,
+      emailOnPublish: l.emailOnPublish ?? true,
+      leaderboardEnabled: l.leaderboardEnabled ?? true,
       timeLimit: l.timeLimit,
       maxAttempts: l.maxAttempts,
       questionCount: l.questionCount,
@@ -379,6 +423,9 @@ export function LinksManager({
 
   const links = data || []
   const events = eventsQuery.data || []
+
+  // Currently selected event (used by the read-only Certificate section).
+  const selectedEvent = events.find((ev) => ev.id === form.eventId) || null
 
   // ---- Security feature counts for the dialog summary + section badges ----
   const securityActive = SECURITY_TOGGLE_KEYS.filter((k) => form[k]).length
@@ -579,6 +626,15 @@ export function LinksManager({
           </DialogHeader>
 
           <div className="space-y-5">
+            {/* Storage + Email provider status banner (dismissible) */}
+            {statusBanner && !bannerDismissed && (
+              <StorageEmailBanner
+                storage={statusBanner.storage}
+                email={statusBanner.email}
+                onDismiss={() => setBannerDismissed(true)}
+              />
+            )}
+
             {/* Security feature summary band */}
             <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200/60 bg-emerald-50/60 p-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
               <ShieldCheck
@@ -748,7 +804,7 @@ export function LinksManager({
               </p>
             )}
 
-            {/* Quiz behavior toggles (shuffle + show results + publish) */}
+            {/* Quiz behavior toggles — shuffle (kept here as quick toggles) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <SecurityToggleRow
                 icon={Shield}
@@ -764,75 +820,159 @@ export function LinksManager({
                 checked={form.shuffleOptions}
                 onCheckedChange={(v) => setForm({ ...form, shuffleOptions: v })}
               />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <SecurityToggleRow
-                        icon={Eye}
-                        label="Show instant results"
-                        description="Reveal score to the student immediately after submit."
-                        checked={form.showResults}
-                        onCheckedChange={(v) => {
-                          // Mutex: enabling showResults disables publishResults.
-                          setForm({
-                            ...form,
-                            showResults: v,
-                            publishResults: v ? false : form.publishResults,
-                          })
-                        }}
-                        disabled={form.publishResults}
-                        disabledReason="Disabled because results are publish-controlled"
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  {form.publishResults && (
-                    <TooltipContent>
-                      Disabled because results are publish-controlled
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <SecurityToggleRow
-                        icon={Megaphone}
-                        label="Publish results later"
-                        description="Students see a 'pending' state after submitting. Admin must publish results from the Attempts tab."
-                        checked={form.publishResults}
-                        onCheckedChange={(v) => {
-                          // Mutex: enabling publishResults disables showResults.
-                          setForm({
-                            ...form,
-                            publishResults: v,
-                            showResults: v ? false : form.showResults,
-                          })
-                        }}
-                        disabled={form.showResults}
-                        disabledReason="Disabled because instant results are enabled"
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  {form.showResults && (
-                    <TooltipContent>
-                      Disabled because instant results are enabled
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
             </div>
-            {form.publishResults && (
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 -mt-2 flex items-start gap-1.5">
-                <ShieldAlert className="size-3.5 mt-0.5 shrink-0" />
-                <span>
-                  Results are hidden from students until you publish them from the{" "}
-                  <span className="font-semibold">Attempts</span> tab. The "Show instant
-                  results" toggle is disabled while this is ON.
-                </span>
-              </p>
-            )}
+
+            {/* ===== Results sub-section =====
+                The Result Visibility radio is mutually exclusive between
+                "Immediately" (showResults=true, publishResults=false) and
+                "Publish Later" (showResults=false, publishResults=true).
+                Email-on-publish + leaderboard are INDEPENDENT toggles. */}
+            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3.5 dark:border-slate-700 dark:bg-slate-500/5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Megaphone className="size-3.5 text-slate-500 dark:text-slate-400" />
+                <p className="text-sm font-semibold">Results</p>
+              </div>
+
+              {/* Result Visibility radio */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Result visibility</Label>
+                <RadioGroup
+                  value={form.publishResults ? "publish" : "immediate"}
+                  onValueChange={(v) => {
+                    if (v === "immediate") {
+                      setForm({ ...form, showResults: true, publishResults: false })
+                    } else {
+                      setForm({ ...form, showResults: false, publishResults: true })
+                    }
+                  }}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1"
+                >
+                  <label
+                    htmlFor="rv-immediate"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5 transition-colors",
+                      !form.publishResults
+                        ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/5"
+                        : "border-slate-200 bg-white hover:bg-muted/40 dark:border-slate-700 dark:bg-slate-900"
+                    )}
+                  >
+                    <RadioGroupItem value="immediate" id="rv-immediate" className="mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <Eye className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Immediately
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+                        Reveal the score to the student as soon as they submit.
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    htmlFor="rv-publish"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5 transition-colors",
+                      form.publishResults
+                        ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5"
+                        : "border-slate-200 bg-white hover:bg-muted/40 dark:border-slate-700 dark:bg-slate-900"
+                    )}
+                  >
+                    <RadioGroupItem value="publish" id="rv-publish" className="mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <Clock className="size-3.5 text-amber-600 dark:text-amber-400" />
+                        Publish later
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+                        Students see a &quot;pending&quot; state. Admin publishes results from
+                        the Results &amp; Certs tab.
+                      </p>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+
+              {form.publishResults && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                  <ShieldAlert className="size-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    Results are hidden from students until you publish them from the{" "}
+                    <span className="font-semibold">Results &amp; Certs</span> tab.
+                  </span>
+                </p>
+              )}
+
+              <Separator />
+
+              {/* Email when published (INDEPENDENT of result visibility) */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <Mail
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        form.emailOnPublish
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-muted-foreground"
+                      )}
+                    />
+                    <p className="text-sm font-medium">Email when published</p>
+                    {form.emailOnPublish && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                      >
+                        ON
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Send an email notification to each participant when their result is
+                    published. Requires <code className="font-mono text-[10px]">RESEND_API_KEY</code>.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.emailOnPublish}
+                  onCheckedChange={(v) => setForm({ ...form, emailOnPublish: v })}
+                  aria-label="Email when published"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Enable leaderboard (INDEPENDENT of result visibility) */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <Trophy
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        form.leaderboardEnabled
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-muted-foreground"
+                      )}
+                    />
+                    <p className="text-sm font-medium">Enable leaderboard</p>
+                    {form.leaderboardEnabled && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                      >
+                        ON
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Show a public leaderboard ranking for this quiz. Independent of result
+                    visibility — only completed &amp; published attempts are ranked.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.leaderboardEnabled}
+                  onCheckedChange={(v) => setForm({ ...form, leaderboardEnabled: v })}
+                  aria-label="Enable leaderboard"
+                />
+              </div>
+            </div>
 
             {/* Expires at */}
             <div className="space-y-1.5">
@@ -1045,6 +1185,12 @@ export function LinksManager({
                 </Tooltip>
               </TooltipProvider>
             </div>
+
+            {/* ============ Certificate section (collapsible, read-only) ============
+                Certificate config lives on the EVENT, not the quiz link.
+                Show a read-only summary + a deep link to the Event settings.
+                Open by default when the event has certs enabled; otherwise collapsed. */}
+            <CertificateSection event={selectedEvent} />
           </div>
           <DialogFooter>
             <Button
@@ -1202,5 +1348,204 @@ function SecurityToggleRow({
         aria-label={label}
       />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Storage + Email provider status banner (dismissible)
+// ---------------------------------------------------------------------------
+
+interface StatusBannerProps {
+  storage?: { configured: boolean; provider: string; cloudName?: string }
+  email?: { configured: boolean; provider: string; from?: string }
+  onDismiss: () => void
+}
+
+/**
+ * Small dismissible banner shown at the top of the Quiz Link dialog.
+ * Surfaces whether Cloudinary (image storage) and Resend (transactional email)
+ * are configured. When either is missing, shows an amber hint so the admin
+ * knows "Email when published" won't actually deliver emails, and image
+ * uploads will fall back to base64 in the DB.
+ */
+function StorageEmailBanner({ storage, email, onDismiss }: StatusBannerProps) {
+  // If both are configured (or we don't have data), don't render anything.
+  if (!storage && !email) return null
+  const storageOk = !!storage?.configured
+  const emailOk = !!email?.configured
+  if (storageOk && emailOk) {
+    // Both green — show a quiet emerald confirmation, dismissible.
+    return (
+      <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-2.5 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/5 dark:text-emerald-300">
+        <Cloud className="size-3.5 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <div className="min-w-0 flex-1 text-xs leading-snug">
+          <span className="font-medium">Cloud storage + email notifications</span> are
+          configured for this deployment.
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 rounded p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+    )
+  }
+  // At least one is missing — amber banner with specifics.
+  return (
+    <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-200">
+      <Info className="size-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="min-w-0 flex-1 space-y-1 text-xs leading-snug">
+        {!storageOk && (
+          <p>
+            <span className="font-medium">Images stored as base64 in DB.</span>{" "}
+            Configure <code className="font-mono text-[10px]">CLOUDINARY_*</code> env vars
+            for production-grade image hosting.
+          </p>
+        )}
+        {!emailOk && (
+          <p>
+            <span className="font-medium">Email notifications disabled.</span>{" "}
+            Configure <code className="font-mono text-[10px]">RESEND_API_KEY</code> to send
+            &quot;result published&quot; emails to participants.
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="shrink-0 rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-500/20"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Certificate (read-only) section — shows the event's cert config.
+// Config lives on the EVENT, so this is a display-only block + a note
+// pointing the admin to the Event settings.
+// ---------------------------------------------------------------------------
+
+const TEMPLATE_LABEL: Record<string, string> = {
+  classic: "Classic",
+  modern: "Modern",
+  elegant: "Elegant",
+  bold: "Bold",
+  minimal: "Minimal",
+}
+
+const CONDITION_LABEL: Record<string, string> = {
+  PARTICIPATION: "Participation",
+  COMPLETED: "Completed attempt",
+  PASSED: "Passed (≥ passing score)",
+}
+
+function CertificateSection({ event }: { event: EventDto | null }) {
+  // Default open when the event has certs enabled; otherwise collapsed.
+  const [open, setOpen] = React.useState(false)
+  React.useEffect(() => {
+    if (event?.certEnabled) setOpen(true)
+  }, [event?.id, event?.certEnabled])
+
+  if (!event) {
+    return null
+  }
+
+  const template = TEMPLATE_LABEL[event.certTemplate] ?? event.certTemplate
+  const condition = CONDITION_LABEL[event.certIssueCondition] ?? event.certIssueCondition
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 rounded-lg"
+            aria-expanded={open}
+          >
+            <span
+              className={cn(
+                "flex size-7 items-center justify-center rounded-md shrink-0",
+                event.certEnabled
+                  ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : "bg-slate-100 text-slate-500 dark:bg-slate-500/10 dark:text-slate-400"
+              )}
+            >
+              <Award className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Certificate</p>
+              <p className="text-xs text-muted-foreground">
+                {event.certEnabled
+                  ? `Enabled · ${template} template`
+                  : "Not enabled for this event"}
+              </p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "size-4 text-muted-foreground transition-transform",
+                open && "rotate-180"
+              )}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t border-slate-100 p-3 space-y-3 dark:border-slate-800">
+            {event.certEnabled ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                  >
+                    <Award className="size-3" /> Certificates enabled
+                  </Badge>
+                  <Badge variant="outline" className="font-normal">
+                    {template} template
+                  </Badge>
+                  <Badge variant="outline" className="font-normal">
+                    Condition: {condition}
+                  </Badge>
+                  <Badge variant="outline" className="font-normal">
+                    Passing score: {event.certPassingScore}%
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={
+                      event.certAutoGenerate
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                        : "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/30"
+                    }
+                  >
+                    <Zap className="size-3" />
+                    Auto-generate: {event.certAutoGenerate ? "ON" : "OFF"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {event.certAutoGenerate
+                    ? "Certificates are auto-generated when a participant becomes eligible (after submit if results are immediate, or after admin publishes results)."
+                    : "Certificates must be generated manually from the Results & Certs tab."}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Certificates are not enabled for this event. Enable them in the Event
+                settings to issue participant certificates.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Info className="size-3 shrink-0" />
+              Configure certificate templates, signee details, and auto-generation in
+              the <span className="font-semibold">Event settings</span>.
+            </p>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }

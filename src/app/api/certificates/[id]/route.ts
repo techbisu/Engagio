@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
 import type {
   CertificateDto,
+  CertIssueCondition,
   CertStatus,
   CertTemplate,
 } from "@/types";
@@ -25,10 +26,18 @@ function toCertDto(c: any): CertificateDto {
     certificateNumber: c.certificateNumber,
     verificationToken: c.verificationToken,
     template: (c.template ?? "modern") as CertTemplate,
+    eligibilityType: (c.eligibilityType ?? "COMPLETED") as CertIssueCondition,
     recipientName: c.recipientName,
     issuedAt: c.issuedAt.toISOString(),
+    issuedBy: c.issuedBy ?? null,
     status: (c.status ?? "VALID") as CertStatus,
     certificateUrl: c.certificateUrl ?? null,
+    certificatePublicId: c.certificatePublicId ?? null,
+    generatedAutomatically: c.generatedAutomatically ?? false,
+    manualOverride: c.manualOverride ?? false,
+    revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
+    revokedBy: c.revokedBy ?? null,
+    revocationReason: c.revocationReason ?? null,
     createdAt: c.createdAt.toISOString(),
     event: c.event
       ? {
@@ -44,7 +53,10 @@ function toCertDto(c: any): CertificateDto {
         }
       : undefined,
     user: c.user
-      ? { name: c.user.name ?? null, email: c.user.email }
+      ? {
+          name: c.user.name ?? null,
+          email: c.user.email,
+        }
       : undefined,
   };
 }
@@ -96,8 +108,11 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 
 /**
  * PATCH /api/certificates/[id] — admin only.
- * Body: { action: "revoke" | "reinstate" }
- * Toggles the certificate status between VALID and REVOKED.
+ * Body:
+ *   - { action: "revoke", reason?: string } — mark as REVOKED with optional reason
+ *   - { action: "reinstate" }              — clear REVOKED status back to VALID
+ *
+ * Tracks revokedAt / revokedBy / revocationReason so revocations are auditable.
  */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
@@ -115,11 +130,25 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
     const body = await req.json();
     const action = body?.action as string | undefined;
+    const reason = typeof body?.reason === "string" ? body.reason.trim().slice(0, 500) : null;
     let nextStatus: "VALID" | "REVOKED";
+    let updateData: Record<string, unknown> = {};
     if (action === "revoke") {
       nextStatus = "REVOKED";
+      updateData = {
+        status: nextStatus,
+        revokedAt: new Date(),
+        revokedBy: user.id ?? null,
+        revocationReason: reason || null,
+      };
     } else if (action === "reinstate") {
       nextStatus = "VALID";
+      updateData = {
+        status: nextStatus,
+        revokedAt: null,
+        revokedBy: null,
+        revocationReason: null,
+      };
     } else {
       return NextResponse.json(
         { error: `Unknown action. Expected "revoke" or "reinstate".` },
@@ -128,7 +157,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
     const updated = await db.certificate.update({
       where: { id },
-      data: { status: nextStatus },
+      data: updateData,
       include: {
         event: {
           select: {

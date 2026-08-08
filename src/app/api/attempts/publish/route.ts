@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  autoGenerateCertificates,
+  sendPublishNotifications,
+} from "@/lib/cert-service";
 
 async function requireAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions);
@@ -17,7 +21,13 @@ async function requireAdmin(): Promise<boolean> {
  *   - { quizLinkId: string } — publish ALL unpublished completed attempts for this link.
  *   - { attemptId: string }  — publish a single attempt.
  *
- * Returns `{ published: number }` (count of attempts newly published).
+ * Returns `{ published: number, emailsSent: number, certsGenerated: number }`.
+ *
+ * After publishing:
+ *   1. If the quiz link's `emailOnPublish` is true, send a "result published"
+ *      email to each participant whose result was just published.
+ *   2. If the event's `certAutoGenerate` is true, auto-generate certificates
+ *      for all eligible participants (idempotent — skips those with existing certs).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -41,11 +51,15 @@ export async function POST(req: NextRequest) {
     }
 
     let publishedCount = 0;
+    let publishedAttemptIds: string[] = [];
+    let targetQuizLinkId = quizLinkId;
+    let targetEventId: string | undefined;
+
     if (quizLinkId) {
-      // Verify the quiz link exists.
+      // Verify the quiz link exists + capture eventId for cert auto-gen.
       const link = await db.quizLink.findUnique({
         where: { id: quizLinkId },
-        select: { id: true },
+        select: { id: true, eventId: true },
       });
       if (!link) {
         return NextResponse.json(
@@ -53,6 +67,19 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
+      targetEventId = link.eventId;
+
+      // Find the attempts that WILL be published (for email targeting)
+      const toPublish = await db.quizAttempt.findMany({
+        where: {
+          quizLinkId,
+          status: "COMPLETED",
+          publishedAt: null,
+        },
+        select: { id: true },
+      });
+      publishedAttemptIds = toPublish.map((a) => a.id);
+
       const result = await db.quizAttempt.updateMany({
         where: {
           quizLinkId,
@@ -65,7 +92,7 @@ export async function POST(req: NextRequest) {
     } else {
       const attempt = await db.quizAttempt.findUnique({
         where: { id: attemptId },
-        select: { id: true, status: true, publishedAt: true },
+        select: { id: true, status: true, publishedAt: true, quizLinkId: true, eventId: true },
       });
       if (!attempt) {
         return NextResponse.json(
@@ -87,9 +114,42 @@ export async function POST(req: NextRequest) {
         data: { publishedAt: new Date() },
       });
       publishedCount = 1;
+      publishedAttemptIds = [attemptId];
+      targetQuizLinkId = attempt.quizLinkId;
+      targetEventId = attempt.eventId;
     }
 
-    return NextResponse.json({ published: publishedCount });
+    // --- Side effects (non-blocking, errors logged but don't fail the publish) ---
+
+    let emailsSent = 0;
+    let certsGenerated = 0;
+
+    if (publishedAttemptIds.length > 0 && targetQuizLinkId) {
+      try {
+        const emailResult = await sendPublishNotifications({
+          quizLinkId: targetQuizLinkId,
+          attemptIds: publishedAttemptIds,
+        });
+        emailsSent = emailResult.sent;
+      } catch (e) {
+        console.error("[publish] email notification error:", e);
+      }
+    }
+
+    if (publishedAttemptIds.length > 0 && targetEventId) {
+      try {
+        const certResult = await autoGenerateCertificates(targetEventId);
+        certsGenerated = certResult.generated;
+      } catch (e) {
+        console.error("[publish] auto-cert-generation error:", e);
+      }
+    }
+
+    return NextResponse.json({
+      published: publishedCount,
+      emailsSent,
+      certsGenerated,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: "Internal Server Error", detail: String(e) },
@@ -107,7 +167,10 @@ export async function POST(req: NextRequest) {
  *   - { quizLinkId: string } — unpublish ALL published attempts for this link.
  *   - { attemptId: string }  — unpublish a single attempt.
  *
- * Returns `{ unpublished: number }` (count of attempts newly unpublished).
+ * Returns `{ unpublished: number }`.
+ *
+ * NOTE: Unpublishing does NOT revoke already-generated certificates or
+ * "unsend" emails. It only hides the results from the student's view again.
  */
 export async function DELETE(req: NextRequest) {
   try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { uploadFile, deleteFile } from "@/lib/storage";
 import {
   toQuestionDto,
   isValidQuestionType,
@@ -112,13 +113,43 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       data.matchPairs = null;
     }
 
-    // ---- imageUrl (base64 data URL, optional) ----
+    // ---- imageUrl (base64 data URL or external URL, optional) ----
+    // Three cases:
+    //   1. body.imageUrl === null / ""       -> admin cleared the image. Delete
+    //                                         the old Cloudinary asset (if any)
+    //                                         and clear both imageUrl + publicId.
+    //   2. body.imageUrl is a base64 data URL -> admin uploaded a new image.
+    //                                         Delete the old asset, then upload
+    //                                         the new one (Cloudinary or base64
+    //                                         fallback) + store url + publicId.
+    //   3. body.imageUrl is a non-data URL  -> raw external URL passed through.
+    //                                         Persist as-is, no publicId change.
     if (typeof body.imageUrl === "string") {
-      data.imageUrl = body.imageUrl.startsWith("data:image/")
-        ? body.imageUrl
-        : body.imageUrl.trim() || null;
+      const trimmed = body.imageUrl.trim();
+      if (!trimmed) {
+        // Case 1 — cleared.
+        await deleteFile(existing.imageUrlPublicId);
+        data.imageUrl = null;
+        data.imageUrlPublicId = null;
+      } else if (trimmed.startsWith("data:image/")) {
+        // Case 2 — new upload.
+        await deleteFile(existing.imageUrlPublicId);
+        const uploaded = await uploadFile(trimmed, "image/jpeg", {
+          folder: "questions",
+          transformations: ["w_800", "h_600", "c_fit", "q_auto", "f_auto"],
+        });
+        data.imageUrl = uploaded.url;
+        data.imageUrlPublicId = uploaded.publicId;
+      } else {
+        // Case 3 — raw URL passthrough (no Cloudinary asset involved).
+        data.imageUrl = trimmed;
+        data.imageUrlPublicId = null;
+      }
     } else if (body.imageUrl === null) {
+      // Case 1 — cleared.
+      await deleteFile(existing.imageUrlPublicId);
       data.imageUrl = null;
+      data.imageUrlPublicId = null;
     }
 
     // ---- difficulty (EASY | MEDIUM | HARD) ----
@@ -309,6 +340,8 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     if (!existing) {
       return NextResponse.json({ error: "Question not found" }, { status: 404 });
     }
+    // Best-effort: delete the Cloudinary asset (if any) before removing the row.
+    await deleteFile(existing.imageUrlPublicId);
     await db.question.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (e) {

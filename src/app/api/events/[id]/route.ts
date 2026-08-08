@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { resolveImageField, deleteFile } from "@/lib/storage";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
@@ -38,17 +39,21 @@ function toEventDto(e: any): EventDto {
     upiId: e.upiId ?? null,
     upiLink: e.upiLink ?? null,
     qrCodeUrl: e.qrCodeUrl ?? null,
+    qrCodePublicId: e.qrCodePublicId ?? null,
     requireTransactionRef: e.requireTransactionRef ?? true,
     requireScreenshot: e.requireScreenshot ?? true,
     certEnabled: e.certEnabled ?? false,
     certTemplate: (e.certTemplate ?? "modern") as CertTemplate,
     certIssueCondition: (e.certIssueCondition ?? "COMPLETED") as CertIssueCondition,
     certPassingScore: e.certPassingScore ?? 60,
+    certAutoGenerate: e.certAutoGenerate ?? false,
     certOrgName: e.certOrgName ?? null,
     certSigneeName: e.certSigneeName ?? null,
     certSigneeTitle: e.certSigneeTitle ?? null,
     certSigneeImage: e.certSigneeImage ?? null,
+    certSigneeImagePublicId: e.certSigneeImagePublicId ?? null,
     certLogo: e.certLogo ?? null,
+    certLogoPublicId: e.certLogoPublicId ?? null,
   };
 }
 
@@ -102,7 +107,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const body = await req.json();
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
-            certEnabled, certTemplate, certIssueCondition, certPassingScore, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
+            certEnabled, certTemplate, certIssueCondition, certPassingScore, certAutoGenerate, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
 
     const data: Record<string, unknown> = {};
     if (typeof title === "string" && title.trim()) data.title = title.trim();
@@ -117,7 +122,21 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     if (typeof paymentInstructions === "string") data.paymentInstructions = paymentInstructions || null;
     if (typeof upiId === "string") data.upiId = upiId || null;
     if (typeof upiLink === "string") data.upiLink = upiLink || null;
-    if (typeof qrCodeUrl === "string") data.qrCodeUrl = qrCodeUrl || null;
+    // QR code image: upload/clear/passthrough depending on the value shape.
+    // - undefined  -> no change.
+    // - null/""    -> delete the old Cloudinary asset + clear both fields.
+    // - data:image/* -> upload (replacing the old asset) + store url + publicId.
+    // - other string -> external URL passthrough (publicId cleared).
+    if (qrCodeUrl !== undefined) {
+      const qr = await resolveImageField(qrCodeUrl, existing.qrCodePublicId, {
+        folder: "events/qr",
+        transformations: ["w_400", "h_400", "c_fit", "q_auto", "f_auto"],
+      });
+      if (qr) {
+        data.qrCodeUrl = qr.url;
+        data.qrCodePublicId = qr.publicId;
+      }
+    }
     if (typeof requireTransactionRef === "boolean") data.requireTransactionRef = requireTransactionRef;
     if (typeof requireScreenshot === "boolean") data.requireScreenshot = requireScreenshot;
     // Certificate
@@ -125,11 +144,32 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     if (typeof certTemplate === "string") data.certTemplate = certTemplate;
     if (typeof certIssueCondition === "string") data.certIssueCondition = certIssueCondition;
     if (typeof certPassingScore === "number") data.certPassingScore = certPassingScore;
+    if (typeof certAutoGenerate === "boolean") data.certAutoGenerate = certAutoGenerate;
     if (typeof certOrgName === "string") data.certOrgName = certOrgName || null;
     if (typeof certSigneeName === "string") data.certSigneeName = certSigneeName || null;
     if (typeof certSigneeTitle === "string") data.certSigneeTitle = certSigneeTitle || null;
-    if (typeof certSigneeImage === "string") data.certSigneeImage = certSigneeImage || null;
-    if (typeof certLogo === "string") data.certLogo = certLogo || null;
+    // Signee image: upload/clear/passthrough (see QR code above).
+    if (certSigneeImage !== undefined) {
+      const signee = await resolveImageField(certSigneeImage, existing.certSigneeImagePublicId, {
+        folder: "events/signatures",
+        transformations: ["w_400", "h_200", "c_fit", "q_auto", "f_auto"],
+      });
+      if (signee) {
+        data.certSigneeImage = signee.url;
+        data.certSigneeImagePublicId = signee.publicId;
+      }
+    }
+    // Org logo: upload/clear/passthrough (see QR code above).
+    if (certLogo !== undefined) {
+      const logo = await resolveImageField(certLogo, existing.certLogoPublicId, {
+        folder: "events/logos",
+        transformations: ["w_300", "h_300", "c_fit", "q_auto", "f_auto"],
+      });
+      if (logo) {
+        data.certLogo = logo.url;
+        data.certLogoPublicId = logo.publicId;
+      }
+    }
 
     let start = existing.startDate;
     let end = existing.endDate;
@@ -192,6 +232,13 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     if (!existing) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
+    // Best-effort: delete any Cloudinary assets owned by this event before
+    // cascading the row delete. Failures are logged but don't block the delete.
+    await Promise.all([
+      deleteFile(existing.qrCodePublicId),
+      deleteFile(existing.certSigneeImagePublicId),
+      deleteFile(existing.certLogoPublicId),
+    ]);
     await db.event.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (e) {

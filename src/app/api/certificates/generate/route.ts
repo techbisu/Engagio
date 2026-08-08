@@ -8,6 +8,7 @@ import {
 } from "@/lib/cert";
 import type {
   CertificateDto,
+  CertIssueCondition,
   CertStatus,
   CertTemplate,
 } from "@/types";
@@ -29,10 +30,18 @@ function toCertDto(c: any): CertificateDto {
     certificateNumber: c.certificateNumber,
     verificationToken: c.verificationToken,
     template: (c.template ?? "modern") as CertTemplate,
+    eligibilityType: (c.eligibilityType ?? "COMPLETED") as CertIssueCondition,
     recipientName: c.recipientName,
     issuedAt: c.issuedAt.toISOString(),
+    issuedBy: c.issuedBy ?? null,
     status: (c.status ?? "VALID") as CertStatus,
     certificateUrl: c.certificateUrl ?? null,
+    certificatePublicId: c.certificatePublicId ?? null,
+    generatedAutomatically: c.generatedAutomatically ?? false,
+    manualOverride: c.manualOverride ?? false,
+    revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
+    revokedBy: c.revokedBy ?? null,
+    revocationReason: c.revocationReason ?? null,
     createdAt: c.createdAt.toISOString(),
     event: c.event
       ? {
@@ -48,7 +57,10 @@ function toCertDto(c: any): CertificateDto {
         }
       : undefined,
     user: c.user
-      ? { name: c.user.name ?? null, email: c.user.email }
+      ? {
+          name: c.user.name ?? null,
+          email: c.user.email,
+        }
       : undefined,
   };
 }
@@ -131,15 +143,19 @@ async function checkEligibility(opts: {
   return { eligible: false, reason: `Unknown issue condition: ${condition}` };
 }
 
-/** Issue (or return the existing) certificate for a user/event. Idempotent. */
+/** Issue (or return the existing) certificate for a user/event. Idempotent.
+ *  If `regenerate` is true and a cert exists, update it (keep cert number + token). */
 async function issueFor(opts: {
   userId: string;
   eventId: string;
   attemptId?: string;
+  manualOverride?: boolean;
+  issuedBy?: string;
+  regenerate?: boolean;
 }): Promise<{ certificate?: CertificateDto; error?: string; status?: number }> {
-  const { userId, eventId, attemptId } = opts;
+  const { userId, eventId, attemptId, manualOverride, issuedBy, regenerate } = opts;
 
-  // 1. Idempotent — return existing if already issued.
+  // 1. Idempotent — return existing if already issued (unless regenerate=true).
   const existing = await db.certificate.findFirst({
     where: { eventId, userId },
     include: {
@@ -159,7 +175,7 @@ async function issueFor(opts: {
       user: { select: { name: true, email: true } },
     },
   });
-  if (existing) {
+  if (existing && !regenerate) {
     return { certificate: toCertDto(existing) };
   }
 
@@ -192,36 +208,84 @@ async function issueFor(opts: {
     return { error: "Event not found", status: 404 };
   }
 
-  // 3. Eligibility check
-  const eligible = await checkEligibility({
-    userId,
-    eventId,
-    condition: event.certIssueCondition ?? "COMPLETED",
-    passingScore: event.certPassingScore ?? 60,
-  });
-  if (!eligible.eligible) {
-    return {
-      error: eligible.reason || "Participant does not meet the certificate issue condition",
-      status: 400,
-    };
+  // 3. Eligibility check (skipped when manualOverride is true OR regenerate is true)
+  let eligibleAttemptId: string | undefined = attemptId;
+  const condition = (event.certIssueCondition ?? "COMPLETED") as string;
+  if (!manualOverride && !regenerate) {
+    const eligible = await checkEligibility({
+      userId,
+      eventId,
+      condition,
+      passingScore: event.certPassingScore ?? 60,
+    });
+    if (!eligible.eligible) {
+      return {
+        error: eligible.reason || "Participant does not meet the certificate issue condition",
+        status: 400,
+      };
+    }
+    eligibleAttemptId = attemptId ?? eligible.attemptId;
   }
 
-  // 4. Generate certificate
-  const certificateNumber = generateCertificateNumber();
-  const verificationToken = generateVerificationToken();
   const template = (event.certTemplate ?? "modern") as CertTemplate;
   const recipientName = user.name?.trim() || user.email;
+
+  // 4. REGENERATE path — keep cert number + token, update template + reset status
+  if (existing && regenerate) {
+    const updated = await db.certificate.update({
+      where: { id: existing.id },
+      data: {
+        template,
+        eligibilityType: condition,
+        attemptId: eligibleAttemptId ?? existing.attemptId ?? null,
+        status: "VALID", // reinstate if was revoked
+        revokedAt: null,
+        revokedBy: null,
+        revocationReason: null,
+        // Clear the old PNG URL — client will re-render + re-upload
+        certificateUrl: null,
+        certificatePublicId: null,
+        issuedBy: issuedBy ?? existing.issuedBy,
+        issuedAt: new Date(),
+      },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            certOrgName: true,
+            certSigneeName: true,
+            certSigneeTitle: true,
+            certSigneeImage: true,
+            certLogo: true,
+            certTemplate: true,
+            certPassingScore: true,
+          },
+        },
+        user: { select: { name: true, email: true } },
+      },
+    });
+    return { certificate: toCertDto(updated) };
+  }
+
+  // 5. CREATE path — new certificate
+  const certificateNumber = generateCertificateNumber();
+  const verificationToken = generateVerificationToken();
 
   const created = await db.certificate.create({
     data: {
       eventId,
       userId,
-      attemptId: attemptId ?? eligible.attemptId ?? null,
+      attemptId: eligibleAttemptId ?? null,
       certificateNumber,
       verificationToken,
       template,
+      eligibilityType: condition,
       recipientName,
       status: "VALID",
+      issuedBy: issuedBy ?? null,
+      generatedAutomatically: false,
+      manualOverride: !!manualOverride,
     },
     include: {
       event: {
@@ -248,14 +312,22 @@ async function issueFor(opts: {
  * POST /api/certificates/generate — admin only.
  *
  * Body shapes:
- *   Single: { userId, eventId, attemptId? }
- *   Bulk:   { userIds: string[], eventId }
+ *   Single: { userId, eventId, attemptId?, manualOverride?, regenerate? }
+ *   Bulk:   { userIds: string[], eventId, manualOverride? }
  *
  * Single response: { certificate: CertificateDto }
  * Bulk response:   { generated: number, certificates: CertificateDto[], errors: [{ userId, error }] }
  *
  * Always idempotent — if a certificate already exists for the (userId, eventId),
- * it's returned as-is without re-issuing.
+ * it's returned as-is without re-issuing (unless `regenerate: true`).
+ *
+ * When `manualOverride: true` is set, the server-side eligibility check is
+ * skipped (admin override). The resulting certificate's `manualOverride`
+ * field is set to true so the override is auditable.
+ *
+ * When `regenerate: true` is set (single-issue only), if a cert already
+ * exists, it's updated (same cert number + verification token, updated
+ * template + status reset to VALID, PNG URL cleared for re-upload).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -264,7 +336,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { userId, eventId, attemptId, userIds } = body || {};
+    const { userId, eventId, attemptId, userIds, manualOverride, regenerate } = body || {};
+    const issuedBy = (admin as { id?: string }).id ?? null;
 
     // --- BULK ----------------------------------------------------------------
     if (Array.isArray(userIds) && eventId) {
@@ -272,7 +345,12 @@ export async function POST(req: NextRequest) {
       const errors: { userId: string; error: string }[] = [];
       for (const uid of userIds) {
         if (typeof uid !== "string" || !uid.trim()) continue;
-        const r = await issueFor({ userId: uid, eventId });
+        const r = await issueFor({
+          userId: uid,
+          eventId,
+          manualOverride: !!manualOverride,
+          issuedBy,
+        });
         if (r.certificate) {
           results.push(r.certificate);
         } else {
@@ -291,7 +369,14 @@ export async function POST(req: NextRequest) {
 
     // --- SINGLE -------------------------------------------------------------
     if (userId && eventId) {
-      const r = await issueFor({ userId, eventId, attemptId });
+      const r = await issueFor({
+        userId,
+        eventId,
+        attemptId,
+        manualOverride: !!manualOverride,
+        issuedBy,
+        regenerate: !!regenerate,
+      });
       if (r.certificate) {
         return NextResponse.json({ certificate: r.certificate });
       }

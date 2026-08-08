@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { resolveImageField } from "@/lib/storage";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 /** Check the session for an admin role. Returns true if the caller is an admin. */
@@ -36,6 +37,7 @@ function toEventDto(e: any): EventDto {
     upiId: e.upiId ?? null,
     upiLink: e.upiLink ?? null,
     qrCodeUrl: e.qrCodeUrl ?? null,
+    qrCodePublicId: e.qrCodePublicId ?? null,
     requireTransactionRef: e.requireTransactionRef ?? true,
     requireScreenshot: e.requireScreenshot ?? true,
     // Certificate
@@ -43,11 +45,14 @@ function toEventDto(e: any): EventDto {
     certTemplate: (e.certTemplate ?? "modern") as CertTemplate,
     certIssueCondition: (e.certIssueCondition ?? "COMPLETED") as CertIssueCondition,
     certPassingScore: e.certPassingScore ?? 60,
+    certAutoGenerate: e.certAutoGenerate ?? false,
     certOrgName: e.certOrgName ?? null,
     certSigneeName: e.certSigneeName ?? null,
     certSigneeTitle: e.certSigneeTitle ?? null,
     certSigneeImage: e.certSigneeImage ?? null,
+    certSigneeImagePublicId: e.certSigneeImagePublicId ?? null,
     certLogo: e.certLogo ?? null,
+    certLogoPublicId: e.certLogoPublicId ?? null,
   };
 }
 
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
-            certEnabled, certTemplate, certIssueCondition, certPassingScore, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
+            certEnabled, certTemplate, certIssueCondition, certPassingScore, certAutoGenerate, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -117,6 +122,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Upload the optional base64 images (QR code, signee image, org logo) to
+    // the storage provider (Cloudinary if configured, else base64 data URL).
+    // The DB stores the resolved URL (Cloudinary URL or base64 data URL) + the
+    // Cloudinary publicId (so we can delete the asset later if replaced).
+    const qr = await resolveImageField(qrCodeUrl, null, {
+      folder: "events/qr",
+      transformations: ["w_400", "h_400", "c_fit", "q_auto", "f_auto"],
+    });
+    const signee = await resolveImageField(certSigneeImage, null, {
+      folder: "events/signatures",
+      transformations: ["w_400", "h_200", "c_fit", "q_auto", "f_auto"],
+    });
+    const logo = await resolveImageField(certLogo, null, {
+      folder: "events/logos",
+      transformations: ["w_300", "h_300", "c_fit", "q_auto", "f_auto"],
+    });
+
     const event = await db.event.create({
       data: {
         title: title.trim(),
@@ -133,7 +155,8 @@ export async function POST(req: NextRequest) {
         paymentInstructions: typeof paymentInstructions === "string" ? paymentInstructions : null,
         upiId: typeof upiId === "string" ? upiId : null,
         upiLink: typeof upiLink === "string" ? upiLink : null,
-        qrCodeUrl: typeof qrCodeUrl === "string" ? qrCodeUrl : null,
+        qrCodeUrl: qr ? qr.url : null,
+        qrCodePublicId: qr ? qr.publicId : null,
         requireTransactionRef: typeof requireTransactionRef === "boolean" ? requireTransactionRef : true,
         requireScreenshot: typeof requireScreenshot === "boolean" ? requireScreenshot : true,
         // Certificate
@@ -141,11 +164,14 @@ export async function POST(req: NextRequest) {
         certTemplate: typeof certTemplate === "string" ? certTemplate : "modern",
         certIssueCondition: typeof certIssueCondition === "string" ? certIssueCondition : "COMPLETED",
         certPassingScore: typeof certPassingScore === "number" ? certPassingScore : 60,
+        certAutoGenerate: typeof certAutoGenerate === "boolean" ? certAutoGenerate : false,
         certOrgName: typeof certOrgName === "string" ? certOrgName : null,
         certSigneeName: typeof certSigneeName === "string" ? certSigneeName : null,
         certSigneeTitle: typeof certSigneeTitle === "string" ? certSigneeTitle : null,
-        certSigneeImage: typeof certSigneeImage === "string" ? certSigneeImage : null,
-        certLogo: typeof certLogo === "string" ? certLogo : null,
+        certSigneeImage: signee ? signee.url : null,
+        certSigneeImagePublicId: signee ? signee.publicId : null,
+        certLogo: logo ? logo.url : null,
+        certLogoPublicId: logo ? logo.publicId : null,
       },
       include: {
         _count: {

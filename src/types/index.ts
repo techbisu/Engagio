@@ -18,6 +18,7 @@ export type AdminTab =
   | "users"
   | "payments"
   | "certificates"
+  | "results"
 
 export type Role = "ADMIN" | "STUDENT"
 
@@ -65,6 +66,7 @@ export interface EventDto {
   upiId?: string | null
   upiLink?: string | null
   qrCodeUrl?: string | null
+  qrCodePublicId?: string | null
   requireTransactionRef: boolean
   requireScreenshot: boolean
   // Certificate
@@ -72,11 +74,14 @@ export interface EventDto {
   certTemplate: CertTemplate
   certIssueCondition: CertIssueCondition
   certPassingScore: number
+  certAutoGenerate: boolean
   certOrgName?: string | null
   certSigneeName?: string | null
   certSigneeTitle?: string | null
   certSigneeImage?: string | null
+  certSigneeImagePublicId?: string | null
   certLogo?: string | null
+  certLogoPublicId?: string | null
   certificateCount?: number
 }
 
@@ -143,6 +148,7 @@ export interface QuestionDto {
   order: number
   explanation?: string | null
   imageUrl?: string | null
+  imageUrlPublicId?: string | null
   difficulty: QuestionDifficulty
   tags: string[]
   createdAt: string
@@ -160,6 +166,9 @@ export interface QuizLinkDto {
   questionCount: number
   showResults: boolean
   publishResults: boolean
+  // Email + leaderboard are independent of result visibility
+  emailOnPublish: boolean
+  leaderboardEnabled: boolean
   passThreshold: number
   // Security toggles
   requireFullscreen: boolean
@@ -273,10 +282,18 @@ export interface CertificateDto {
   certificateNumber: string
   verificationToken: string
   template: CertTemplate
+  eligibilityType: CertIssueCondition
   recipientName: string
   issuedAt: string
+  issuedBy?: string | null
   status: CertStatus
   certificateUrl?: string | null
+  certificatePublicId?: string | null
+  generatedAutomatically: boolean
+  manualOverride: boolean
+  revokedAt?: string | null
+  revokedBy?: string | null
+  revocationReason?: string | null
   createdAt: string
   event?: {
     id: string

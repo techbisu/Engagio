@@ -26,10 +26,21 @@ function toCertDto(c: any): CertificateDto {
     certificateNumber: c.certificateNumber,
     verificationToken: c.verificationToken,
     template: (c.template ?? "modern") as CertTemplate,
+    eligibilityType: (c.eligibilityType ?? "COMPLETED") as
+      | "PARTICIPATION"
+      | "COMPLETED"
+      | "PASSED",
     recipientName: c.recipientName,
     issuedAt: c.issuedAt.toISOString(),
+    issuedBy: c.issuedBy ?? null,
     status: (c.status ?? "VALID") as CertStatus,
     certificateUrl: c.certificateUrl ?? null,
+    certificatePublicId: c.certificatePublicId ?? null,
+    generatedAutomatically: c.generatedAutomatically ?? false,
+    manualOverride: c.manualOverride ?? false,
+    revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
+    revokedBy: c.revokedBy ?? null,
+    revocationReason: c.revocationReason ?? null,
     createdAt: c.createdAt.toISOString(),
     event: c.event
       ? {

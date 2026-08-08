@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { uploadFile } from "@/lib/storage";
 import type { PaymentStatus, RegistrationDto } from "@/types";
 
 /** Map a Prisma Registration row to a RegistrationDto (omits large `data`). */
@@ -221,13 +222,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Upload the screenshot to the storage provider (Cloudinary if configured,
+    // else base64 data URL fallback). The Registration model doesn't have a
+    // dedicated screenshotPublicId field, so we don't track the public_id for
+    // deletion here — screenshots are kept for audit. If Cloudinary is set up
+    // this means we store a Cloudinary URL instead of a multi-megabyte base64
+    // blob, which keeps the DB row small.
+    let storedScreenshotUrl: string | null = null;
+    if (ss) {
+      const uploaded = await uploadFile(ss, "image/jpeg", {
+        folder: "payments",
+        transformations: ["w_800", "h_600", "c_limit", "q_auto", "f_auto"],
+      });
+      storedScreenshotUrl = uploaded.url;
+    }
+
     const updated = await db.registration.update({
       where: { id: registration.id },
       data: {
         paymentStatus: "PENDING_VERIFICATION",
         paymentMethod: "MANUAL",
         transactionReference: txRef || null,
-        screenshotUrl: ss || null,
+        screenshotUrl: storedScreenshotUrl,
         verifiedBy: null,
         verifiedAt: null,
         rejectionReason: null,
