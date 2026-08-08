@@ -1,85 +1,102 @@
 /**
- * Email abstraction — provides a uniform interface for sending transactional
- * emails. Initially backed by Resend. If RESEND_API_KEY is not configured,
- * email sending is a no-op (logged) and result publishing still works.
+ * Email abstraction layer.
  *
- * To migrate to another provider (SES, Postmark, SendGrid) later, implement
- * the same `sendEmail()` interface.
+ * All emails go through this module so the provider can be swapped
+ * (Resend → SendGrid → Postmark → SES) without changing application code.
  *
- * Env vars (optional — if absent, emails are skipped):
- *   RESEND_API_KEY
- *   EMAIL_FROM (e.g. "QuizMaster Pro <noreply@eventra.app>")
- *   APP_URL (base URL for links in emails, e.g. https://eventra.app)
+ * Current provider: Resend (via direct API, no SDK).
+ *
+ * Env vars:
+ *   RESEND_API_KEY   — Resend API key (optional)
+ *   EMAIL_FROM       — From address (default: noreply@quizmaster.pro)
+ *
+ * If RESEND_API_KEY is not configured, `sendEmail` returns a success
+ * status with `sent: false` and logs a warning — email is NEVER a hard
+ * dependency for business logic (result publishing, certificate issuance).
  */
 
-import { Resend } from "resend"
-
-const API_KEY = process.env.RESEND_API_KEY
-const FROM = process.env.EMAIL_FROM || "QuizMaster Pro <noreply@quizmaster.pro>"
-const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000"
-
-export const emailConfigured = !!API_KEY
-
-const resend = API_KEY ? new Resend(API_KEY) : null
-
-export interface SendEmailParams {
+export interface SendEmailInput {
   to: string
   subject: string
   html: string
-  /** Optional plain-text fallback. If omitted, derived from html. */
+  /** Optional plain-text fallback. */
   text?: string
 }
 
 export interface SendEmailResult {
   sent: boolean
+  /** When false, the reason (e.g. "email not configured"). */
+  reason?: string
+  /** Provider message ID (when sent). */
   messageId?: string
-  error?: string
-  /** Which provider handled the email (or "skipped" if not configured). */
-  provider: "resend" | "skipped"
+}
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@quizmaster.pro"
+
+export function isEmailConfigured(): boolean {
+  return !!RESEND_API_KEY
 }
 
 /**
- * Send a transactional email. If Resend is not configured, logs the email
- * and returns `{ sent: false, provider: "skipped" }` — the caller can
- * continue (email is not a hard dependency for result publishing).
+ * Send an email via Resend.
+ *
+ * If RESEND_API_KEY is not set, returns `{ sent: false, reason: "..." }`
+ * without throwing — callers can continue their flow.
  */
-export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
-  if (!resend) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log(
-        `[email] RESEND_API_KEY not configured — skipping email to ${params.to}:\n` +
-          `Subject: ${params.subject}\n` +
-          `Body: ${(params.text || params.html.replace(/<[^>]+>/g, "")).slice(0, 200)}...`
-      )
+export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  if (!isEmailConfigured()) {
+    console.warn(
+      `[email] RESEND_API_KEY not configured — skipping email to ${input.to} (subject: "${input.subject}")`
+    )
+    return {
+      sent: false,
+      reason: "Email provider not configured (set RESEND_API_KEY)",
     }
-    return { sent: false, provider: "skipped" }
   }
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: FROM,
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+      }),
     })
 
-    if (error) {
-      console.error("[email] Resend error:", error)
-      return { sent: false, error: error.message, provider: "resend" }
+    if (!res.ok) {
+      const text = await res.text()
+      console.error(`[email] Resend API error (${res.status}):`, text)
+      return {
+        sent: false,
+        reason: `Resend API error: ${res.status}`,
+      }
     }
 
-    return { sent: true, messageId: data?.id, provider: "resend" }
-  } catch (e: any) {
-    console.error("[email] sendEmail exception:", e)
-    return { sent: false, error: e?.message || String(e), provider: "resend" }
+    const data = (await res.json()) as { id?: string }
+    return {
+      sent: true,
+      messageId: data.id,
+    }
+  } catch (error) {
+    console.error("[email] sendEmail error:", error)
+    return {
+      sent: false,
+      reason: String(error),
+    }
   }
 }
 
 /**
  * Send a "result published" notification email to a participant.
- * The CTA links to the app's authenticated my-results page (not an
- * unsecured URL — the participant must log in to see their result).
+ * Non-blocking — returns `{ sent: false }` if email isn't configured.
  */
 export async function sendResultPublishedEmail(params: {
   to: string
@@ -87,58 +104,71 @@ export async function sendResultPublishedEmail(params: {
   eventTitle: string
   score?: number | null
   percentage?: number | null
-  passed?: boolean | null
+  resultUrl: string
 }): Promise<SendEmailResult> {
-  const { to, participantName, eventTitle, score, percentage, passed } = params
-  const myResultsUrl = `${APP_URL}/?view=student`
-
+  const { participantName, eventTitle, percentage, resultUrl } = params
   const scoreText =
-    percentage != null
-      ? `<p style="font-size: 18px; margin: 16px 0;"><strong>Score: ${percentage}%</strong>${
-          passed != null
-            ? passed
-              ? " — Passed ✓"
-              : " — Did not pass"
-            : ""
-        }</p>`
-      : ""
+    percentage != null ? `<p style="margin:0;font-size:32px;font-weight:700;color:#10b981;">${percentage}%</p>` : ""
 
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Your result is published</title></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #0f172a;">
-  <div style="background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 22px;">Result Published ✓</h1>
-  </div>
-  <div style="background: white; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-    <p style="margin: 0 0 12px;">Hello ${escapeHtml(participantName)},</p>
-    <p style="margin: 0 0 12px;">Your result for <strong>${escapeHtml(eventTitle)}</strong> is now available.</p>
-    ${scoreText}
-    <p style="margin: 16px 0; color: #64748b; font-size: 14px;">
-      You can view your detailed result, including per-question review and category analysis, in your dashboard.
-    </p>
-    <a href="${myResultsUrl}" style="display: inline-block; background: #10b981; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 8px;">
-      View My Result
-    </a>
-    <p style="margin: 24px 0 0; color: #94a3b8; font-size: 12px;">
-      You received this email because you attempted the ${escapeHtml(eventTitle)} assessment. If you believe this was sent in error, please ignore this email.
-    </p>
-  </div>
-  <p style="text-align: center; color: #cbd5e1; font-size: 11px; margin-top: 16px;">
-    Powered by QuizMaster Pro
-  </p>
-</body>
-</html>
-  `.trim()
+  <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;">
+    <div style="background:linear-gradient(135deg,#10b981,#14b8a6);padding:24px;border-radius:12px 12px 0 0;color:white;">
+      <h1 style="margin:0;font-size:22px;">Result Published ✓</h1>
+    </div>
+    <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 16px;color:#475569;">Hello ${escapeHtml(participantName)},</p>
+      <p style="margin:0 0 16px;color:#475569;">Your result for <strong style="color:#0f172a;">${escapeHtml(eventTitle)}</strong> is now available.</p>
+      ${scoreText}
+      <a href="${escapeHtml(resultUrl)}" style="display:inline-block;margin:24px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View My Result</a>
+      <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;">If the button doesn't work, copy this URL: ${escapeHtml(resultUrl)}</p>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by QuizMaster Pro</p>
+  </body>
+</html>`
 
   return sendEmail({
-    to,
+    to: params.to,
     subject: `Your result for ${eventTitle} is now available`,
     html,
-    text: `Hello ${participantName}, your result for ${eventTitle} is now available.${
-      percentage != null ? ` Score: ${percentage}%.` : ""
-    } View it at ${myResultsUrl}`,
+    text: `Hello ${participantName}, your result for ${eventTitle} is now available. View it at ${resultUrl}`,
+  })
+}
+
+/**
+ * Send a certificate issued notification email.
+ */
+export async function sendCertificateIssuedEmail(params: {
+  to: string
+  participantName: string
+  eventTitle: string
+  certificateNumber: string
+  verifyUrl: string
+}): Promise<SendEmailResult> {
+  const { participantName, eventTitle, certificateNumber, verifyUrl } = params
+
+  const html = `<!DOCTYPE html>
+<html>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;">
+    <div style="background:linear-gradient(135deg,#10b981,#14b8a6);padding:24px;border-radius:12px 12px 0 0;color:white;">
+      <h1 style="margin:0;font-size:22px;">Certificate Issued 🎓</h1>
+    </div>
+    <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 16px;color:#475569;">Hello ${escapeHtml(participantName)},</p>
+      <p style="margin:0 0 16px;color:#475569;">Congratulations! You've been issued a certificate for completing <strong style="color:#0f172a;">${escapeHtml(eventTitle)}</strong>.</p>
+      <p style="margin:16px 0 4px;font-size:12px;color:#94a3b8;">Certificate Number</p>
+      <p style="margin:0 0 16px;font-family:monospace;font-size:16px;color:#0f172a;">${escapeHtml(certificateNumber)}</p>
+      <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;margin:8px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View Certificate</a>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by QuizMaster Pro</p>
+  </body>
+</html>`
+
+  return sendEmail({
+    to: params.to,
+    subject: `Your certificate for ${eventTitle} is ready`,
+    html,
+    text: `Hello ${participantName}, your certificate for ${eventTitle} (number: ${certificateNumber}) has been issued. Verify at ${verifyUrl}`,
   })
 }
 
@@ -151,17 +181,18 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;")
 }
 
-/**
- * Get the status of the email provider for admin display.
- */
-export function getEmailStatus(): {
+// ─── Compatibility for the admin storage-status endpoint ────────────────────
+
+export interface EmailStatus {
   configured: boolean
-  provider: "resend" | "disabled"
-  from?: string
-} {
+  provider: "resend" | "none"
+  fromAddress: string
+}
+
+export function getEmailStatus(): EmailStatus {
   return {
-    configured: emailConfigured,
-    provider: emailConfigured ? "resend" : "disabled",
-    from: FROM,
+    configured: isEmailConfigured(),
+    provider: isEmailConfigured() ? "resend" : "none",
+    fromAddress: EMAIL_FROM,
   }
 }

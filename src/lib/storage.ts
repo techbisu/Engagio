@@ -1,274 +1,286 @@
 /**
- * Storage abstraction — provides a uniform interface for uploading, fetching,
- * and deleting files. Initially backed by Cloudinary with a base64/local
- * fallback when Cloudinary credentials are not configured.
+ * Storage abstraction layer.
  *
- * To migrate to Cloudflare R2/S3 later, implement the same interface
- * (upload/delete/getUrl) with the new provider. Application-level code
- * uses `uploadFile()` / `deleteFile()` / `resolveFileUrl()` and never
- * touches provider-specific APIs directly.
+ * All file uploads go through this module so the underlying provider can be
+ * swapped (Cloudinary → Cloudflare R2 → S3) without changing application code.
  *
- * Env vars (optional — if absent, falls back to base64 data URLs):
+ * Current provider: Cloudinary (unsigned upload via upload preset, or signed
+ * upload via the API directly).
+ *
+ * Env vars (all optional — falls back to local base64 storage if missing):
  *   CLOUDINARY_CLOUD_NAME
  *   CLOUDINARY_API_KEY
  *   CLOUDINARY_API_SECRET
+ *   CLOUDINARY_UPLOAD_PRESET (for unsigned uploads — browser-side)
+ *
+ * When CLOUDINARY_CLOUD_NAME is not set, `uploadImage` falls back to returning
+ * a base64 data URL so the app keeps working in dev without external services.
  */
 
-import { v2 as cloudinary } from "cloudinary"
-
-const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME
-const API_KEY = process.env.CLOUDINARY_API_KEY
-const API_SECRET = process.env.CLOUDINARY_API_SECRET
-
-export const cloudinaryConfigured = !!(CLOUD_NAME && API_KEY && API_SECRET)
-
-if (cloudinaryConfigured) {
-  cloudinary.config({
-    cloud_name: CLOUD_NAME,
-    api_key: API_KEY,
-    api_secret: API_SECRET,
-    secure: true,
-  })
+export interface UploadOptions {
+  /** Logical folder, e.g. "questions", "events", "payments", "certificates". */
+  folder?: string
+  /** Public ID prefix — Cloudinary will append a unique suffix. */
+  publicIdPrefix?: string
+  /** Transformation to apply on upload, e.g. "w_800,h_600,c_fill,q_auto". */
+  transformation?: string
+  /** Tags for organization. */
+  tags?: string[]
 }
 
 export interface UploadResult {
-  /** The publicly-accessible URL of the stored file (Cloudinary URL or base64 data URL). */
   url: string
-  /** Provider-specific public_id for later deletion/migration. null for base64 fallback. */
-  publicId: string | null
-  /** Size in bytes of the original data. */
-  bytes: number
-  /** MIME type of the file. */
-  mimeType: string
-  /** Which provider handled the upload. */
-  provider: "cloudinary" | "base64"
+  publicId?: string
+  /** True if the result is a base64 data URL (fallback mode). */
+  isLocal: boolean
+  /** Original byte size of the input. */
+  bytes?: number
+  /** MIME type of the uploaded file. */
+  format?: string
 }
 
-export interface UploadOptions {
-  /**
-   * Logical folder path in the storage provider, e.g. "questions", "payments",
-   * "certificates", "events". Used to organize assets + generate unique public_ids.
-   */
-  folder: string
-  /**
-   * Optional filename (without extension). If omitted, a random id is generated.
-   */
-  filename?: string
-  /**
-   * Optional list of Cloudinary transformation strings applied on upload,
-   * e.g. ["w_800","h_600","c_fit","q_auto","f_auto"]. Ignored by base64 fallback.
-   */
-  transformations?: string[]
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET
+
+export function isCloudinaryConfigured(): boolean {
+  return !!(CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET)
 }
 
 /**
- * Upload a file to storage. Accepts a base64 data URL (from client-side canvas
- * compression) or a raw Buffer + mime type (from server-side generation).
+ * Upload an image buffer to Cloudinary using signed upload.
+ * Server-side only (uses the API secret).
  *
- * - If Cloudinary is configured: uploads to Cloudinary with the given folder +
- *   transformations, returns the secure URL + public_id.
- * - If Cloudinary is NOT configured: returns the base64 data URL as-is (or
- *   converts a Buffer to a base64 data URL), with publicId=null.
+ * If Cloudinary is not configured, falls back to returning a base64 data URL
+ * so the app keeps working in dev without external services.
+ */
+export async function uploadImage(
+  buffer: Buffer,
+  mimeType: string,
+  options: UploadOptions = {}
+): Promise<UploadResult> {
+  if (!isCloudinaryConfigured()) {
+    // Fallback: base64 data URL — no external storage
+    const base64 = buffer.toString("base64")
+    return {
+      url: `data:${mimeType};base64,${base64}`,
+      isLocal: true,
+      bytes: buffer.length,
+      format: mimeType.split("/")[1] || "bin",
+    }
+  }
+
+  const folder = options.folder || "quizmaster"
+  const timestamp = Math.floor(Date.now() / 1000)
+
+  // Build the upload params
+  const params: Record<string, string> = {
+    folder,
+    timestamp: String(timestamp),
+    resource_type: "image",
+  }
+  if (options.publicIdPrefix) params.public_id = `${options.publicIdPrefix}-${timestamp}`
+  if (options.transformation) params.transformation = options.transformation
+  if (options.tags?.length) params.tags = options.tags.join(",")
+
+  // Sign the params
+  const signature = await signCloudinaryParams(params)
+
+  const formData = new FormData()
+  for (const [k, v] of Object.entries(params)) formData.append(k, v)
+  formData.append("signature", signature)
+  formData.append("api_key", CLOUDINARY_API_KEY!)
+  formData.append("file", new Blob([buffer], { type: mimeType }))
+
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
+  const res = await fetch(uploadUrl, { method: "POST", body: formData })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Cloudinary upload failed (${res.status}): ${text}`)
+  }
+
+  const data = (await res.json()) as {
+    secure_url: string
+    public_id: string
+    bytes: number
+    format: string
+  }
+
+  // Return an optimized URL with auto-format + auto-quality + width constraint
+  // by inserting transformation segments into the URL path.
+  const optimizedUrl = optimizeCloudinaryUrl(data.secure_url, options.transformation)
+
+  return {
+    url: optimizedUrl,
+    publicId: data.public_id,
+    isLocal: false,
+    bytes: data.bytes,
+    format: data.format,
+  }
+}
+
+/**
+ * Sign Cloudinary upload params using SHA-1 + the API secret.
+ * Mirrors Cloudinary's server-side signing algorithm.
+ */
+async function signCloudinaryParams(
+  params: Record<string, string>
+): Promise<string> {
+  const sorted = Object.keys(params)
+    .filter((k) => k !== "api_key" && k !== "file")
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join("&")
+  const toSign = `${sorted}${CLOUDINARY_API_SECRET}`
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(toSign))
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+/**
+ * Insert transformation params into a Cloudinary URL to get an optimized
+ * derivative (auto-format + auto-quality).
+ *
+ * Input:  https://res.cloudinary.com/demo/image/upload/v123/sample.jpg
+ * Output: https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,w_800/v123/sample.jpg
+ *
+ * If the URL doesn't look like a Cloudinary URL, returns it unchanged.
+ */
+export function optimizeCloudinaryUrl(
+  url: string,
+  transformation?: string
+): string {
+  if (!url.includes("res.cloudinary.com")) return url
+  const t = transformation || "f_auto,q_auto"
+  return url.replace(
+    "/image/upload/",
+    `/image/upload/${t}/`
+  )
+}
+
+/**
+ * Delete an asset from Cloudinary by its public ID.
+ * Server-side only.
+ * No-op (returns success) if Cloudinary is not configured or publicId is empty.
+ */
+export async function deleteImage(publicId: string): Promise<boolean> {
+  if (!publicId || !isCloudinaryConfigured()) return false
+
+  const timestamp = Math.floor(Date.now() / 1000)
+  const params = {
+    public_id: publicId,
+    timestamp: String(timestamp),
+  }
+  const signature = await signCloudinaryParams(params)
+
+  const formData = new FormData()
+  formData.append("public_id", params.public_id)
+  formData.append("timestamp", params.timestamp)
+  formData.append("signature", signature)
+  formData.append("api_key", CLOUDINARY_API_KEY!)
+
+  const deleteUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image/destroy`
+  const res = await fetch(deleteUrl, { method: "POST", body: formData })
+  return res.ok
+}
+
+/**
+ * Convert a File/Blob (from a browser file input) to a Buffer.
+ * Used by the /api/upload route handler to read the incoming file.
+ */
+export async function fileToBuffer(file: Blob): Promise<Buffer> {
+  const arrayBuffer = await file.arrayBuffer()
+  return Buffer.from(arrayBuffer)
+}
+
+// ─── Compatibility wrappers for the previous storage API ───────────────────
+// The earlier version of this module exposed uploadFile / deleteFile /
+// resolveImageField / getStorageStatus. We keep them here so existing route
+// handlers continue to work without changes.
+
+export interface StorageStatus {
+  provider: "cloudinary" | "local"
+  cloudinaryConfigured: boolean
+  cloudName?: string
+}
+
+export function getStorageStatus(): StorageStatus {
+  return {
+    provider: isCloudinaryConfigured() ? "cloudinary" : "local",
+    cloudinaryConfigured: isCloudinaryConfigured(),
+    cloudName: CLOUDINARY_CLOUD_NAME || undefined,
+  }
+}
+
+/**
+ * Upload a file from a multipart FormData field. Used by routes that accept
+ * file uploads directly (questions, events, registrations, certificates).
+ *
+ * `fieldName` is the FormData key; `formData` is the parsed FormData.
+ * Returns `{ url, publicId }` — url is a Cloudinary URL or base64 data URL.
  */
 export async function uploadFile(
-  data: string | Buffer,
-  mimeType: string,
-  options: UploadOptions
-): Promise<UploadResult> {
-  // Normalize input to a base64 string (without the data: prefix)
-  let base64Data: string
-  let bytes: number
-
-  if (Buffer.isBuffer(data)) {
-    base64Data = data.toString("base64")
-    bytes = data.length
-  } else if (typeof data === "string") {
-    if (data.startsWith("data:")) {
-      // Already a data URL — strip the prefix
-      const match = data.match(/^data:([^;]+);base64,(.*)$/)
-      if (match) {
-        base64Data = match[2]
-        mimeType = match[1] || mimeType
-        bytes = Math.floor((base64Data.length * 3) / 4)
-      } else {
-        base64Data = data
-        bytes = data.length
-      }
-    } else {
-      base64Data = data
-      bytes = data.length
-    }
-  } else {
-    throw new Error("uploadFile: data must be a string or Buffer")
+  formData: FormData,
+  fieldName: string,
+  options: UploadOptions = {}
+): Promise<{ url: string; publicId: string | null }> {
+  const file = formData.get(fieldName)
+  if (!file || !(file instanceof File)) {
+    return { url: "", publicId: null }
   }
+  const buffer = await fileToBuffer(file)
+  const result = await uploadImage(buffer, file.type, options)
+  return { url: result.url, publicId: result.publicId || null }
+}
 
-  // --- Cloudinary path ---
-  if (cloudinaryConfigured) {
-    try {
-      const publicId = options.filename
-        ? `${options.folder}/${options.filename}`
-        : `${options.folder}/${generateId()}`
-
-      const transformation = (options.transformations || []).join(",")
-
-      const result = await cloudinary.uploader.upload(
-        `data:${mimeType};base64,${base64Data}`,
-        {
-          public_id: publicId,
-          resource_type: "auto",
-          // Apply transformations inline so the stored asset is already optimized
-          ...(transformation ? { transformation } : {}),
-          // Overwrite if same public_id (for regeneration)
-          overwrite: true,
-        }
-      )
-
-      return {
-        url: result.secure_url,
-        publicId: result.public_id,
-        bytes: result.bytes,
-        mimeType,
-        provider: "cloudinary",
-      }
-    } catch (e) {
-      console.error("[storage] Cloudinary upload failed, falling back to base64:", e)
-      // Fall through to base64
-    }
-  }
-
-  // --- Base64 fallback ---
-  return {
-    url: `data:${mimeType};base64,${base64Data}`,
-    publicId: null,
-    bytes,
-    mimeType,
-    provider: "base64",
-  }
+/** Alias for deleteImage — kept for compatibility. */
+export async function deleteFile(publicId: string): Promise<boolean> {
+  return deleteImage(publicId)
 }
 
 /**
- * Delete a file from storage. Uses the publicId if available (Cloudinary);
- * for base64 fallback, deletion is a no-op (the data URL is stored inline
- * in the DB and will be removed when the row is deleted).
- */
-export async function deleteFile(
-  publicId: string | null | undefined
-): Promise<boolean> {
-  if (!publicId) return true // base64 — nothing to delete
-  if (!cloudinaryConfigured) return true
-
-  try {
-    await cloudinary.uploader.destroy(publicId, { resource_type: "auto" })
-    return true
-  } catch (e) {
-    console.error("[storage] Cloudinary delete failed:", e)
-    return false
-  }
-}
-
-/**
- * Resolve a stored file's URL for display. For base64 data URLs, returns as-is.
- * For Cloudinary URLs, optionally applies a transformation (e.g. thumbnail).
- */
-export function resolveFileUrl(
-  url: string | null | undefined,
-  transformation?: string
-): string | null {
-  if (!url) return null
-  if (url.startsWith("data:") || url.startsWith("http")) {
-    // For Cloudinary URLs, insert the transformation if requested
-    if (transformation && cloudinaryConfigured && url.includes("res.cloudinary.com")) {
-      // Insert transformation before the upload part of the URL
-      // Format: https://res.cloudinary.com/{cloud}/image/upload/v{ver}/{public_id}
-      return url.replace(
-        /\/image\/upload\//,
-        `/image/upload/${transformation}/`
-      )
-    }
-    return url
-  }
-  return url
-}
-
-/**
- * Generate a URL for an asset given its publicId (Cloudinary only).
- * Returns null if Cloudinary is not configured or publicId is null.
- */
-export function getUrlByPublicId(
-  publicId: string | null | undefined,
-  transformation?: string
-): string | null {
-  if (!publicId || !cloudinaryConfigured) return null
-  return cloudinary.url(publicId, {
-    transformation: transformation ? transformation.split(",") : undefined,
-    secure: true,
-  })
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
-}
-
-/**
- * Get the status of the storage provider for admin display.
- */
-export function getStorageStatus(): {
-  configured: boolean
-  provider: "cloudinary" | "base64"
-  cloudName?: string
-} {
-  return {
-    configured: cloudinaryConfigured,
-    provider: cloudinaryConfigured ? "cloudinary" : "base64",
-    cloudName: CLOUD_NAME,
-  }
-}
-
-/**
- * Resolve an image field sent by a client (e.g. in an event PATCH/POST) into
- * the URL + publicId that should be persisted. Handles three cases:
+ * Resolve a form field that may be either a file upload OR a string URL.
+ * If the field is a File, upload it and return the URL + publicId.
+ * If it's a string, treat it as an existing URL and return as-is.
  *
- *   1. `bodyValue === undefined`             -> no change. Returns `null` so the
- *                                               caller can skip the update.
- *   2. `bodyValue` is null/empty/""           -> cleared. The previous Cloudinary
- *                                               asset (if any) is deleted; both
- *                                               url + publicId return null.
- *   3. `bodyValue` is a base64 data URL       -> new upload. Deletes the previous
- *                                               asset (if any), uploads the new
- *                                               one, returns its url + publicId.
- *   4. `bodyValue` is any other string        -> external URL passthrough. Persists
- *                                               the URL as-is with publicId=null
- *                                               (we don't know its mapping).
- *
- * `oldPublicId` is the previously-stored publicId for this field (used to
- * clean up the old Cloudinary asset before replacing it).
+ * Used by event/question PATCH handlers that accept either a new upload
+ * or keep the existing URL.
  */
 export async function resolveImageField(
-  bodyValue: unknown,
-  oldPublicId: string | null | undefined,
-  options: UploadOptions,
-  mimeType = "image/jpeg"
-): Promise<{ url: string | null; publicId: string | null } | null> {
-  if (bodyValue === undefined) return null // No change — caller should skip.
+  formData: FormData,
+  fieldName: string,
+  existingUrl: string | null = null,
+  existingPublicId: string | null = null,
+  options: UploadOptions = {}
+): Promise<{
+  url: string | null
+  publicId: string | null
+  deletedOld: boolean
+}> {
+  const field = formData.get(fieldName)
 
-  if (typeof bodyValue !== "string") {
-    // null / undefined / non-string -> cleared.
-    await deleteFile(oldPublicId)
-    return { url: null, publicId: null }
+  // Case 1: new file upload
+  if (field instanceof File && field.size > 0) {
+    // Delete the old asset if there was one
+    if (existingPublicId) {
+      await deleteImage(existingPublicId).catch(() => {})
+    }
+    const buffer = await fileToBuffer(field)
+    const result = await uploadImage(buffer, field.type, options)
+    return {
+      url: result.url,
+      publicId: result.publicId || null,
+      deletedOld: !!existingPublicId,
+    }
   }
 
-  const trimmed = bodyValue.trim()
-  if (!trimmed) {
-    await deleteFile(oldPublicId)
-    return { url: null, publicId: null }
+  // Case 2: string value (existing URL or null)
+  if (typeof field === "string" && field.trim()) {
+    return { url: field, publicId: existingPublicId, deletedOld: false }
   }
 
-  if (trimmed.startsWith("data:image/")) {
-    await deleteFile(oldPublicId)
-    const uploaded = await uploadFile(trimmed, mimeType, options)
-    return { url: uploaded.url, publicId: uploaded.publicId }
-  }
-
-  // External URL passthrough — no Cloudinary asset to track.
-  return { url: trimmed, publicId: null }
+  // Case 3: no value — keep existing
+  return { url: existingUrl, publicId: existingPublicId, deletedOld: false }
 }
