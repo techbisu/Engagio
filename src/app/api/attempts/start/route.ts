@@ -82,6 +82,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Registration gate — if the event requires registration and the user
+    // has not yet registered, refuse to start and tell the client to register first.
+    const fieldCount = await db.eventField.count({
+      where: { eventId: quizLink.eventId },
+    });
+    if (quizLink.event && fieldCount > 0) {
+      // Re-fetch the event's requireRegistration flag (the lightweight include
+      // above only selected id/title/description).
+      const event = await db.event.findUnique({
+        where: { id: quizLink.eventId },
+        select: { requireRegistration: true },
+      });
+      if (event?.requireRegistration) {
+        const registration = await db.registration.findUnique({
+          where: {
+            eventId_userId: {
+              eventId: quizLink.eventId,
+              userId: session.user.id,
+            },
+          },
+          select: { id: true },
+        });
+        if (!registration) {
+          return NextResponse.json(
+            {
+              error: "Registration required",
+              code: "REGISTRATION_REQUIRED",
+              eventId: quizLink.eventId,
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // Fetch all questions for the event, ordered by `order` then createdAt
     const questions = await db.question.findMany({
       where: { eventId: quizLink.eventId },

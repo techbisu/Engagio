@@ -20,10 +20,13 @@ function toEventDto(e: any): EventDto {
     startDate: e.startDate.toISOString(),
     endDate: e.endDate.toISOString(),
     isActive: e.isActive,
+    requireRegistration: e.requireRegistration ?? false,
     createdAt: e.createdAt.toISOString(),
     questionCount: e._count?.questions ?? 0,
     linkCount: e._count?.quizLinks ?? 0,
     attemptCount: e._count?.attempts ?? 0,
+    registrationCount: e._count?.registrations ?? 0,
+    fieldCount: e._count?.fields ?? 0,
   };
 }
 
@@ -35,7 +38,15 @@ export async function GET() {
     }
     const events = await db.event.findMany({
       include: {
-        _count: { select: { questions: true, attempts: true, quizLinks: true } },
+        _count: {
+          select: {
+            questions: true,
+            attempts: true,
+            quizLinks: true,
+            registrations: true,
+            fields: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -56,7 +67,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { title, description, image, startDate, endDate, isActive } = body || {};
+    const { title, description, image, startDate, endDate, isActive, requireRegistration } = body || {};
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -90,9 +101,18 @@ export async function POST(req: NextRequest) {
         startDate: start,
         endDate: end,
         isActive: typeof isActive === "boolean" ? isActive : true,
+        requireRegistration: typeof requireRegistration === "boolean" ? requireRegistration : false,
       },
       include: {
-        _count: { select: { questions: true, attempts: true, quizLinks: true } },
+        _count: {
+          select: {
+            questions: true,
+            attempts: true,
+            quizLinks: true,
+            registrations: true,
+            fields: true,
+          },
+        },
       },
     });
     return NextResponse.json(toEventDto(event), { status: 201 });

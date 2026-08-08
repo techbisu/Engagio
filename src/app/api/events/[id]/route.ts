@@ -23,10 +23,13 @@ function toEventDto(e: any): EventDto {
     startDate: e.startDate.toISOString(),
     endDate: e.endDate.toISOString(),
     isActive: e.isActive,
+    requireRegistration: e.requireRegistration ?? false,
     createdAt: e.createdAt.toISOString(),
     questionCount: e._count?.questions ?? 0,
     linkCount: e._count?.quizLinks ?? 0,
     attemptCount: e._count?.attempts ?? 0,
+    registrationCount: e._count?.registrations ?? 0,
+    fieldCount: e._count?.fields ?? 0,
   };
 }
 
@@ -42,7 +45,15 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     const event = await db.event.findUnique({
       where: { id },
       include: {
-        _count: { select: { questions: true, attempts: true, quizLinks: true } },
+        _count: {
+          select: {
+            questions: true,
+            attempts: true,
+            quizLinks: true,
+            registrations: true,
+            fields: true,
+          },
+        },
       },
     });
     if (!event) {
@@ -69,13 +80,14 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const body = await req.json();
-    const { title, description, image, startDate, endDate, isActive } = body || {};
+    const { title, description, image, startDate, endDate, isActive, requireRegistration } = body || {};
 
     const data: Record<string, unknown> = {};
     if (typeof title === "string" && title.trim()) data.title = title.trim();
     if (typeof description === "string") data.description = description;
     if (typeof image === "string") data.image = image.trim() || null;
     if (typeof isActive === "boolean") data.isActive = isActive;
+    if (typeof requireRegistration === "boolean") data.requireRegistration = requireRegistration;
 
     let start = existing.startDate;
     let end = existing.endDate;
@@ -106,7 +118,15 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       where: { id },
       data,
       include: {
-        _count: { select: { questions: true, attempts: true, quizLinks: true } },
+        _count: {
+          select: {
+            questions: true,
+            attempts: true,
+            quizLinks: true,
+            registrations: true,
+            fields: true,
+          },
+        },
       },
     });
     return NextResponse.json(toEventDto(updated));

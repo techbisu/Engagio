@@ -36,6 +36,32 @@ export interface QuizLinkBySlugResponse {
   requireFullscreen: boolean
   isActive: boolean
   hasExpired: boolean
+  // When true, the student must fill out the event registration form
+  // (fetched via GET /api/events/[eventId]/fields) before they can start
+  // the quiz. The QuizStart screen renders a RegistrationForm in that case.
+  requireRegistration?: boolean
+  fieldCount?: number
+}
+
+export interface EventFieldDto {
+  id: string
+  eventId: string
+  label: string
+  type:
+    | "text"
+    | "email"
+    | "number"
+    | "tel"
+    | "textarea"
+    | "select"
+    | "checkbox"
+    | "date"
+  required: boolean
+  placeholder?: string | null
+  helpText?: string | null
+  options: string[]
+  order: number
+  createdAt: string
 }
 
 export interface PublicQuestion {

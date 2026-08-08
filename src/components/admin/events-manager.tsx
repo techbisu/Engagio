@@ -13,6 +13,8 @@ import {
   BarChart3,
   ImageOff,
   Inbox,
+  ClipboardList,
+  Users,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
@@ -59,6 +61,8 @@ interface EventsManagerProps {
   onManageQuestions?: (eventId: string, eventTitle: string) => void
   onGenerateLink?: (eventId: string) => void
   onViewAnalytics?: (eventId: string) => void
+  onManageRegistration?: (eventId: string, eventTitle: string) => void
+  onViewRegistrations?: (eventId: string, eventTitle: string) => void
 }
 
 interface EventFormState {
@@ -83,6 +87,8 @@ export function EventsManager({
   onManageQuestions,
   onGenerateLink,
   onViewAnalytics,
+  onManageRegistration,
+  onViewRegistrations,
 }: EventsManagerProps) {
   const qc = useQueryClient()
   const { data, isLoading, isError, error } = useQuery<EventDto[]>({
@@ -313,6 +319,40 @@ export function EventsManager({
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Attempts</p>
                   </div>
                 </div>
+
+                {/* Registration status badges */}
+                {(ev.requireRegistration ||
+                  (ev.fieldCount ?? 0) > 0 ||
+                  (ev.registrationCount ?? 0) > 0) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {ev.requireRegistration && (
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30"
+                      >
+                        <ClipboardList className="size-3" />
+                        Registration required
+                      </Badge>
+                    )}
+                    {(ev.fieldCount ?? 0) > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="bg-slate-50 text-slate-600 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:ring-slate-700"
+                      >
+                        {ev.fieldCount} field{ev.fieldCount === 1 ? "" : "s"}
+                      </Badge>
+                    )}
+                    {(ev.registrationCount ?? 0) > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:ring-teal-500/30"
+                      >
+                        <Users className="size-3" />
+                        {ev.registrationCount} registered
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </CardContent>
               <div className="flex items-center justify-between border-t px-4 py-2.5 bg-muted/20">
                 <span className="text-xs text-muted-foreground">
@@ -339,6 +379,18 @@ export function EventsManager({
                     <DropdownMenuItem onClick={() => onGenerateLink?.(ev.id)}>
                       <Link2 className="size-4" /> Generate Link
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onManageRegistration?.(ev.id, ev.title)}
+                    >
+                      <ClipboardList className="size-4" /> Registration Form
+                    </DropdownMenuItem>
+                    {(ev.registrationCount ?? 0) > 0 || ev.requireRegistration ? (
+                      <DropdownMenuItem
+                        onClick={() => onViewRegistrations?.(ev.id, ev.title)}
+                      >
+                        <Users className="size-4" /> View Registrations
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem onClick={() => onViewAnalytics?.(ev.id)}>
                       <BarChart3 className="size-4" /> View Analytics
                     </DropdownMenuItem>

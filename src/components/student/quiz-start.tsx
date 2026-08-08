@@ -6,9 +6,11 @@ import {
   AlertTriangle,
   ArrowLeft,
   Award,
+  CheckCircle2,
   Clock,
   HelpCircle,
   Layers,
+  Loader2,
   Maximize,
   PlayCircle,
   ShieldAlert,
@@ -26,11 +28,26 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 import { api } from "./api"
 import type { AttemptListResponse, QuizLinkBySlugResponse } from "./api"
+import { RegistrationForm } from "./registration-form"
 import { cn } from "@/lib/utils"
 import type { SafeUser } from "@/types"
+
+interface RegCheckResponse {
+  registered: boolean
+  registration?: {
+    id: string
+    createdAt: string
+    data: Record<string, unknown>
+  }
+}
 
 export interface QuizStartProps {
   slug: string
@@ -57,6 +74,31 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     queryFn: () => api<AttemptListResponse>("/api/attempts/list"),
     enabled: !!user,
   })
+
+  // Check whether the student has already registered for this event.
+  // Only fires when the event requires registration, the user is logged in,
+  // and we know the event id (i.e. after the meta query has resolved).
+  const regCheckQuery = useQuery<RegCheckResponse>({
+    queryKey: ["registration-check", meta?.event?.id],
+    queryFn: () =>
+      api<RegCheckResponse>(
+        `/api/registrations/check?eventId=${encodeURIComponent(meta!.event!.id)}`,
+      ),
+    enabled:
+      !!meta?.event?.id && !!user && !!meta?.requireRegistration,
+    retry: false,
+  })
+
+  const isRegistered = regCheckQuery.data?.registered === true
+  const checkingRegistration =
+    !!meta?.requireRegistration && regCheckQuery.isLoading
+  // We render the RegistrationForm only after the reg-check query has
+  // finished (loaded or errored) so we don't flash the form while we're
+  // still deciding whether the student is already registered.
+  const needsRegistration =
+    !!meta?.requireRegistration &&
+    !isRegistered &&
+    regCheckQuery.isFetched
 
   const usedAttempts = React.useMemo(() => {
     if (!attemptsData?.attempts || !meta) return 0
@@ -123,6 +165,25 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     )
   }
 
+  // Registration gate: render the registration form INSTEAD of the
+  // pre-quiz card when the event requires registration and the student
+  // hasn't registered yet. The form invalidates the ['registration-check']
+  // query on success — once that refetch returns registered:true,
+  // needsRegistration flips to false and the pre-quiz card renders.
+  if (needsRegistration && meta.event) {
+    return (
+      <RegistrationForm
+        eventId={meta.event.id}
+        eventTitle={meta.event.title}
+        onRegistered={() => {
+          // No-op: the form already invalidates the query; the parent
+          // re-renders automatically when the refetch resolves.
+        }}
+        onBack={onBack}
+      />
+    )
+  }
+
   const event = meta.event
   const quizLink = meta.quizLink
   const hasImage = !!event?.image
@@ -155,6 +216,11 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
             {meta.requireFullscreen && (
               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300">
                 <Maximize className="size-3" /> Fullscreen required
+              </Badge>
+            )}
+            {meta.requireRegistration && isRegistered && (
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300">
+                <CheckCircle2 className="size-3" /> Registered
               </Badge>
             )}
           </div>
@@ -258,21 +324,32 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
             <Button variant="ghost" onClick={onBack} className="sm:order-1">
               <ArrowLeft className="size-4" /> Back to Dashboard
             </Button>
-            <Button
-              onClick={() => meta && onBegin(meta)}
-              disabled={maxReached}
-              className="bg-emerald-600 text-white hover:bg-emerald-700 sm:order-2"
-            >
-              {maxReached ? (
-                <>
-                  <AlertTriangle className="size-4" /> Max attempts reached
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="size-4" /> Begin Quiz
-                </>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => meta && onBegin(meta)}
+                  disabled={maxReached || checkingRegistration}
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 sm:order-2"
+                >
+                  {maxReached ? (
+                    <>
+                      <AlertTriangle className="size-4" /> Max attempts reached
+                    </>
+                  ) : checkingRegistration ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Checking…
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="size-4" /> Begin Quiz
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {checkingRegistration && (
+                <TooltipContent>Checking registration…</TooltipContent>
               )}
-            </Button>
+            </Tooltip>
           </div>
         </CardContent>
       </Card>

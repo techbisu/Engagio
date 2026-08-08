@@ -20,9 +20,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  attempts      QuizAttempt[]
+  accounts       Account[]
+  sessions       Session[]
+  attempts       QuizAttempt[]
+  registrations  Registration[]
 }
 
 model Account {
@@ -69,12 +70,17 @@ model Event {
   startDate   DateTime
   endDate     DateTime
   isActive    Boolean  @default(true)
+  // When true, students must fill out the event registration form
+  // before they can attempt any quiz link for this event.
+  requireRegistration Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  questions   Question[]
-  quizLinks   QuizLink[]
-  attempts    QuizAttempt[]
+  questions      Question[]
+  quizLinks      QuizLink[]
+  attempts       QuizAttempt[]
+  fields         EventField[]
+  registrations  Registration[]
 }
 
 model Question {
@@ -143,4 +149,42 @@ model QuizAttempt {
   @@index([userId])
   @@index([quizLinkId])
   @@index([eventId])
+}
+
+// Dynamic registration form field — admin defines these per event.
+// Rendered as an HTML input of the matching `type`.
+model EventField {
+  id          String   @id @default(cuid())
+  eventId     String
+  label       String   // Human label, e.g. "Full Name"
+  type        String   // text | email | number | tel | textarea | select | checkbox | date
+  required    Boolean  @default(true)
+  placeholder String?
+  helpText    String?
+  // JSON-encoded string[] — only used for `select` type (dropdown options).
+  options     String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+// One registration per (event, user). `data` stores the submitted answers
+// as JSON: { [fieldId]: string | number | boolean }
+model Registration {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  data      String   // JSON-encoded { [fieldId]: value }
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // A user can register for an event only once.
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
 }

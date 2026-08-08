@@ -40,10 +40,45 @@ export interface EventDto {
   startDate: string
   endDate: string
   isActive: boolean
+  requireRegistration: boolean
   createdAt: string
   questionCount?: number
   linkCount?: number
   attemptCount?: number
+  registrationCount?: number
+  fieldCount?: number
+}
+
+export type EventFieldType =
+  | "text"
+  | "email"
+  | "number"
+  | "tel"
+  | "textarea"
+  | "select"
+  | "checkbox"
+  | "date"
+
+export interface EventFieldDto {
+  id: string
+  eventId: string
+  label: string
+  type: EventFieldType
+  required: boolean
+  placeholder?: string | null
+  helpText?: string | null
+  options: string[]
+  order: number
+  createdAt: string
+}
+
+export interface RegistrationDto {
+  id: string
+  eventId: string
+  userId: string
+  data: Record<string, string | number | boolean>
+  createdAt: string
+  user?: { name: string | null; email: string; image?: string | null }
 }
 
 export interface QuestionDto {

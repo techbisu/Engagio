@@ -40,6 +40,8 @@ import { QuestionsManager } from "./questions-manager"
 import { LinksManager } from "./links-manager"
 import { AttemptsTable } from "./attempts-table"
 import { UsersList } from "./users-list"
+import { RegistrationFormBuilder } from "./registration-form-builder"
+import { RegistrationsList } from "./registrations-list"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -90,6 +92,18 @@ export function AdminShell({
     eventTitle: string
   } | null>(null)
 
+  // Sub-view state for registration form builder (event context).
+  const [registrationCtx, setRegistrationCtx] = React.useState<{
+    eventId: string
+    eventTitle: string
+  } | null>(null)
+
+  // Sub-view state for registrations list (event context).
+  const [registrationsListCtx, setRegistrationsListCtx] = React.useState<{
+    eventId: string
+    eventTitle: string
+  } | null>(null)
+
   // Preselected event for generating a link (set from events manager).
   const [linkPreselectedEventId, setLinkPreselectedEventId] = React.useState<
     string | undefined
@@ -134,6 +148,24 @@ export function AdminShell({
     (_eventId: string) => {
       setAttemptsEventId(undefined)
       changeTab("dashboard")
+    },
+    [changeTab]
+  )
+
+  const handleManageRegistration = React.useCallback(
+    (eventId: string, eventTitle: string) => {
+      setRegistrationCtx({ eventId, eventTitle })
+      setRegistrationsListCtx(null)
+      changeTab("events")
+    },
+    [changeTab]
+  )
+
+  const handleViewRegistrations = React.useCallback(
+    (eventId: string, eventTitle: string) => {
+      setRegistrationsListCtx({ eventId, eventTitle })
+      setRegistrationCtx(null)
+      changeTab("events")
     },
     [changeTab]
   )
@@ -312,13 +344,28 @@ export function AdminShell({
               <Dashboard onViewAttempts={() => changeTab("attempts")} />
             )}
 
-            {tab === "events" && (
-              <EventsManager
-                onManageQuestions={handleManageQuestions}
-                onGenerateLink={handleGenerateLink}
-                onViewAnalytics={handleViewAnalytics}
-              />
-            )}
+            {tab === "events" &&
+              (registrationCtx ? (
+                <RegistrationFormBuilder
+                  eventId={registrationCtx.eventId}
+                  eventTitle={registrationCtx.eventTitle}
+                  onBack={() => setRegistrationCtx(null)}
+                />
+              ) : registrationsListCtx ? (
+                <RegistrationsList
+                  eventId={registrationsListCtx.eventId}
+                  eventTitle={registrationsListCtx.eventTitle}
+                  onBack={() => setRegistrationsListCtx(null)}
+                />
+              ) : (
+                <EventsManager
+                  onManageQuestions={handleManageQuestions}
+                  onGenerateLink={handleGenerateLink}
+                  onViewAnalytics={handleViewAnalytics}
+                  onManageRegistration={handleManageRegistration}
+                  onViewRegistrations={handleViewRegistrations}
+                />
+              ))}
 
             {tab === "questions" &&
               (questionsCtx ? (

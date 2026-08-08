@@ -45,7 +45,17 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 
     const link = await db.quizLink.findUnique({
       where: { slug },
-      include: { event: { select: { id: true, title: true, description: true, image: true } } },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            image: true,
+            requireRegistration: true,
+          },
+        },
+      },
     });
 
     if (!link) {
@@ -60,6 +70,8 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     }
 
     const questionCount = await db.question.count({ where: { eventId: link.eventId } });
+    const fieldCount = await db.eventField.count({ where: { eventId: link.eventId } });
+    const requireRegistration = !!link.event?.requireRegistration && fieldCount > 0;
 
     return NextResponse.json({
       quizLink: toQuizLinkDto(link),
@@ -78,6 +90,11 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
       requireFullscreen: link.requireFullscreen,
       isActive: link.isActive,
       hasExpired,
+      // Registration gate: if true, the caller must fill out the event's
+      // registration form (GET /api/events/[id]/fields) before /attempts/start
+      // will accept them.
+      requireRegistration,
+      fieldCount,
     });
   } catch (e) {
     return NextResponse.json(
