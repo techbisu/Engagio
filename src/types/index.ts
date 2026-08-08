@@ -14,6 +14,7 @@ export type ViewName =
   | "org-dashboard"
   | "org-settings"
   | "accept-invitation"
+  | "share"
 
 export type AdminTab =
   | "dashboard"
@@ -449,4 +450,102 @@ export interface ActivityResultsDto {
     textResponses?: string[]
     responseCount: number
   }>
+}
+
+// ─── Shareable Achievement Cards ───────────────────────────────────────────
+
+export type AchievementType =
+  | "QUIZ_RESULT"
+  | "LIVE_QUIZ_RESULT"
+  | "KNOWLEDGE_CHECK_RESULT"
+  | "PRE_POST_RESULT"
+  | "CERTIFICATE_EARNED"
+  | "ACTIVITY_COMPLETED"
+  | "EVENT_PARTICIPATION"
+  | "LEADERBOARD_ACHIEVEMENT"
+
+export type AchievementVisibility = "PRIVATE" | "LINK_ONLY" | "PUBLIC"
+
+export type AchievementTemplateId =
+  | "minimal"
+  | "modern"
+  | "professional"
+  | "celebration"
+  | "conference"
+
+export type SharePlatform =
+  | "NATIVE"
+  | "WHATSAPP"
+  | "LINKEDIN"
+  | "FACEBOOK"
+  | "X"
+  | "COPY_LINK"
+  | "DOWNLOAD"
+
+export interface AchievementData {
+  beforeScore?: number
+  afterScore?: number
+  improvement?: number // percentage points
+  certificateNumber?: string
+  certificateVerifyUrl?: string
+  eventTitle?: string
+  activityTitle?: string
+  orgName?: string
+  orgLogoUrl?: string
+  [key: string]: unknown
+}
+
+export interface ShareableAchievementDto {
+  id: string
+  organizationId: string
+  eventId?: string | null
+  activityId?: string | null
+  participantId?: string | null
+  participantName: string
+  type: AchievementType
+  title: string
+  subtitle?: string | null
+  score?: number | null
+  totalScore?: number | null
+  percentage?: number | null
+  rank?: number | null
+  totalParticipants?: number | null
+  achievementData: AchievementData
+  publicToken: string
+  visibility: AchievementVisibility
+  imageUrl?: string | null
+  imagePublicId?: string | null
+  templateId: AchievementTemplateId
+  certificateId?: string | null
+  dataVersion: number
+  createdAt: string
+  updatedAt: string
+  shareCount?: number
+}
+
+export interface PublicAchievementDto {
+  // Only the safe, public fields — no internal IDs beyond the token
+  type: AchievementType
+  title: string
+  subtitle?: string | null
+  participantName: string
+  score?: number | null
+  totalScore?: number | null
+  percentage?: number | null
+  rank?: number | null
+  totalParticipants?: number | null
+  achievementData: AchievementData
+  imageUrl?: string | null
+  templateId: AchievementTemplateId
+  visibility: AchievementVisibility
+  createdAt: string
+  // For OG metadata
+  ogTitle: string
+  ogDescription: string
+}
+
+export interface OrgAchievementStatsDto {
+  totalAchievements: number
+  totalShares: number
+  sharesByPlatform: Record<SharePlatform, number>
 }

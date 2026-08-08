@@ -60,6 +60,10 @@ interface AppState {
   verifyToken: string | null
   setVerifyToken: (t: string | null) => void
 
+  // Public share-token (when visiting /?share=TOKEN)
+  shareToken: string | null
+  setShareToken: (t: string | null) => void
+
   // Activity deep-link (?activity=SLUG) — renders the participant activity join
   activitySlug: string | null
   setActivitySlug: (slug: string | null) => void
@@ -104,6 +108,9 @@ export const useAppStore = create<AppState>((set) => ({
   verifyToken: null,
   setVerifyToken: (verifyToken) => set({ verifyToken }),
 
+  shareToken: null,
+  setShareToken: (shareToken) => set({ shareToken }),
+
   activitySlug: null,
   setActivitySlug: (activitySlug) => set({ activitySlug }),
 
@@ -121,6 +128,7 @@ export const useAppStore = create<AppState>((set) => ({
       quizMeta: null,
       lastAttemptId: null,
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: null,
       liveActivityType: null,
@@ -136,6 +144,7 @@ export const useAppStore = create<AppState>((set) => ({
  *   ?view=login      → login page
  *   ?view=student    → student dashboard (will require login)
  *   ?verify=TOKEN    → public verification page (no login needed)
+ *   ?share=TOKEN     → public shareable-achievement page (no login needed)
  *   ?activity=SLUG   → participant activity join view (will require login)
  *   ?live=ID         → projector live-display view (no auth — public audience view)
  *   ?invite=TOKEN    → accept an org invitation (requires login)
@@ -145,6 +154,7 @@ export function parseInitialRoute(): {
   quizSlug: string | null
   adminTab: AdminTab
   verifyToken: string | null
+  shareToken: string | null
   activitySlug: string | null
   liveActivityId: string | null
   inviteToken: string | null
@@ -155,6 +165,7 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: null,
       inviteToken: null,
@@ -165,6 +176,7 @@ export function parseInitialRoute(): {
   const view = params.get("view") as ViewName | null
   const tab = params.get("tab") as AdminTab | null
   const verify = params.get("verify")
+  const share = params.get("share")
   const activity = params.get("activity")
   const live = params.get("live")
   const invite = params.get("invite")
@@ -176,6 +188,20 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: verify,
+      shareToken: null,
+      activitySlug: null,
+      liveActivityId: null,
+      inviteToken: null,
+    }
+  }
+  // Public share deep-link — no auth required.
+  if (share) {
+    return {
+      view: "share",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      shareToken: share,
       activitySlug: null,
       liveActivityId: null,
       inviteToken: null,
@@ -188,6 +214,7 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: live,
       inviteToken: null,
@@ -200,6 +227,7 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: null,
       inviteToken: invite,
@@ -211,6 +239,7 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: activity,
       liveActivityId: null,
       inviteToken: null,
@@ -222,6 +251,7 @@ export function parseInitialRoute(): {
       quizSlug: quiz,
       adminTab: "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: null,
       inviteToken: null,
@@ -240,6 +270,7 @@ export function parseInitialRoute(): {
       quizSlug: null,
       adminTab: tab || "dashboard",
       verifyToken: null,
+      shareToken: null,
       activitySlug: null,
       liveActivityId: null,
       inviteToken: null,
@@ -250,6 +281,7 @@ export function parseInitialRoute(): {
     quizSlug: null,
     adminTab: "dashboard",
     verifyToken: null,
+    shareToken: null,
     activitySlug: null,
     liveActivityId: null,
     inviteToken: null,
@@ -262,6 +294,7 @@ export function syncUrl(
   opts?: {
     quizSlug?: string | null
     verifyToken?: string | null
+    shareToken?: string | null
     activitySlug?: string | null
     liveActivityId?: string | null
     inviteToken?: string | null
@@ -272,11 +305,14 @@ export function syncUrl(
   url.searchParams.delete("quiz")
   url.searchParams.delete("view")
   url.searchParams.delete("verify")
+  url.searchParams.delete("share")
   url.searchParams.delete("activity")
   url.searchParams.delete("live")
   url.searchParams.delete("invite")
   if (view === "verify" && opts?.verifyToken) {
     url.searchParams.set("verify", opts.verifyToken)
+  } else if (view === "share" && opts?.shareToken) {
+    url.searchParams.set("share", opts.shareToken)
   } else if (view === "quiz" && opts?.quizSlug) {
     url.searchParams.set("quiz", opts.quizSlug)
   } else if (view === "activity" && opts?.activitySlug) {

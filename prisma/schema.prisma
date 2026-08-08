@@ -571,3 +571,84 @@ model Subscription {
 
   @@index([organizationId])
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// SHAREABLE ACHIEVEMENT CARDS — social-media-ready cards for participant achievements
+// Reuses existing Activities/Assessments/Certificates data. The card is a
+// presentation/share layer on top — no duplicate result/attempt data.
+// ────────────────────────────────────────────────────────────────────────────
+
+model ShareableAchievement {
+  id              String   @id @default(cuid())
+  organizationId String
+  eventId         String?
+  activityId      String?
+
+  // The participant who earned this achievement (user.id).
+  // Null for guest/anonymous participants (rare).
+  participantId   String?
+  // Display name snapshot at creation time (in case user later changes name)
+  participantName String
+
+  // QUIZ_RESULT | LIVE_QUIZ_RESULT | KNOWLEDGE_CHECK_RESULT | PRE_POST_RESULT |
+  // CERTIFICATE_EARNED | ACTIVITY_COMPLETED | EVENT_PARTICIPATION | LEADERBOARD_ACHIEVEMENT
+  type            String
+
+  // Card content (snapshot at creation time)
+  title           String
+  subtitle        String?
+  score           Int?     // raw score
+  totalScore      Int?     // out of
+  percentage      Int?
+  rank            Int?     // 1-based
+  totalParticipants Int?
+  // Extra JSON: { beforeScore, afterScore, improvement, certificateNumber, certificateUrl, ... }
+  achievementData String   @default("{}")
+
+  // Public share token (32-char hex) — non-sequential, hard to guess
+  publicToken     String   @unique
+
+  // PRIVATE | LINK_ONLY | PUBLIC
+  visibility      String   @default("LINK_ONLY")
+
+  // Generated card image (Cloudinary URL or base64 fallback)
+  imageUrl        String?
+  imagePublicId   String?
+
+  // Card template: minimal | modern | professional | celebration | conference
+  templateId      String   @default("modern")
+
+  // Optional link to a related certificate
+  certificateId   String?
+
+  // Bumping this invalidates cached images (forces regeneration)
+  dataVersion     Int      @default(1)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shares          AchievementShare[]
+
+  @@index([organizationId])
+  @@index([participantId])
+  @@index([activityId])
+  @@index([publicToken])
+}
+
+// Lightweight share analytics — tracks which platform was used.
+model AchievementShare {
+  id              String   @id @default(cuid())
+  organizationId  String
+  achievementId   String
+
+  // NATIVE | WHATSAPP | LINKEDIN | FACEBOOK | X | COPY_LINK | DOWNLOAD
+  platform        String
+
+  createdAt       DateTime @default(now())
+
+  achievement     ShareableAchievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([achievementId])
+  @@index([platform])
+}

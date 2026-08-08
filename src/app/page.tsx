@@ -42,6 +42,8 @@ import { VerifyCertificate } from "@/components/cert/verify-certificate"
 import { ActivityJoin } from "@/components/activities/activity-join"
 import { LiveDisplay } from "@/components/activities/live-display"
 
+import { PublicSharePage } from "@/components/achievements/public-share-page"
+
 import { OrgOnboarding } from "@/components/organization/org-onboarding"
 import { OrgDashboard } from "@/components/organization/org-dashboard"
 import { OrgSettings } from "@/components/organization/org-settings"
@@ -88,6 +90,8 @@ export default function Home() {
     setUser,
     verifyToken,
     setVerifyToken,
+    shareToken,
+    setShareToken,
     activitySlug,
     setActivitySlug,
     liveActivityId,
@@ -106,6 +110,7 @@ export default function Home() {
     setAdminTab(initial.adminTab)
     if (initial.quizSlug) setQuizSlug(initial.quizSlug)
     if (initial.verifyToken) setVerifyToken(initial.verifyToken)
+    if (initial.shareToken) setShareToken(initial.shareToken)
     if (initial.activitySlug) setActivitySlug(initial.activitySlug)
     if (initial.liveActivityId) setLiveActivity(initial.liveActivityId)
     if (initial.inviteToken) setInviteToken(initial.inviteToken)
@@ -116,6 +121,7 @@ export default function Home() {
     setAdminTab,
     setQuizSlug,
     setVerifyToken,
+    setShareToken,
     setActivitySlug,
     setLiveActivity,
     setInviteToken,
@@ -148,11 +154,12 @@ export default function Home() {
     syncUrl(view, {
       quizSlug,
       verifyToken,
+      shareToken,
       activitySlug,
       liveActivityId,
       inviteToken,
     })
-  }, [view, quizSlug, verifyToken, activitySlug, liveActivityId, inviteToken])
+  }, [view, quizSlug, verifyToken, shareToken, activitySlug, liveActivityId, inviteToken])
 
   // --- Routing guards ----------------------------------------------------
   // If user lands on a protected view without a session, redirect to login.
@@ -296,6 +303,11 @@ export default function Home() {
     setVerifyToken(null)
     setView("landing")
   }, [setVerifyToken, setView])
+
+  const handleExitShare = React.useCallback(() => {
+    setShareToken(null)
+    setView("landing")
+  }, [setShareToken, setView])
 
   // --- Activity handlers -------------------------------------------------
   const handleActivityExit = React.useCallback(() => {
@@ -441,6 +453,22 @@ export default function Home() {
   // PUBLIC VERIFY VIEW — no auth required, full-screen, no header/footer chrome.
   if (view === "verify" && verifyToken) {
     return <VerifyCertificate token={verifyToken} onExit={handleExitVerify} />
+  }
+
+  // PUBLIC SHARE VIEW — no auth required, full-screen, no shell chrome.
+  // Renders the shareable-achievement card for visitors with the share token.
+  if (view === "share" && shareToken) {
+    return (
+      <React.Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center">
+            <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+          </div>
+        }
+      >
+        <PublicSharePage token={shareToken} onExit={handleExitShare} />
+      </React.Suspense>
+    )
   }
 
   // ORG ONBOARDING VIEW — full-screen, for new users without an org.

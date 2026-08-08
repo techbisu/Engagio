@@ -20,6 +20,7 @@ import {
 
 import { api } from "./api";
 import type { CertificateDto, EventDto, RegistrationDto } from "@/types";
+import { ShareAchievementButton } from "@/components/achievements/share-achievement-button";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -885,7 +886,7 @@ function ViewCertificateDialog({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
           <Button
             variant="outline"
             onClick={() => window.open(`/?verify=${cert.verificationToken}`, "_blank")}
@@ -902,6 +903,30 @@ function ViewCertificateDialog({
           >
             <Download className="size-4" /> Download PNG
           </Button>
+          {cert.status === "VALID" && (
+            <ShareAchievementButton
+              achievementInput={{
+                type: "CERTIFICATE_EARNED",
+                eventId: cert.eventId,
+                title: cert.event?.title
+                  ? `${cert.event.title} · Certificate`
+                  : "Certificate Earned",
+                subtitle: cert.event?.title ?? undefined,
+                achievementData: {
+                  eventTitle: cert.event?.title,
+                  certificateNumber: cert.certificateNumber,
+                  certificateVerifyUrl:
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/?verify=${cert.verificationToken}`
+                      : `/?verify=${cert.verificationToken}`,
+                },
+                templateId: "professional",
+                visibility: "PUBLIC",
+              }}
+              label="Share Certificate"
+              size="sm"
+            />
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

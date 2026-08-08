@@ -55,6 +55,7 @@ import type {
   AttemptReviewQuestion,
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
+import { ShareAchievementButton } from "@/components/achievements/share-achievement-button"
 
 interface QuizResultsProps {
   attemptId: string
@@ -482,6 +483,36 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               </CollapsibleContent>
             </Collapsible>
           )}
+
+          {/* Share achievement CTA — only shown when results are published */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 text-center dark:border-emerald-900/60 dark:bg-emerald-950/20">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+              Share your achievement
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Show off your {data.event?.title ?? "quiz"} result with a
+              polished, shareable card.
+            </p>
+            <ShareAchievementButton
+              achievementInput={{
+                type: "QUIZ_RESULT",
+                eventId: data.event?.id,
+                title: data.event?.title
+                  ? `${data.event.title} · Quiz Result`
+                  : "Quiz Result",
+                subtitle: data.event?.title ?? undefined,
+                score: data.score ?? undefined,
+                totalScore: data.totalMarks ?? undefined,
+                percentage: data.percentage ?? undefined,
+                achievementData: {
+                  eventTitle: data.event?.title,
+                },
+                templateId: "modern",
+                visibility: "LINK_ONLY",
+              }}
+              className="w-full sm:w-auto"
+            />
+          </div>
 
           <Button
             onClick={onBack}

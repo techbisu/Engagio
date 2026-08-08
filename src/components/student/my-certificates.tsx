@@ -39,6 +39,7 @@ import {
   CertificateRenderer,
   downloadCertificatePng,
 } from "@/components/cert/certificate-renderer";
+import { ShareAchievementButton } from "@/components/achievements/share-achievement-button";
 
 interface MyCertsResponse {
   certificates: CertificateDto[];
@@ -336,7 +337,7 @@ function ViewCertificateDialog({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
           <Button
             variant="outline"
             onClick={() => window.open(verifyUrl, "_blank")}
@@ -353,6 +354,25 @@ function ViewCertificateDialog({
           >
             <Download className="size-4" /> Download PNG
           </Button>
+          <ShareAchievementButton
+            achievementInput={{
+              type: "CERTIFICATE_EARNED",
+              eventId: cert.eventId,
+              title: cert.event?.title
+                ? `${cert.event.title} · Certificate`
+                : "Certificate Earned",
+              subtitle: cert.event?.title ?? undefined,
+              achievementData: {
+                eventTitle: cert.event?.title,
+                certificateNumber: cert.certificateNumber,
+                certificateVerifyUrl: verifyUrl,
+              },
+              templateId: "professional",
+              visibility: "PUBLIC",
+            }}
+            label="Share Certificate"
+            size="sm"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -56,4 +56,11 @@ function Button({
   )
 }
 
+/** Props type for consumers that need to forward Button props. */
+export type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }
+
 export { Button, buttonVariants }
+export type { VariantProps }
