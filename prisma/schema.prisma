@@ -104,6 +104,11 @@ model Event {
   certLogo            String?  // Cloudinary URL (or base64 fallback)
   certLogoPublicId    String? // Cloudinary public_id for deletion
 
+  // Multi-tenant: nullable for backward compat (existing events get backfilled
+  // to a Default Organization by the migration script).
+  organizationId      String?
+  organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
   questions      Question[]
   quizLinks      QuizLink[]
   attempts       QuizAttempt[]
@@ -139,8 +144,14 @@ model Question {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
+  // Multi-tenant: nullable for backward compat. When set, the question belongs
+  // to the org's question bank (reusable across events in the same org).
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
   @@index([eventId])
   @@index([category])
+  @@index([organizationId])
 }
 
 model QuizLink {
@@ -433,4 +444,130 @@ model ActivityParticipation {
   @@unique([activityId, participantId])
   @@index([activityId])
   @@index([participantId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// MULTI-TENANT SAAS — Organization, Membership, Audit, Plans
+// All org-owned resources (Event, Question) carry a nullable `organizationId`.
+// Nullable = backward-compatible (existing data gets backfilled to a Default Org).
+// Other resources (Activity, QuizLink, QuizAttempt, Registration, Certificate)
+// inherit org scope transitively from their Event.
+// ────────────────────────────────────────────────────────────────────────────
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String?
+  // Branding
+  logoUrl       String?
+  logoPublicId  String?
+  website       String?
+  email         String?
+  phone         String?
+  primaryColor  String   @default("#10b981")
+  secondaryColor String  @default("#14b8a6")
+  // Settings
+  timezone      String   @default("UTC")
+  locale        String   @default("en")
+  // ACTIVE | SUSPENDED | ARCHIVED
+  status        String   @default("ACTIVE")
+  // Industry/use-case tag (Medical | Education | Corporate | Training | Professional Association | NGO | Other)
+  industry      String?
+  // SaaS billing (future-ready stubs)
+  planId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members       OrganizationMember[]
+  invitations   OrganizationInvitation[]
+  auditLogs     AuditLog[]
+  events        Event[]
+  questions     Question[]
+
+  @@index([status])
+}
+
+model OrganizationMember {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  // OWNER | ADMIN | EVENT_MANAGER | MODERATOR | EVALUATOR | CHECKIN_STAFF | PARTICIPANT
+  role            String   @default("PARTICIPANT")
+  // ACTIVE | INVITED | SUSPENDED
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model OrganizationInvitation {
+  id              String   @id @default(cuid())
+  organizationId  String
+  email           String
+  role            String   @default("EVENT_MANAGER")
+  // PENDING | ACCEPTED | EXPIRED | CANCELLED
+  status          String   @default("PENDING")
+  token           String   @unique
+  invitedBy       String?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String?
+  action          String   // e.g. EVENT_CREATED, MEMBER_INVITED, PAYMENT_VERIFIED
+  entityType      String?  // Event | Question | Member | Payment | Certificate | etc.
+  entityId        String?
+  metadata        String   @default("{}") // JSON
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([action])
+}
+
+// Future-ready SaaS billing stubs (not fully implemented — just the models)
+model Plan {
+  id              String   @id @default(cuid())
+  name            String   @unique // FREE | STARTER | PROFESSIONAL | ENTERPRISE
+  displayName     String
+  // JSON: { maxEvents, maxParticipantsPerEvent, maxMembers, maxStorage, customBranding, certificates, advancedSecurity, aiProctor, customDomain }
+  limits          String   @default("{}")
+  priceMonthly    Int      @default(0) // in paise
+  priceYearly     Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  organizationId  String
+  planId          String
+  // ACTIVE | PAST_DUE | CANCELED | TRIALING
+  status          String   @default("ACTIVE")
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id])
+
+  @@index([organizationId])
 }

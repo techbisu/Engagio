@@ -16,6 +16,7 @@ import {
   Award,
   Trophy,
   Sparkles,
+  Settings as SettingsIcon,
 } from "lucide-react"
 
 import { cn, initials } from "@/lib/utils"
@@ -50,6 +51,7 @@ import { CertificatesPanel } from "./certificates-panel"
 import { PaymentsPanel } from "./payments-panel"
 import { ResultsCertDashboard } from "./results-cert-dashboard"
 import { ActivitiesPanel } from "./activities/activities-panel"
+import { OrgSwitcher } from "@/components/organization/org-switcher"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -57,6 +59,12 @@ interface AdminShellProps {
   onNavigate?: (view: "landing" | "login" | "student") => void
   onSignOut: () => void
   onTabChange?: (tab: AdminTab) => void
+  /** Called when the user switches org via the OrgSwitcher. */
+  onOrgSwitch?: (slug: string) => void
+  /** Called when the user wants to open org settings. */
+  onOpenOrgSettings?: () => void
+  /** Called when the user wants to create a new org. */
+  onOpenOrgOnboarding?: () => void
 }
 
 interface NavItem {
@@ -98,6 +106,9 @@ export function AdminShell({
   onNavigate,
   onSignOut,
   onTabChange,
+  onOrgSwitch,
+  onOpenOrgSettings,
+  onOpenOrgOnboarding,
 }: AdminShellProps) {
   const [tab, setTab] = React.useState<AdminTab>(initialTab)
   const [mobileOpen, setMobileOpen] = React.useState(false)
@@ -293,6 +304,13 @@ export function AdminShell({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <OrgSwitcher
+            onSwitch={onOrgSwitch}
+            onCreate={onOpenOrgOnboarding}
+            onOpenSettings={onOpenOrgSettings}
+            className="hidden sm:flex"
+          />
+
           <Badge
             variant="outline"
             className="hidden sm:inline-flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400"
@@ -327,6 +345,16 @@ export function AdminShell({
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {onOpenOrgSettings && (
+                <DropdownMenuItem onClick={onOpenOrgSettings}>
+                  <SettingsIcon className="size-4" /> Organization settings
+                </DropdownMenuItem>
+              )}
+              {onOpenOrgOnboarding && (
+                <DropdownMenuItem onClick={onOpenOrgOnboarding}>
+                  <Sparkles className="size-4" /> Create organization
+                </DropdownMenuItem>
+              )}
               {onNavigate && (
                 <DropdownMenuItem onClick={() => onNavigate("student")}>
                   <Users className="size-4" /> Switch to participant view

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
 import { resolveImageField } from "@/lib/storage";
+import { requireOrgRole, orgScope, auditLog, type TenantContext } from "@/lib/tenant";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 /** Check the session for an admin role. Returns true if the caller is an admin. */
@@ -56,13 +57,24 @@ function toEventDto(e: any): EventDto {
   };
 }
 
-/** GET /api/events — list all events (admin only). */
-export async function GET() {
+/** GET /api/events — list all events in the current organization (org-scoped). */
+export async function GET(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Use org context: requires EVENT_MANAGER role. Platform admins see all.
+    const ctxResult = await requireOrgRole(req, "EVENT_MANAGER");
+    let ctx: TenantContext;
+    if ("error" in ctxResult) {
+      // Fallback to legacy admin check for backward compat (single-tenant admins)
+      if (!(await requireAdmin())) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      // Legacy admin without org membership — return empty (no org scope)
+      return NextResponse.json([]);
     }
+    ctx = ctxResult;
+
     const events = await db.event.findMany({
+      where: orgScope(ctx),
       include: {
         _count: {
           select: {
@@ -87,12 +99,18 @@ export async function GET() {
   }
 }
 
-/** POST /api/events — create a new event (admin only). */
+/** POST /api/events — create a new event in the current organization. */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const ctxResult = await requireOrgRole(req, "EVENT_MANAGER");
+    let ctx: TenantContext;
+    if ("error" in ctxResult) {
+      if (!(await requireAdmin())) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return NextResponse.json({ error: "No organization context" }, { status: 403 });
     }
+    ctx = ctxResult;
     const body = await req.json();
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
@@ -148,6 +166,8 @@ export async function POST(req: NextRequest) {
         endDate: end,
         isActive: typeof isActive === "boolean" ? isActive : true,
         requireRegistration: typeof requireRegistration === "boolean" ? requireRegistration : false,
+        // Multi-tenant: assign to the current org
+        organizationId: ctx.orgId,
         // Payment
         paymentMethod: typeof paymentMethod === "string" ? paymentMethod : "FREE",
         paymentAmount: typeof paymentAmount === "number" ? paymentAmount : 0,
@@ -186,6 +206,7 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+    await auditLog(ctx, "EVENT_CREATED", "Event", event.id, { title: title.trim() });
     return NextResponse.json(toEventDto(event), { status: 201 });
   } catch (e) {
     return NextResponse.json(

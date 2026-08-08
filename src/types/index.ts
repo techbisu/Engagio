@@ -10,6 +10,10 @@ export type ViewName =
   | "verify"
   | "activity"
   | "live-display"
+  | "org-onboarding"
+  | "org-dashboard"
+  | "org-settings"
+  | "accept-invitation"
 
 export type AdminTab =
   | "dashboard"

@@ -30,6 +30,14 @@ interface AppState {
   view: ViewName
   setView: (view: ViewName) => void
 
+  // Active organization slug (persisted to localStorage via the org API helper).
+  currentOrgSlug: string | null
+  setCurrentOrgSlug: (slug: string | null) => void
+
+  // Invitation token (deep-link ?invite=TOKEN)
+  inviteToken: string | null
+  setInviteToken: (token: string | null) => void
+
   // Admin tab
   adminTab: AdminTab
   setAdminTab: (tab: AdminTab) => void
@@ -72,6 +80,12 @@ export const useAppStore = create<AppState>((set) => ({
   view: "landing",
   setView: (view) => set({ view }),
 
+  currentOrgSlug: null,
+  setCurrentOrgSlug: (currentOrgSlug) => set({ currentOrgSlug }),
+
+  inviteToken: null,
+  setInviteToken: (inviteToken) => set({ inviteToken }),
+
   adminTab: "dashboard",
   setAdminTab: (adminTab) => set({ adminTab }),
 
@@ -110,6 +124,8 @@ export const useAppStore = create<AppState>((set) => ({
       activitySlug: null,
       liveActivityId: null,
       liveActivityType: null,
+      currentOrgSlug: null,
+      inviteToken: null,
     }),
 }))
 
@@ -122,6 +138,7 @@ export const useAppStore = create<AppState>((set) => ({
  *   ?verify=TOKEN    → public verification page (no login needed)
  *   ?activity=SLUG   → participant activity join view (will require login)
  *   ?live=ID         → projector live-display view (no auth — public audience view)
+ *   ?invite=TOKEN    → accept an org invitation (requires login)
  */
 export function parseInitialRoute(): {
   view: ViewName
@@ -130,6 +147,7 @@ export function parseInitialRoute(): {
   verifyToken: string | null
   activitySlug: string | null
   liveActivityId: string | null
+  inviteToken: string | null
 } {
   if (typeof window === "undefined") {
     return {
@@ -139,6 +157,7 @@ export function parseInitialRoute(): {
       verifyToken: null,
       activitySlug: null,
       liveActivityId: null,
+      inviteToken: null,
     }
   }
   const params = new URLSearchParams(window.location.search)
@@ -148,6 +167,7 @@ export function parseInitialRoute(): {
   const verify = params.get("verify")
   const activity = params.get("activity")
   const live = params.get("live")
+  const invite = params.get("invite")
 
   // Public verify deep-link takes priority — no auth required.
   if (verify) {
@@ -158,6 +178,7 @@ export function parseInitialRoute(): {
       verifyToken: verify,
       activitySlug: null,
       liveActivityId: null,
+      inviteToken: null,
     }
   }
   // Public live-display deep-link — no auth required (projector view).
@@ -169,6 +190,19 @@ export function parseInitialRoute(): {
       verifyToken: null,
       activitySlug: null,
       liveActivityId: live,
+      inviteToken: null,
+    }
+  }
+  // Org invitation deep-link — requires login (handled by page.tsx guard).
+  if (invite) {
+    return {
+      view: "accept-invitation",
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      activitySlug: null,
+      liveActivityId: null,
+      inviteToken: invite,
     }
   }
   if (activity) {
@@ -179,6 +213,7 @@ export function parseInitialRoute(): {
       verifyToken: null,
       activitySlug: activity,
       liveActivityId: null,
+      inviteToken: null,
     }
   }
   if (quiz) {
@@ -189,9 +224,17 @@ export function parseInitialRoute(): {
       verifyToken: null,
       activitySlug: null,
       liveActivityId: null,
+      inviteToken: null,
     }
   }
-  if (view === "admin" || view === "login" || view === "student") {
+  if (
+    view === "admin" ||
+    view === "login" ||
+    view === "student" ||
+    view === "org-onboarding" ||
+    view === "org-dashboard" ||
+    view === "org-settings"
+  ) {
     return {
       view,
       quizSlug: null,
@@ -199,6 +242,7 @@ export function parseInitialRoute(): {
       verifyToken: null,
       activitySlug: null,
       liveActivityId: null,
+      inviteToken: null,
     }
   }
   return {
@@ -208,6 +252,7 @@ export function parseInitialRoute(): {
     verifyToken: null,
     activitySlug: null,
     liveActivityId: null,
+    inviteToken: null,
   }
 }
 
@@ -219,6 +264,7 @@ export function syncUrl(
     verifyToken?: string | null
     activitySlug?: string | null
     liveActivityId?: string | null
+    inviteToken?: string | null
   },
 ) {
   if (typeof window === "undefined") return
@@ -228,6 +274,7 @@ export function syncUrl(
   url.searchParams.delete("verify")
   url.searchParams.delete("activity")
   url.searchParams.delete("live")
+  url.searchParams.delete("invite")
   if (view === "verify" && opts?.verifyToken) {
     url.searchParams.set("verify", opts.verifyToken)
   } else if (view === "quiz" && opts?.quizSlug) {
@@ -236,7 +283,16 @@ export function syncUrl(
     url.searchParams.set("activity", opts.activitySlug)
   } else if (view === "live-display" && opts?.liveActivityId) {
     url.searchParams.set("live", opts.liveActivityId)
-  } else if (view === "admin" || view === "login" || view === "student") {
+  } else if (view === "accept-invitation" && opts?.inviteToken) {
+    url.searchParams.set("invite", opts.inviteToken)
+  } else if (
+    view === "admin" ||
+    view === "login" ||
+    view === "student" ||
+    view === "org-onboarding" ||
+    view === "org-dashboard" ||
+    view === "org-settings"
+  ) {
     url.searchParams.set("view", view)
   }
   window.history.replaceState({}, "", url.toString())

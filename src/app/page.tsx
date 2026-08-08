@@ -42,6 +42,19 @@ import { VerifyCertificate } from "@/components/cert/verify-certificate"
 import { ActivityJoin } from "@/components/activities/activity-join"
 import { LiveDisplay } from "@/components/activities/live-display"
 
+import { OrgOnboarding } from "@/components/organization/org-onboarding"
+import { OrgDashboard } from "@/components/organization/org-dashboard"
+import { OrgSettings } from "@/components/organization/org-settings"
+import { AcceptInvitation } from "@/components/organization/accept-invitation"
+import {
+  api as orgApi,
+  clearOrgSlug,
+  ORG_CHANGED_EVENT_NAME,
+  type OrganizationDto,
+  type OrganizationSummaryDto,
+} from "@/components/organization/api"
+import { OrgDashboardShell } from "@/components/organization/org-dashboard-shell"
+
 /**
  * Helper: GET /api/me → returns { id, email, name, image, role } or null.
  * Used as the source of truth for the current user on the client.
@@ -80,6 +93,10 @@ export default function Home() {
     liveActivityId,
     liveActivityType,
     setLiveActivity,
+    currentOrgSlug,
+    setCurrentOrgSlug,
+    inviteToken,
+    setInviteToken,
   } = useAppStore()
 
   React.useEffect(() => {
@@ -91,6 +108,7 @@ export default function Home() {
     if (initial.verifyToken) setVerifyToken(initial.verifyToken)
     if (initial.activitySlug) setActivitySlug(initial.activitySlug)
     if (initial.liveActivityId) setLiveActivity(initial.liveActivityId)
+    if (initial.inviteToken) setInviteToken(initial.inviteToken)
     setHydrated(true)
   }, [
     hydrated,
@@ -100,6 +118,7 @@ export default function Home() {
     setVerifyToken,
     setActivitySlug,
     setLiveActivity,
+    setInviteToken,
   ])
 
   // --- Session sync -------------------------------------------------------
@@ -131,8 +150,9 @@ export default function Home() {
       verifyToken,
       activitySlug,
       liveActivityId,
+      inviteToken,
     })
-  }, [view, quizSlug, verifyToken, activitySlug, liveActivityId])
+  }, [view, quizSlug, verifyToken, activitySlug, liveActivityId, inviteToken])
 
   // --- Routing guards ----------------------------------------------------
   // If user lands on a protected view without a session, redirect to login.
@@ -151,7 +171,16 @@ export default function Home() {
     if (!isAuthed && view === "activity") {
       setView("login")
     }
-  }, [view, user, sessionStatus, setView])
+    // Org dashboard/settings: require auth.
+    if (!isAuthed && (view === "org-dashboard" || view === "org-settings")) {
+      setView("login")
+    }
+    // Accept-invitation: redirect to login if not signed in (we still want to
+    // show the invitation details after they log in).
+    if (!isAuthed && view === "accept-invitation" && inviteToken) {
+      setView("login")
+    }
+  }, [view, user, sessionStatus, setView, inviteToken])
 
   // --- Handlers ----------------------------------------------------------
   const queryClient = useQueryClient()
@@ -161,9 +190,11 @@ export default function Home() {
     // Clear ALL cached queries so the next user doesn't see the previous
     // user's data (attempts, analytics, etc.).
     queryClient.clear()
+    clearOrgSlug()
+    setCurrentOrgSlug(null)
     setUser(null)
     setView("landing")
-  }, [setUser, setView, queryClient])
+  }, [setUser, setView, queryClient, setCurrentOrgSlug])
 
   const handleLoginSuccess = React.useCallback(
     async (role: string) => {
@@ -174,7 +205,10 @@ export default function Home() {
         setUser(me)
         // Refetch the React Query cache so useSession-derived queries stay in sync.
         meQuery.refetch()
-        if (me.role === "ADMIN" || role === "ADMIN") {
+        if (inviteToken) {
+          // Pending org invitation — keep the deep-link.
+          setView("accept-invitation")
+        } else if (me.role === "ADMIN" || role === "ADMIN") {
           setView("admin")
         } else {
           if (quizSlug) {
@@ -192,7 +226,7 @@ export default function Home() {
         meQuery.refetch()
       }
     },
-    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug],
+    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug, inviteToken],
   )
 
   const handleNavigate = React.useCallback(
@@ -298,6 +332,88 @@ export default function Home() {
     }
   }, [setLiveActivity, activitySlug, setView])
 
+  // --- Org handlers ------------------------------------------------------
+  // Hydrate the currentOrgSlug from localStorage on mount, and listen for
+  // the `engagio-org-changed` custom event so the store stays in sync when
+  // the OrgSwitcher (or anyone else) updates it.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const stored = window.localStorage.getItem("engagio-org-slug")
+    if (stored && stored !== currentOrgSlug) {
+      setCurrentOrgSlug(stored)
+    }
+    function handleOrgChange(e: Event) {
+      const detail = (e as CustomEvent<{ slug: string | null }>).detail
+      setCurrentOrgSlug(detail?.slug ?? null)
+      // Invalidate all org-scoped queries — the new org context needs fresh data.
+      queryClient.invalidateQueries()
+    }
+    window.addEventListener(ORG_CHANGED_EVENT_NAME, handleOrgChange)
+    return () => window.removeEventListener(ORG_CHANGED_EVENT_NAME, handleOrgChange)
+  }, [currentOrgSlug, setCurrentOrgSlug, queryClient])
+
+  // Resolve the current organization details (for dashboard/settings views).
+  const currentOrgQuery = useQuery<{ organization?: OrganizationSummaryDto } | null>({
+    queryKey: ["organizations", "current"],
+    queryFn: async () => {
+      try {
+        return await orgApi<{ organization?: OrganizationSummaryDto }>(
+          "/api/organizations/current",
+        )
+      } catch {
+        return null
+      }
+    },
+    enabled: !!user && (view === "org-dashboard" || view === "org-settings"),
+    staleTime: 30_000,
+  })
+
+  const fullOrgQuery = useQuery<{ organization: OrganizationDto } | null>({
+    queryKey: ["organizations", "detail", currentOrgQuery.data?.organization?.id],
+    queryFn: async () => {
+      const id = currentOrgQuery.data?.organization?.id
+      if (!id) return null
+      try {
+        return await orgApi<{ organization: OrganizationDto }>(
+          `/api/organizations/${id}`,
+        )
+      } catch {
+        return null
+      }
+    },
+    enabled:
+      !!currentOrgQuery.data?.organization?.id &&
+      (view === "org-dashboard" || view === "org-settings"),
+    staleTime: 30_000,
+  })
+
+  const handleOrgCreated = React.useCallback(
+    (orgId: string) => {
+      // Invalidate org lists so the switcher reflects the new membership.
+      queryClient.invalidateQueries({ queryKey: ["organizations"] })
+      queryClient.invalidateQueries({ queryKey: ["organizations", "current"] })
+      // Route the user to the admin shell (which is org-aware via the switcher).
+      setView("admin")
+      void orgId
+    },
+    [queryClient, setView],
+  )
+
+  const handleOrgSwitched = React.useCallback(
+    (slug: string) => {
+      // setOrgSlug already dispatched the event; just mirror into the store.
+      setCurrentOrgSlug(slug)
+    },
+    [setCurrentOrgSlug],
+  )
+
+  const handleAcceptInvitation = React.useCallback(() => {
+    setInviteToken(null)
+    queryClient.invalidateQueries({ queryKey: ["organizations"] })
+    queryClient.invalidateQueries({ queryKey: ["organizations", "current"] })
+    setView("admin")
+  }, [setInviteToken, setView, queryClient])
+
   // --- Render ------------------------------------------------------------
   if (sessionStatus === "loading" && !hydrated) {
     // Initial paint: minimal shell to avoid hydration mismatch
@@ -327,6 +443,95 @@ export default function Home() {
     return <VerifyCertificate token={verifyToken} onExit={handleExitVerify} />
   }
 
+  // ORG ONBOARDING VIEW — full-screen, for new users without an org.
+  if (view === "org-onboarding") {
+    return (
+      <OrgOnboarding
+        onCreated={handleOrgCreated}
+        onCancel={() => setView(user ? "admin" : "landing")}
+      />
+    )
+  }
+
+  // ACCEPT INVITATION VIEW — invitation deep-link (?invite=TOKEN).
+  // Requires auth; the guard above redirects to login if not signed in.
+  if (view === "accept-invitation" && inviteToken) {
+    if (!user) {
+      // Fall through to login.
+    } else {
+      return (
+        <AcceptInvitation
+          token={inviteToken}
+          user={user}
+          onAccepted={handleAcceptInvitation}
+          onSignIn={() => {
+            // Sign out then show login.
+            void handleSignOut()
+            setView("login")
+          }}
+        />
+      )
+    }
+  }
+
+  // ORG DASHBOARD VIEW — full-screen shell (clean, not the admin chrome).
+  if (view === "org-dashboard" && user) {
+    const org = fullOrgQuery.data?.organization
+    if (!org) {
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      )
+    }
+    return (
+      <OrgDashboardShell
+        user={user}
+        onSignOut={handleSignOut}
+        onNavigateHome={() => setView("landing")}
+        onOpenSettings={() => setView("org-settings")}
+        onOpenOnboarding={() => setView("org-onboarding")}
+        onOrgSwitch={handleOrgSwitched}
+      >
+        <OrgDashboard
+          org={org}
+          onCreateEvent={() => setView("admin")}
+          onOpenMembers={() => setView("org-settings")}
+          onOpenEvent={() => setView("admin")}
+          onViewAllActivity={() => setView("org-settings")}
+        />
+      </OrgDashboardShell>
+    )
+  }
+
+  // ORG SETTINGS VIEW — uses the same clean shell.
+  if (view === "org-settings" && user) {
+    const org = fullOrgQuery.data?.organization
+    if (!org) {
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      )
+    }
+    return (
+      <OrgDashboardShell
+        user={user}
+        onSignOut={handleSignOut}
+        onNavigateHome={() => setView("landing")}
+        onOpenSettings={() => setView("org-dashboard")}
+        onOpenOnboarding={() => setView("org-onboarding")}
+        onOrgSwitch={handleOrgSwitched}
+      >
+        <OrgSettings
+          orgId={org.id}
+          canEdit
+          onBack={() => setView("org-dashboard")}
+        />
+      </OrgDashboardShell>
+    )
+  }
+
   // ADMIN VIEW
   if (view === "admin" && user && user.role === "ADMIN") {
     return (
@@ -336,6 +541,9 @@ export default function Home() {
         onTabChange={setAdminTab}
         onSignOut={handleSignOut}
         onNavigate={(v) => setView(v)}
+        onOrgSwitch={handleOrgSwitched}
+        onOpenOrgSettings={() => setView("org-settings")}
+        onOpenOrgOnboarding={() => setView("org-onboarding")}
       />
     )
   }
