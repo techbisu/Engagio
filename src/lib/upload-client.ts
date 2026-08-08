@@ -4,7 +4,7 @@
  * Client-side image upload helper.
  *
  * Wraps the /api/upload endpoint. Returns the hosted URL (Cloudinary or
- * base64 fallback). Used by all admin + student image upload UIs.
+ * base64 fallback). Used by all admin + participant image upload UIs.
  */
 export interface UploadResponse {
   url: string

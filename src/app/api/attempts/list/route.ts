@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ attempts: data, total: data.length });
     }
 
-    // Student (or admin without all=) — own attempts only
+    // Participant (or admin without all=) — own attempts only
     const attempts = await db.quizAttempt.findMany({
       where: { userId: session.user.id, ...(eventId ? { eventId } : {}) },
       orderBy: { startedAt: "desc" },

@@ -37,7 +37,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         const email = credentials?.email?.trim().toLowerCase()
-        const name = credentials?.name?.trim() || email?.split("@")[0] || "Student"
+        const name = credentials?.name?.trim() || email?.split("@")[0] || "Participant"
         const asAdmin = credentials?.asAdmin === "true"
         if (!email) return null
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null

@@ -248,7 +248,7 @@ export function PaymentConfig({
           </p>
           <p className="mt-0.5 text-xs">
             To collect fees right now, switch to <strong>Custom (Manual UPI)</strong>
-            . Students will see your UPI ID / QR and upload a payment
+            . Participants will see your UPI ID / QR and upload a payment
             screenshot, which you verify from the Payments panel.
           </p>
         </div>
@@ -311,7 +311,7 @@ export function PaymentConfig({
               placeholder="Pay ₹499 using the UPI ID below and upload the screenshot. Your registration will be verified within a few minutes."
             />
             <p className="text-[11px] text-muted-foreground">
-              Shown to the student before they proceed to pay.
+              Shown to the participant before they proceed to pay.
             </p>
           </div>
 
@@ -440,7 +440,7 @@ export function PaymentConfig({
                   Require Transaction ID
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Student must enter the UTR / Txn Ref.
+                  Participant must enter the UTR / Txn Ref.
                 </p>
               </div>
               <Switch
@@ -455,7 +455,7 @@ export function PaymentConfig({
                   Require Screenshot
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Student must upload a payment screenshot.
+                  Participant must upload a payment screenshot.
                 </p>
               </div>
               <Switch
@@ -470,7 +470,7 @@ export function PaymentConfig({
             <Wallet className="mt-0.5 size-3.5 shrink-0" />
             <span>
               <strong>Reminder:</strong> The screenshot is proof submitted for
-              manual verification — it does not auto-mark the student as paid.
+              manual verification — it does not auto-mark the participant as paid.
               You approve each payment from the <em>Payments</em> panel.
             </span>
           </div>

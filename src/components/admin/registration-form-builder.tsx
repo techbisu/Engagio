@@ -326,7 +326,7 @@ export function RegistrationFormBuilder({
             <span className="text-emerald-700 dark:text-emerald-400">{eventTitle}</span>
           </h2>
           <p className="text-sm text-muted-foreground">
-            Define custom fields students must complete before attempting a quiz.
+            Define custom fields participants must complete before attempting a quiz.
           </p>
         </div>
       </div>
@@ -352,7 +352,7 @@ export function RegistrationFormBuilder({
               <p className="text-sm text-muted-foreground flex items-start gap-1.5">
                 <Info className="size-3.5 mt-0.5 shrink-0 opacity-70" />
                 <span>
-                  When ON, students must fill out this form before they can attempt any quiz for
+                  When ON, participants must fill out this form before they can attempt any quiz for
                   this event. Add at least one field below.
                 </span>
               </p>
@@ -419,7 +419,7 @@ export function RegistrationFormBuilder({
               </div>
               <p className="mt-4 text-lg font-semibold">No fields yet</p>
               <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-                Add fields like Name, Phone, College, or Year. Students will fill these in when
+                Add fields like Name, Phone, College, or Year. Participants will fill these in when
                 registering for the event.
               </p>
               <Button
@@ -562,7 +562,7 @@ export function RegistrationFormBuilder({
             <DialogDescription>
               {editing
                 ? "Update the configuration of this registration field."
-                : "Configure a new field students will complete when registering."}
+                : "Configure a new field participants will complete when registering."}
             </DialogDescription>
           </DialogHeader>
 
@@ -650,7 +650,7 @@ export function RegistrationFormBuilder({
                   Required
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Students cannot submit the form without filling this in.
+                  Participants cannot submit the form without filling this in.
                 </p>
               </div>
               <Switch

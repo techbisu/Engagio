@@ -177,7 +177,7 @@ export function PaymentsPanel() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payments"] })
-      toast.success("Payment approved. Student can now take the quiz.")
+      toast.success("Payment approved. Participant can now take the quiz.")
     },
     onError: (e: Error) => toast.error(e.message || "Failed to approve."),
   })
@@ -190,7 +190,7 @@ export function PaymentsPanel() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payments"] })
-      toast.success("Payment rejected. Student will be asked to resubmit.")
+      toast.success("Payment rejected. Participant will be asked to resubmit.")
       setRejectTarget(null)
       setRejectReason("")
       setRejectError(null)
@@ -240,7 +240,7 @@ export function PaymentsPanel() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Manual Payments</h2>
           <p className="text-sm text-muted-foreground">
-            Verify manual UPI payment submissions from students.
+            Verify manual UPI payment submissions from participants.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -284,7 +284,7 @@ export function PaymentsPanel() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search student, email, event, txn id…"
+          placeholder="Search participant, email, event, txn id…"
           className="pl-9"
         />
       </div>
@@ -312,7 +312,7 @@ export function PaymentsPanel() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 dark:bg-slate-900/60">
-                    <TableHead className="w-[24%]">Student</TableHead>
+                    <TableHead className="w-[24%]">Participant</TableHead>
                     <TableHead className="w-[18%]">Event</TableHead>
                     <TableHead className="w-[10%]">Amount</TableHead>
                     <TableHead className="w-[14%]">Transaction ID</TableHead>
@@ -380,7 +380,7 @@ export function PaymentsPanel() {
           <DialogHeader>
             <DialogTitle>Reject payment?</DialogTitle>
             <DialogDescription>
-              The student will see your reason and be able to resubmit.
+              The participant will see your reason and be able to resubmit.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -449,7 +449,7 @@ export function PaymentsPanel() {
               Payment screenshot
             </DialogTitle>
             <DialogDescription>
-              {preview?.user?.name || preview?.user?.email || "Student"} —{" "}
+              {preview?.user?.name || preview?.user?.email || "Participant"} —{" "}
               {preview?.event?.title}
             </DialogDescription>
           </DialogHeader>
@@ -533,7 +533,7 @@ function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
         </p>
         <p className="mt-1 text-sm text-muted-foreground max-w-sm">
           {statusFilter === "PENDING_VERIFICATION"
-            ? "When students submit manual payments, they'll appear here for verification."
+            ? "When participants submit manual payments, they'll appear here for verification."
             : "Try a different filter or check back later."}
         </p>
       </CardContent>
@@ -701,7 +701,7 @@ function PaymentCard({
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
-        {/* Student */}
+        {/* Participant */}
         <div className="flex items-start gap-3">
           <Avatar className="size-10 shrink-0">
             {payment.user?.image ? (

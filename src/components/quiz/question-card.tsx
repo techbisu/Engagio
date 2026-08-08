@@ -29,7 +29,7 @@ interface QuestionCardProps {
   index: number
   total: number
   question: PublicQuestion
-  /** The student's current answer for this question (or undefined). */
+  /** The participant's current answer for this question (or undefined). */
   answer: QuestionAnswer | undefined
   /** Update handler — receives the new answer value. */
   onAnswer: (answer: QuestionAnswer) => void
@@ -45,7 +45,7 @@ interface QuestionCardProps {
  * the pair selections as `{ [leftValue]: rightValue }`.
  *
  * The right-side items are shuffled once per mount via useMemo so the order
- * is stable while the student works the question.
+ * is stable while the participant works the question.
  */
 function MatchingInput({
   question,

@@ -262,7 +262,7 @@ export async function POST(req: NextRequest) {
     });
 
     // If the quiz link has publishResults=false (instant results), auto-publish
-    // on submit so the student can immediately see their review.
+    // on submit so the participant can immediately see their review.
     let publishedAt: string | null = null;
     if (!attempt.quizLink.publishResults) {
       const updated2 = await db.quizAttempt.update({

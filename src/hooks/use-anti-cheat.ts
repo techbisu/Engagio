@@ -50,7 +50,7 @@ export interface UseAntiCheatOptions {
   onKeyboardViolation?: () => void
   /**
    * Fired when the auto-submit-on-fullscreen-exit grace period elapses
-   * without the student re-entering fullscreen. The runner calls
+   * without the participant re-entering fullscreen. The runner calls
    * its submit handler from here.
    */
   onAutoSubmit?: () => void
@@ -167,7 +167,7 @@ export function useAntiCheat(options: UseAntiCheatOptions): AntiCheatCounters {
   )
 
   // ----- Auto-submit-on-exit grace period handling -----
-  // When autoSubmitOnExit is on AND fullscreen exits, we give the student
+  // When autoSubmitOnExit is on AND fullscreen exits, we give the participant
   // a 3-second grace period to re-enter fullscreen before auto-submitting.
   const autoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelAutoSubmit = useCallback(() => {

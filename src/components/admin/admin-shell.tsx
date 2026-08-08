@@ -69,10 +69,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "events", label: "Events", icon: CalendarDays, description: "Manage quiz events" },
   { id: "questions", label: "Questions", icon: FileQuestion, description: "Per-event questions" },
   { id: "links", label: "Quiz Links", icon: Link2, description: "Shareable quiz URLs" },
-  { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All student attempts" },
+  { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All participant attempts" },
   { id: "payments", label: "Payments", icon: ReceiptIndianRupee, description: "Verify manual UPI payments" },
   { id: "results", label: "Results & Certs", icon: Trophy, description: "Publish results + issue certificates" },
-  { id: "users", label: "Users", icon: Users, description: "Registered students" },
+  { id: "users", label: "Users", icon: Users, description: "Registered participants" },
   { id: "certificates", label: "Certificates", icon: Award, description: "Issue & verify certificates" },
 ]
 
@@ -278,7 +278,7 @@ export function AdminShell({
             className="hidden sm:inline-flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400"
           >
             <ShieldCheck className="size-3" />
-            {user.role === "ADMIN" ? "Admin" : "Student"}
+            {user.role === "ADMIN" ? "Admin" : "Participant"}
           </Badge>
 
           <DropdownMenu>
@@ -309,7 +309,7 @@ export function AdminShell({
               <DropdownMenuSeparator />
               {onNavigate && (
                 <DropdownMenuItem onClick={() => onNavigate("student")}>
-                  <Users className="size-4" /> Switch to student view
+                  <Users className="size-4" /> Switch to participant view
                 </DropdownMenuItem>
               )}
               {onNavigate && (

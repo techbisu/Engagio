@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "QuizMaster Pro — Workshop & Event Quiz Platform",
   description:
-    "Create events, import questions via CSV, generate shareable quiz links, and let students attempt with anti-cheat protection — all in one beautiful platform.",
+    "Create events, import questions via CSV, generate shareable quiz links, and let participants attempt with anti-cheat protection — all in one beautiful platform.",
   keywords: [
     "quiz platform",
     "workshop quiz",

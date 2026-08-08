@@ -314,7 +314,7 @@ export function Dashboard({
           <CardHeader className="flex-row items-center justify-between">
             <div>
               <CardTitle className="text-base">Recent Attempts</CardTitle>
-              <CardDescription>Latest 5 student attempts</CardDescription>
+              <CardDescription>Latest 5 participant attempts</CardDescription>
             </div>
             {onViewAttempts && (
               <Button variant="outline" size="sm" onClick={onViewAttempts}>

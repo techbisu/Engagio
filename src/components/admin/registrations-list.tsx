@@ -237,7 +237,7 @@ export function RegistrationsList({
               </span>
             </h2>
             <p className="text-sm text-muted-foreground">
-              {list.length} student{list.length === 1 ? "" : "s"} registered for this event.
+              {list.length} participant{list.length === 1 ? "" : "s"} registered for this event.
             </p>
           </div>
           <Button
@@ -330,7 +330,7 @@ export function RegistrationsList({
             </div>
             <p className="mt-4 text-lg font-semibold">No registrations yet</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-md">
-              Share the quiz link with students — once they register, they&apos;ll appear here.
+              Share the quiz link with participants — once they register, they&apos;ll appear here.
             </p>
           </CardContent>
         </Card>
@@ -347,7 +347,7 @@ export function RegistrationsList({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">Student</TableHead>
+                  <TableHead className="min-w-[200px]">Participant</TableHead>
                   {fieldList.map((f) => (
                     <TableHead key={f.id} className="min-w-[120px]">
                       {f.label}
@@ -483,7 +483,7 @@ export function RegistrationsList({
 
           {selected && (
             <div className="space-y-4">
-              {/* Student */}
+              {/* Participant */}
               <div className="flex items-center gap-3 rounded-lg border p-3">
                 <Avatar className="size-10">
                   {selected.user?.image ? (

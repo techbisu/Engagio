@@ -182,9 +182,9 @@ export function QuizRunner({
   })
 
   // ----- AI proctor — only mounted when security.aiProctor is true AND the
-  //       student has either granted camera permission or chosen to bypass.
+  //       participant has either granted camera permission or chosen to bypass.
   //       We pass `enabled = aiProctor && !proctorBypassed` so the hook stops
-  //       the camera stream if the student later chooses to bypass.
+  //       the camera stream if the participant later chooses to bypass.
   const aiProctor = useAiProctor({
     enabled:
       security.aiProctor && !cameraGateOpen && !proctorBypassed && status === "active",
@@ -843,7 +843,7 @@ export function QuizRunner({
 
       {/* AI Proctor camera permission gate — shown when security.aiProctor is
           on and the camera hasn't been authorized yet. The gate prevents the
-          quiz from being interactable until the student either grants camera
+          quiz from being interactable until the participant either grants camera
           access or chooses to continue without AI proctor (which logs the
           bypass). */}
       {cameraGateOpen && status === "active" && (

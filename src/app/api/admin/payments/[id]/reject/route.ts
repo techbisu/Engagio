@@ -58,7 +58,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  *
  * Returns: `{ success: true, registration }`.
  *
- * The student sees the rejection + reason in their PaymentScreen and can
+ * The participant sees the rejection + reason in their PaymentScreen and can
  * re-submit via the "Resubmit Payment" button.
  */
 export async function POST(req: NextRequest, ctx: RouteContext) {

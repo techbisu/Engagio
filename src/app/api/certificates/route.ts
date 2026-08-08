@@ -67,7 +67,7 @@ function toCertDto(c: any): CertificateDto {
 /**
  * GET /api/certificates
  *  - Admin (?all=true):  all certificates (optionally filtered by ?eventId=)
- *  - Student (default):   only the current user's certificates
+ *  - Participant (default):   only the current user's certificates
  *
  * Always returns: { certificates: CertificateDto[], total: number }
  */
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     const wantsAll = url.searchParams.get("all") === "true";
     const eventIdFilter = url.searchParams.get("eventId") || undefined;
 
-    // Students can never request ?all=true — silently ignore and return only
+    // Participants can never request ?all=true — silently ignore and return only
     // their own rows to avoid leaking other users' certificates.
     const scopeAll = isAdmin && wantsAll;
 

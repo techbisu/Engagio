@@ -55,7 +55,7 @@ export function StudentShell({
               variant="outline"
               className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300 sm:inline-flex"
             >
-              <GraduationCap className="size-3" /> Student
+              <GraduationCap className="size-3" /> Participant
             </Badge>
 
             {onNavigateMyCertificates && (
@@ -94,7 +94,7 @@ export function StudentShell({
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium leading-none">
-                    {user.name || "Student"}
+                    {user.name || "Participant"}
                   </span>
                   <span className="text-xs text-muted-foreground leading-none">
                     {user.email}

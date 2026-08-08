@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
  * Returns `{ unpublished: number }`.
  *
  * NOTE: Unpublishing does NOT revoke already-generated certificates or
- * "unsend" emails. It only hides the results from the student's view again.
+ * "unsend" emails. It only hides the results from the participant's view again.
  */
 export async function DELETE(req: NextRequest) {
   try {

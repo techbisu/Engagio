@@ -42,7 +42,7 @@ function toRegistrationDto(r: any): RegistrationDto {
 /**
  * GET /api/registrations/payment?eventId=xxx
  * Authenticated. Returns the current user's payment status for the event
- * (used by the student's PaymentScreen to poll for verification result).
+ * (used by the participant's PaymentScreen to poll for verification result).
  *
  * Returns:
  *   - 401 if not authenticated.

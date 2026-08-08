@@ -190,7 +190,7 @@ export interface QuizLinkDto {
   event?: Pick<EventDto, "id" | "title" | "description"> & { image?: string | null }
 }
 
-/** Question as seen by the student (correctAnswer/correctText hidden). */
+/** Question as seen by the participant (correctAnswer/correctText hidden). */
 export interface PublicQuestion {
   id: string
   question: string
@@ -231,7 +231,7 @@ export interface QuizAttemptDto {
   startedAt: string
   completedAt: string | null
   publishedAt: string | null
-  /** True iff scoring is visible to student (`!publishResults || publishedAt != null`). */
+  /** True iff scoring is visible to participant (`!publishResults || publishedAt != null`). */
   published?: boolean
   /** For convenience: event.title via joined select. */
   ipAddress?: string | null

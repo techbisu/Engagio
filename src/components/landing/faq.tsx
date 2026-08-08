@@ -26,19 +26,19 @@ const FAQS: FaqItem[] = [
       'Yes — upload a CSV with the columns: question, option_a, option_b, option_c, option_d, correct_answer (a/b/c/d or 1/2/3/4), marks (optional), explanation (optional). The importer handles quoted CSV values and large files.',
   },
   {
-    question: 'Do students need an account?',
+    question: 'Do participants need an account?',
     answer:
-      'They sign in with Gmail (Google OAuth) for production, or email for the demo. One click, no signup friction. First-time users are created automatically with the STUDENT role.',
+      'They sign in with Gmail (Google OAuth) for production, or email for the demo. One click, no signup friction. First-time users are created automatically with the participant role.',
   },
   {
     question: 'Is the question order really random?',
     answer:
-      'Yes — every student gets a unique Fisher-Yates shuffle of the question order. You can also enable option shuffling so even two students viewing the same question see the options in different orders.',
+      'Yes — every participant gets a unique Fisher-Yates shuffle of the question order. You can also enable option shuffling so even two participants viewing the same question see the options in different orders.',
   },
   {
     question: 'Can I limit attempts?',
     answer:
-      'Yes — set max attempts per quiz link (default 1). Once a student exhausts their attempts, the link blocks them with a friendly message and shows their best score.',
+      'Yes — set max attempts per quiz link (default 1). Once a participant exhausts their attempts, the link blocks them with a friendly message and shows their best score.',
   },
   {
     question: 'Does it work on Vercel?',

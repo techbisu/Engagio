@@ -198,7 +198,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         fireToast(
           "multiFace",
           "Multiple faces detected",
-          "Only the registered student should be visible.",
+          "Only the registered participant should be visible.",
         )
       }
     }

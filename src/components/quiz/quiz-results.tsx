@@ -237,7 +237,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
         studentName:
           user?.name ||
           user?.email?.split("@")[0] ||
-          "Student",
+          "Participant",
         eventTitle: data.event?.title ?? "Quiz",
         score,
         totalMarks,
@@ -1032,10 +1032,10 @@ function buildReportPng(input: {
   const eventTitle = truncateText(ctx, input.eventTitle, W - 160)
   ctx.fillText(eventTitle, W / 2, 220)
 
-  // Student name
+  // Participant name
   ctx.fillStyle = "#6b7280"
   ctx.font = "12px sans-serif"
-  ctx.fillText("STUDENT", W / 2, 270)
+  ctx.fillText("PARTICIPANT", W / 2, 270)
   ctx.fillStyle = "#0f172a"
   ctx.font = "bold 20px sans-serif"
   ctx.fillText(truncateText(ctx, input.studentName, W - 160), W / 2, 298)

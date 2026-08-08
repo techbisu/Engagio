@@ -92,7 +92,7 @@ export function UsersList() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Users</h2>
           <p className="text-sm text-muted-foreground">
-            {users.length} unique student{users.length === 1 ? "" : "s"} across all attempts.
+            {users.length} unique participant{users.length === 1 ? "" : "s"} across all attempts.
           </p>
         </div>
         <div className="relative w-full sm:w-72">
@@ -124,7 +124,7 @@ export function UsersList() {
             </div>
             <p className="mt-4 text-lg font-semibold">No users found</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {search ? "Try a different search." : "Students will appear here after their first attempt."}
+              {search ? "Try a different search." : "Participants will appear here after their first attempt."}
             </p>
           </CardContent>
         ) : (
@@ -132,7 +132,7 @@ export function UsersList() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student</TableHead>
+                  <TableHead>Participant</TableHead>
                   <TableHead className="text-center">Attempts</TableHead>
                   <TableHead className="hidden sm:table-cell">Last active</TableHead>
                 </TableRow>

@@ -93,7 +93,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     if (!cert) {
       return NextResponse.json({ error: "Certificate not found" }, { status: 404 });
     }
-    // Students can only see their own certificates.
+    // Participants can only see their own certificates.
     if (user.role !== "ADMIN" && cert.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

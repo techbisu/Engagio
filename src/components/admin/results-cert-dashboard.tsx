@@ -748,7 +748,7 @@ export function ResultsCertDashboard() {
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {rows.length === 0
-                      ? "Once students submit attempts, they'll show up here."
+                      ? "Once participants submit attempts, they'll show up here."
                       : "Try clearing the search or status filters."}
                   </p>
                 </div>

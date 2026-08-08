@@ -11,7 +11,7 @@ interface WatermarkOverlayProps {
  * Fixed-position semi-transparent watermark overlay. Scatters 6 watermark
  * elements across the viewport (corners + mid-edges) so any photo/video
  * capture includes at least one. Uses pointer-events: none + select-none so
- * it never blocks interaction. Each watermark shows the student's email + a
+ * it never blocks interaction. Each watermark shows the participant's email + a
  * live timestamp (updates every second).
  *
  * Designed to be subtle but readable: opacity 0.10, rotated -15deg,

@@ -278,8 +278,8 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       return
     }
     const headers = [
-      "student_name",
-      "student_email",
+      "participant_name",
+      "participant_email",
       "event",
       "quiz_slug",
       "status",
@@ -464,7 +464,7 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
             </div>
             <p className="mt-4 text-lg font-semibold">No attempts found</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting filters or check back after students take a quiz.
+              Try adjusting filters or check back after participants take a quiz.
             </p>
           </CardContent>
         ) : (
@@ -472,7 +472,7 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student</TableHead>
+                  <TableHead>Participant</TableHead>
                   <TableHead className="hidden md:table-cell">Event</TableHead>
                   <TableHead className="hidden lg:table-cell">Slug</TableHead>
                   <TableHead className="text-center">Status</TableHead>
@@ -794,10 +794,10 @@ function AttemptDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Student + summary */}
+        {/* Participant + summary */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-lg border p-3 space-y-2">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Student</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Participant</p>
             <div className="flex items-center gap-2.5">
               <Avatar className="size-9">
                 {attempt.user?.image ? (

@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
           );
         }
         // Payment gate — for MANUAL payment events, the registration must
-        // have paymentStatus = "COMPLETED" before the student can start.
+        // have paymentStatus = "COMPLETED" before the participant can start.
         // PENDING_VERIFICATION / REJECTED / NONE all block the attempt.
         if (event.paymentMethod === "MANUAL") {
           if (registration.paymentStatus !== "COMPLETED") {

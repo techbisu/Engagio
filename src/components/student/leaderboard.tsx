@@ -227,7 +227,7 @@ export function Leaderboard({ slug, onBack }: LeaderboardProps) {
                           {entry.image ? (
                             <AvatarImage
                               src={entry.image}
-                              alt={entry.name || "Student"}
+                              alt={entry.name || "Participant"}
                             />
                           ) : null}
                           <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
@@ -318,7 +318,7 @@ export function Leaderboard({ slug, onBack }: LeaderboardProps) {
                         {entry.image ? (
                           <AvatarImage
                             src={entry.image}
-                            alt={entry.name || "Student"}
+                            alt={entry.name || "Participant"}
                           />
                         ) : null}
                         <AvatarFallback className="bg-emerald-100 text-[10px] text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
@@ -456,7 +456,7 @@ function PodiumRowSmall({
       </span>
       <Avatar className="size-9">
         {entry.image ? (
-          <AvatarImage src={entry.image} alt={entry.name || "Student"} />
+          <AvatarImage src={entry.image} alt={entry.name || "Participant"} />
         ) : null}
         <AvatarFallback className="bg-emerald-100 text-[10px] text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
           {initials(entry.name) || "?"}

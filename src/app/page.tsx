@@ -317,7 +317,7 @@ export default function Home() {
     )
   }
 
-  // QUIZ deep-link view: requires auth. If authed, route to student quiz-start.
+  // QUIZ deep-link view: requires auth. If authed, route to participant quiz-start.
   if (view === "quiz" && quizSlug) {
     if (user) {
       return (

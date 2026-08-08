@@ -443,7 +443,7 @@ export function LinksManager({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Quiz Links</h2>
           <p className="text-sm text-muted-foreground">
-            Generate shareable links that students use to take a quiz.
+            Generate shareable links that participants use to take a quiz.
           </p>
         </div>
         <Button
@@ -477,7 +477,7 @@ export function LinksManager({
             </div>
             <p className="mt-4 text-lg font-semibold">No quiz links yet</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              Generate a shareable link for an event to let students take the quiz.
+              Generate a shareable link for an event to let participants take the quiz.
             </p>
             <Button
               className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -621,7 +621,7 @@ export function LinksManager({
             <DialogDescription>
               {editing
                 ? "Update the settings for this quiz link."
-                : "Configure the quiz link and share it with students."}
+                : "Configure the quiz link and share it with participants."}
             </DialogDescription>
           </DialogHeader>
 
@@ -704,7 +704,7 @@ export function LinksManager({
               <div className="min-w-0">
                 <p className="text-sm font-medium">Link is active</p>
                 <p className="text-xs text-muted-foreground">
-                  When ON, students can use this link to start attempts.
+                  When ON, participants can use this link to start attempts.
                 </p>
               </div>
               <Switch
@@ -863,7 +863,7 @@ export function LinksManager({
                         Immediately
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
-                        Reveal the score to the student as soon as they submit.
+                        Reveal the score to the participant as soon as they submit.
                       </p>
                     </div>
                   </label>
@@ -883,7 +883,7 @@ export function LinksManager({
                         Publish later
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
-                        Students see a &quot;pending&quot; state. Admin publishes results from
+                        Participants see a &quot;pending&quot; state. Admin publishes results from
                         the Results &amp; Certs tab.
                       </p>
                     </div>
@@ -895,7 +895,7 @@ export function LinksManager({
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
                   <ShieldAlert className="size-3.5 mt-0.5 shrink-0" />
                   <span>
-                    Results are hidden from students until you publish them from the{" "}
+                    Results are hidden from participants until you publish them from the{" "}
                     <span className="font-semibold">Results &amp; Certs</span> tab.
                   </span>
                 </p>
@@ -1009,14 +1009,14 @@ export function LinksManager({
               <SecurityToggleRow
                 icon={LogOut}
                 label="Auto-submit on fullscreen exit"
-                description="Automatically submit the quiz if the student exits fullscreen mode."
+                description="Automatically submit the quiz if the participant exits fullscreen mode."
                 checked={form.autoSubmitOnExit}
                 onCheckedChange={(v) => setForm({ ...form, autoSubmitOnExit: v })}
               />
               <SecurityToggleRow
                 icon={AppWindow}
                 label="Tab/window switch detection"
-                description="Detect when the student switches to another tab or window."
+                description="Detect when the participant switches to another tab or window."
                 checked={form.tabSwitchDetection}
                 onCheckedChange={(v) => setForm({ ...form, tabSwitchDetection: v })}
               />
@@ -1058,7 +1058,7 @@ export function LinksManager({
               <SecurityToggleRow
                 icon={Stamp}
                 label="Watermark overlay"
-                description="Show a semi-transparent overlay with the student's email + timestamp, discouraging photos."
+                description="Show a semi-transparent overlay with the participant's email + timestamp, discouraging photos."
                 checked={form.watermarkOverlay}
                 onCheckedChange={(v) => setForm({ ...form, watermarkOverlay: v })}
               />
@@ -1169,7 +1169,7 @@ export function LinksManager({
                       <SecurityToggleRow
                         icon={Eye}
                         label="Look-away detection"
-                        description="Track head position and alert if the student looks away frequently."
+                        description="Track head position and alert if the participant looks away frequently."
                         checked={form.aiProctorLookAway}
                         onCheckedChange={(v) =>
                           setForm({ ...form, aiProctorLookAway: v })

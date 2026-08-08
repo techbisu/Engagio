@@ -8,7 +8,7 @@ import type {
 } from "@/types"
 
 /**
- * Shared fetch helper for the student-facing API surface.
+ * Shared fetch helper for the participant-facing API surface.
  * Always sends JSON content-type, surfaces server error messages,
  * and works with relative Next.js API routes only.
  */
@@ -33,7 +33,7 @@ export interface AttemptCategoryStat {
   maxScore: number
 }
 
-// ---- DTOs returned by the student APIs ------------------------------------
+// ---- DTOs returned by the participant APIs ------------------------------------
 
 export interface QuizLinkBySlugResponse {
   quizLink: QuizLinkDto
@@ -61,7 +61,7 @@ export interface QuizLinkBySlugResponse {
   requireFullscreen: boolean
   isActive: boolean
   hasExpired: boolean
-  // When true, the student must fill out the event registration form
+  // When true, the participant must fill out the event registration form
   // (fetched via GET /api/events/[eventId]/fields) before they can start
   // the quiz. The QuizStart screen renders a RegistrationForm in that case.
   requireRegistration?: boolean
@@ -170,7 +170,7 @@ export interface AttemptReviewQuestion {
   type?: QuestionType
   question: string
   options: string[]
-  /** The student's chosen option index, or null if unanswered (MCQ/TRUE_FALSE). */
+  /** The participant's chosen option index, or null if unanswered (MCQ/TRUE_FALSE). */
   chosenIndex: number | null
   /** The correct option index (MCQ/TRUE_FALSE). */
   correctIndex: number
@@ -222,7 +222,7 @@ export interface AttemptReviewPayload {
   showResults: boolean
   /** When true, results are hidden until admin publishes them. */
   publishResults?: boolean
-  /** True iff scoring details are visible to the student. */
+  /** True iff scoring details are visible to the participant. */
   published?: boolean
   publishedAt?: string | null
   event?: { id: string; title: string; description?: string | null } | null

@@ -227,7 +227,7 @@ export function PaymentScreen({
   const handleResubmit = () => {
     setPhase("form")
     setRejectionReason(null)
-    // Keep previous entries so the student can fix only what's wrong,
+    // Keep previous entries so the participant can fix only what's wrong,
     // but clear the screenshot (it's already been used in the rejected submission).
     setScreenshot(null)
   }

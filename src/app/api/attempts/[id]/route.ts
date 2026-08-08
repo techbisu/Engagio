@@ -180,7 +180,7 @@ export async function GET(
         correctAnswer: type === "MCQ" || type === "TRUE_FALSE" ? q.correctAnswer : null,
         correctText: q.correctText ?? null,
         codeLanguage: q.codeLanguage ?? null,
-        // What the student chose (shape depends on type).
+        // What the participant chose (shape depends on type).
         chosenIndex:
           type === "MCQ" || type === "TRUE_FALSE"
             ? typeof chosen === "number"

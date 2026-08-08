@@ -300,7 +300,7 @@ export function EventsManager({
             </div>
             <p className="mt-4 text-lg font-semibold">No events yet</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              Create your first quiz event to start adding questions and sharing links with students.
+              Create your first quiz event to start adding questions and sharing links with participants.
             </p>
             <Button
               className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white"

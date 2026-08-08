@@ -19,7 +19,7 @@ interface HeroProps {
 }
 
 const STATS = [
-  { value: '10k+', label: 'Students' },
+  { value: '10k+', label: 'Participants' },
   { value: '500+', label: 'Events' },
   { value: '99.9%', label: 'Uptime' },
   { value: '4.9/5', label: 'Rating' },
@@ -71,7 +71,7 @@ export function Hero({ onNavigate }: HeroProps) {
 
           <p className="mt-5 max-w-xl text-base text-muted-foreground sm:text-lg">
             Create events, import questions via CSV, generate shareable quiz
-            links, and let students attempt with anti-cheat protection — all in
+            links, and let participants attempt with anti-cheat protection — all in
             one beautiful platform.
           </p>
 

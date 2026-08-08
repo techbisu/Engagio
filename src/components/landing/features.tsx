@@ -36,13 +36,13 @@ const FEATURES: Feature[] = [
     icon: Shuffle,
     title: 'Random Question Order',
     description:
-      'Every student sees questions in a different order. Optionally shuffle option order too — no two attempts look alike.',
+      'Every participant sees questions in a different order. Optionally shuffle option order too — no two attempts look alike.',
   },
   {
     icon: Mail,
     title: 'Gmail Login',
     description:
-      'Frictionless Google OAuth for students. One click and they’re in — no password resets, no signup friction.',
+      'Frictionless Google OAuth for participants. One click and they’re in — no password resets, no signup friction.',
   },
   {
     icon: LinkIcon,
@@ -54,7 +54,7 @@ const FEATURES: Feature[] = [
     icon: BarChart3,
     title: 'Live Analytics',
     description:
-      'Real-time results and per-question insights. Spot which questions students struggle with and improve your content.',
+      'Real-time results and per-question insights. Spot which questions participants struggle with and improve your content.',
   },
 ]
 

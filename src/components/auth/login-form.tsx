@@ -102,7 +102,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     try {
       const res = await signIn('credentials', {
         email: demoEmail,
-        name: asAdmin ? 'Demo Admin' : 'Demo Student',
+        name: asAdmin ? 'Demo Admin' : 'Demo Participant',
         asAdmin: asAdmin ? 'true' : 'false',
         redirect: false,
         callbackUrl: '/',
@@ -111,7 +111,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         toast.error('Demo sign-in failed. Please try again.')
         return
       }
-      toast.success(`Signed in as ${asAdmin ? 'Admin' : 'Student'}`)
+      toast.success(`Signed in as ${asAdmin ? 'Admin' : 'Participant'}`)
       const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
       const role = sessionRes?.user?.role || (asAdmin ? 'ADMIN' : 'STUDENT')
       onSuccess(role)
@@ -140,7 +140,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           <CardDescription className="text-center">
             {tab === 'signin'
               ? 'Sign in to your account to continue'
-              : 'Try the platform as an admin or a student — no setup needed'}
+              : 'Try the platform as an admin or a participant — no setup needed'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -214,7 +214,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 onClick={() => handleDemo(false)}
                 loading={demoLoading === 'student'}
                 icon={GraduationCap}
-                title="Demo as Student"
+                title="Demo as Participant"
                 description="Take a quiz with the anti-cheat proctoring active."
                 accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300"
                 textOnDark

@@ -85,7 +85,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     enabled: !!user,
   })
 
-  // Check whether the student has already registered for this event.
+  // Check whether the participant has already registered for this event.
   // Only fires when the event requires registration, the user is logged in,
   // and we know the event id (i.e. after the meta query has resolved).
   const regCheckQuery = useQuery<RegCheckResponse>({
@@ -104,7 +104,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     !!meta?.requireRegistration && regCheckQuery.isLoading
   // We render the RegistrationForm only after the reg-check query has
   // finished (loaded or errored) so we don't flash the form while we're
-  // still deciding whether the student is already registered.
+  // still deciding whether the participant is already registered.
   const needsRegistration =
     !!meta?.requireRegistration &&
     !isRegistered &&
@@ -114,7 +114,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
   // The event requires manual payment when:
   //   - The event's paymentMethod is "MANUAL" AND
   //   - The paymentAmount is > 0 (or there's any payment config at all).
-  // We only render the PaymentScreen when the student is past the
+  // We only render the PaymentScreen when the participant is past the
   // registration gate (either registered already, or registration isn't
   // required at all — in which case we can't have a `Registration` row yet,
   // so payment can't apply; treat as no payment required).
@@ -209,7 +209,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
   }
 
   // Registration gate: render the registration form INSTEAD of the
-  // pre-quiz card when the event requires registration and the student
+  // pre-quiz card when the event requires registration and the participant
   // hasn't registered yet. The form invalidates the ['registration-check']
   // query on success — once that refetch returns registered:true,
   // needsRegistration flips to false and the pre-quiz card renders.
@@ -228,7 +228,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
   }
 
   // Payment gate: render the PaymentScreen instead of the pre-quiz card
-  // when the event requires MANUAL payment AND the student's registration
+  // when the event requires MANUAL payment AND the participant's registration
   // is not yet COMPLETED. After payment verification (onPaid), we
   // invalidate the payment-status query and fall through to the pre-quiz
   // card below.

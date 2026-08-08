@@ -36,9 +36,9 @@ const STEPS: Step[] = [
   },
   {
     icon: PlayCircle,
-    title: 'Students Attempt',
+    title: 'Participants Attempt',
     description:
-      'Students login with Gmail and take the anti-cheat-protected quiz.',
+      'Participants login with Gmail and take the anti-cheat-protected quiz.',
   },
 ]
 

@@ -1258,7 +1258,7 @@ function FillBlankFields({
         <p className="text-xs text-rose-500">{errors.correctText}</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Student types a short answer. Match is case-insensitive, trimmed.
+          Participant types a short answer. Match is case-insensitive, trimmed.
         </p>
       )}
     </div>
@@ -1349,7 +1349,7 @@ function MatchingFields({
         <p className="text-xs text-rose-500">{errors.matchPairs}</p>
       )}
       <p className="text-xs text-muted-foreground">
-        Student matches left items to right items. All must be correct for
+        Participant matches left items to right items. All must be correct for
         marks. Min 2 pairs.
       </p>
     </div>
