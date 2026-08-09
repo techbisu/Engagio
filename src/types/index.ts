@@ -16,6 +16,10 @@ export type ViewName =
   | "accept-invitation"
   | "share"
   | "pricing"
+  | "about"
+  | "privacy"
+  | "terms"
+  | "contact"
 
 export type AdminTab =
   | "dashboard"

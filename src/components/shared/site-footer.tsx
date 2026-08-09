@@ -3,30 +3,35 @@
 import * as React from 'react'
 import { Github, Twitter, Linkedin } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/brand-logo'
+import type { ViewName } from '@/types'
+
+interface SiteFooterProps {
+  onNavigate?: (view: ViewName) => void
+}
 
 const PRODUCT_LINKS = [
-  { label: 'Events', href: '#features' },
-  { label: 'Activities', href: '#activities' },
-  { label: 'Assessments', href: '#assessment' },
-  { label: 'Certificates', href: '#certificates' },
+  { label: 'Events', href: '#features', view: null as ViewName | null },
+  { label: 'Activities', href: '#activities', view: null as ViewName | null },
+  { label: 'Assessments', href: '#assessment', view: null as ViewName | null },
+  { label: 'Certificates', href: '#certificates', view: null as ViewName | null },
 ] as const
 
 const SOLUTIONS_LINKS = [
-  { label: 'Medical Summits', href: '#solutions' },
-  { label: 'Workshops', href: '#solutions' },
-  { label: 'Corporate Training', href: '#solutions' },
-  { label: 'Conferences', href: '#solutions' },
-  { label: 'Education', href: '#solutions' },
+  { label: 'Medical Summits', href: '#solutions', view: null as ViewName | null },
+  { label: 'Workshops', href: '#solutions', view: null as ViewName | null },
+  { label: 'Corporate Training', href: '#solutions', view: null as ViewName | null },
+  { label: 'Conferences', href: '#solutions', view: null as ViewName | null },
+  { label: 'Education', href: '#solutions', view: null as ViewName | null },
 ] as const
 
 const COMPANY_LINKS = [
-  { label: 'About', href: '#' },
-  { label: 'Privacy', href: '#' },
-  { label: 'Terms', href: '#' },
-  { label: 'Contact', href: '#' },
+  { label: 'About', href: null, view: 'about' as ViewName },
+  { label: 'Privacy', href: null, view: 'privacy' as ViewName },
+  { label: 'Terms', href: null, view: 'terms' as ViewName },
+  { label: 'Contact', href: null, view: 'contact' as ViewName },
 ] as const
 
-export function SiteFooter() {
+export function SiteFooter({ onNavigate }: SiteFooterProps = {}) {
   return (
     <footer className="mt-auto w-full border-t border-border/60 bg-background">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -43,9 +48,10 @@ export function SiteFooter() {
             </p>
             <div className="mt-5 flex items-center gap-2">
               <a
-                href="#"
+                href="https://github.com/techbisu/Engagio"
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label="GitHub"
-                title="Coming soon"
                 className="grid size-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-600"
               >
                 <Github className="size-4" />
@@ -69,13 +75,9 @@ export function SiteFooter() {
             </div>
           </div>
 
-          <FooterColumn title="Product" links={PRODUCT_LINKS} />
-          <FooterColumn title="Solutions" links={SOLUTIONS_LINKS} />
-          <FooterColumn
-            title="Company"
-            links={COMPANY_LINKS}
-            comingSoon
-          />
+          <FooterColumn title="Product" links={PRODUCT_LINKS} onNavigate={onNavigate} />
+          <FooterColumn title="Solutions" links={SOLUTIONS_LINKS} onNavigate={onNavigate} />
+          <FooterColumn title="Company" links={COMPANY_LINKS} onNavigate={onNavigate} />
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 text-sm text-muted-foreground sm:flex-row">
@@ -90,14 +92,20 @@ export function SiteFooter() {
   )
 }
 
+type FooterLink = {
+  label: string
+  href: string | null
+  view: ViewName | null
+}
+
 function FooterColumn({
   title,
   links,
-  comingSoon = false,
+  onNavigate,
 }: {
   title: string
-  links: readonly { label: string; href: string }[]
-  comingSoon?: boolean
+  links: readonly FooterLink[]
+  onNavigate?: (view: ViewName) => void
 }) {
   return (
     <div>
@@ -105,13 +113,21 @@ function FooterColumn({
       <ul className="mt-3 space-y-2">
         {links.map((link) => (
           <li key={link.label}>
-            <a
-              href={link.href}
-              title={comingSoon ? 'Coming soon' : undefined}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </a>
+            {link.view && onNavigate ? (
+              <button
+                onClick={() => onNavigate(link.view as ViewName)}
+                className="text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </button>
+            ) : (
+              <a
+                href={link.href || '#'}
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </a>
+            )}
           </li>
         ))}
       </ul>

@@ -29,6 +29,10 @@ import { OrganizationSection } from "@/components/landing/organization-section"
 import { TeamSection } from "@/components/landing/team-section"
 import { CtaSection } from "@/components/landing/cta-section"
 import { PricingSection } from "@/components/landing/pricing-section"
+import { AboutPage } from "@/components/landing/about-page"
+import { PrivacyPage } from "@/components/landing/privacy-page"
+import { TermsPage } from "@/components/landing/terms-page"
+import { ContactPage } from "@/components/landing/contact-page"
 import { Faq } from "@/components/landing/faq"
 
 import { AdminShell } from "@/components/admin/admin-shell"
@@ -734,7 +738,7 @@ export default function Home() {
             <LoginForm onSuccess={handleLoginSuccess} />
           </div>
         </main>
-        <SiteFooter />
+        <SiteFooter onNavigate={handleNavigate} />
       </div>
     )
   }
@@ -752,7 +756,75 @@ export default function Home() {
         <main className="flex-1">
           <PricingSection onNavigate={handleNavigate} standalone />
         </main>
-        <SiteFooter />
+        <SiteFooter onNavigate={handleNavigate} />
+      </div>
+    )
+  }
+
+  // ABOUT VIEW
+  if (view === "about") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader
+          session={user ? { user } : null}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+        />
+        <main className="flex-1">
+          <AboutPage onNavigate={handleNavigate} />
+        </main>
+        <SiteFooter onNavigate={handleNavigate} />
+      </div>
+    )
+  }
+
+  // PRIVACY VIEW
+  if (view === "privacy") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader
+          session={user ? { user } : null}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+        />
+        <main className="flex-1">
+          <PrivacyPage />
+        </main>
+        <SiteFooter onNavigate={handleNavigate} />
+      </div>
+    )
+  }
+
+  // TERMS VIEW
+  if (view === "terms") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader
+          session={user ? { user } : null}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+        />
+        <main className="flex-1">
+          <TermsPage />
+        </main>
+        <SiteFooter onNavigate={handleNavigate} />
+      </div>
+    )
+  }
+
+  // CONTACT VIEW
+  if (view === "contact") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader
+          session={user ? { user } : null}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+        />
+        <main className="flex-1">
+          <ContactPage onNavigate={handleNavigate} />
+        </main>
+        <SiteFooter onNavigate={handleNavigate} />
       </div>
     )
   }
@@ -808,7 +880,7 @@ export default function Home() {
         <Faq />
         <CtaSection onNavigate={handleNavigate} />
       </main>
-      <SiteFooter />
+      <SiteFooter onNavigate={handleNavigate} />
     </div>
   )
 }

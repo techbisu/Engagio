@@ -264,7 +264,11 @@ export function parseInitialRoute(): {
     view === "org-onboarding" ||
     view === "org-dashboard" ||
     view === "org-settings" ||
-    view === "pricing"
+    view === "pricing" ||
+    view === "about" ||
+    view === "privacy" ||
+    view === "terms" ||
+    view === "contact"
   ) {
     return {
       view,
@@ -329,7 +333,11 @@ export function syncUrl(
     view === "org-onboarding" ||
     view === "org-dashboard" ||
     view === "org-settings" ||
-    view === "pricing"
+    view === "pricing" ||
+    view === "about" ||
+    view === "privacy" ||
+    view === "terms" ||
+    view === "contact"
   ) {
     url.searchParams.set("view", view)
   }
