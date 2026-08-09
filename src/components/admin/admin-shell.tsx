@@ -369,11 +369,8 @@ export function AdminShell({
                   <LayoutDashboard className="size-4" /> Back to home
                 </DropdownMenuItem>
               )}
-              {user.role === "ADMIN" && onNavigate && (
-                <DropdownMenuItem onClick={() => onNavigate("platform" as any)}>
-                  <Shield className="size-4" /> Platform Admin
-                </DropdownMenuItem>
-              )}
+              {/* Platform Admin link removed — super admin has a separate
+                  login at /?view=superadmin. Org admins cannot access it. */}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-rose-600 focus:text-rose-700"

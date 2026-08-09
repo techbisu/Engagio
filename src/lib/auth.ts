@@ -6,6 +6,13 @@ import bcrypt from "bcryptjs"
 import { db } from "./db"
 
 // ─── Super Admin ────────────────────────────────────────────────────────────
+// Super Admin is NOT auto-detected from email. It's a separate login at
+// /?view=superadmin. The SUPERADMIN_EMAIL env var is used ONLY to identify
+// which email CAN access the super admin login page — it does NOT grant
+// super admin privileges automatically.
+//
+// For production: create a super admin user in the DB with role=ADMIN,
+// then sign in via /?view=superadmin with that email + password.
 const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app")
   .toLowerCase()
   .trim()

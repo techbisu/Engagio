@@ -92,11 +92,14 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   }
 
   // ─── Demo logins ──────────────────────────────────────────────────────
-  const handleDemo = async (type: 'superadmin' | 'orgadmin') => {
+  // Only 2 demo accounts (NO super admin demo — that's a separate secure login):
+  //   orgadmin    → org admin of "Demo Organization" (has a demo event + quiz)
+  //   participant → participant who can take the demo quiz
+  const handleDemo = async (type: 'orgadmin' | 'participant') => {
     setDemoLoading(type)
     const demoConfig = {
-      superadmin: { email: 'superadmin@engagio.app', name: 'Super Admin', asAdmin: 'true' },
       orgadmin: { email: 'demo.admin@engagio.app', name: 'Demo Admin', asAdmin: 'true' },
+      participant: { email: 'demo.participant@engagio.app', name: 'Demo Participant', asAdmin: 'false' },
     }
     const config = demoConfig[type]
     try {
@@ -182,11 +185,12 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
 
             {/* ─── Quick Demo ───────────────────────────────────────── */}
             <TabsContent value="demo" className="mt-5 space-y-3">
-              <DemoButton onClick={() => handleDemo('superadmin')} loading={demoLoading === 'superadmin'} icon={ShieldCheck} title="Super Admin" description="Platform admin — manage all orgs, plans & billing." accent="from-amber-600 to-orange-500" />
               <DemoButton onClick={() => handleDemo('orgadmin')} loading={demoLoading === 'orgadmin'} icon={Building2} title="Organization Admin" description="Demo Medical Association — manage events & certificates." accent="from-emerald-600 to-teal-500" />
-              <div className="rounded-lg border border-dashed border-border p-4 text-center">
-                <p className="text-sm text-muted-foreground">Participant? 🎓</p>
-                <p className="mt-1 text-xs text-muted-foreground">Participants access events via the link shared by the organizer.</p>
+              <DemoButton onClick={() => handleDemo('participant')} loading={demoLoading === 'participant'} icon={GraduationCap} title="Participant" description="Take a quiz with anti-cheat, view results & certificates." accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300" textOnDark />
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900 dark:bg-amber-950/20">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  🔒 Super Admin login is separate. Use <code className="font-mono">/?view=superadmin</code> for platform admin access.
+                </p>
               </div>
             </TabsContent>
           </Tabs>

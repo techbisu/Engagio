@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useSession, signOut } from "next-auth/react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
 import {
   useAppStore,
@@ -16,6 +17,7 @@ import { SiteHeader } from "@/components/shared/site-header"
 import { SiteFooter } from "@/components/shared/site-footer"
 import { LoginForm } from "@/components/auth/login-form"
 import { ParticipantLogin } from "@/components/auth/participant-login"
+import { SuperAdminLogin } from "@/components/auth/super-admin-login"
 
 import { Hero } from "@/components/landing/hero"
 import { TrustStrip } from "@/components/landing/trust-strip"
@@ -259,13 +261,10 @@ export default function Home() {
           return
         }
 
-        // 4. Check if this is the superadmin (platform admin)
-        const sessionRes = await fetch("/api/auth/session").then((r) => r.json())
-        const isSuperAdmin = sessionRes?.user?.isSuperAdmin === true
-        if (isSuperAdmin) {
-          setView("platform")
-          return
-        }
+        // 4. Organization login NEVER routes to Super Admin / Platform Admin.
+        //    Super Admin has a separate login at /?view=superadmin.
+        //    If someone tries to login with the superadmin email via the org
+        //    login, show them a message to use the super admin login instead.
 
         // 5. Check if the user has an organization membership
         //    Anyone logging in via the Organization Login page is an admin.
@@ -636,7 +635,45 @@ export default function Home() {
     )
   }
 
-  // PLATFORM ADMIN VIEW — super admin panel for managing all orgs, users, plans, billing
+  // SUPER ADMIN LOGIN VIEW — separate from org login
+  if (view === "superadmin") {
+    if (user && user.role === "ADMIN") {
+      // Already authed as admin → check if super admin
+      const isSuper = (session as any)?.user?.isSuperAdmin
+      if (isSuper) {
+        return (
+          <PlatformAdminShell
+            user={user}
+            onSignOut={handleSignOut}
+            onNavigateHome={() => setView("landing")}
+            onOpenAdmin={() => setView("admin")}
+          />
+        )
+      }
+    }
+    // Not authed or not super admin → show login
+    return (
+      <SuperAdminLogin
+        onSuccess={async () => {
+          const me = await fetchMe()
+          if (me) {
+            setUser(me)
+            meQuery.refetch()
+            // Verify super admin in session
+            const sessionRes = await fetch("/api/auth/session").then((r) => r.json())
+            if (sessionRes?.user?.isSuperAdmin) {
+              setView("platform")
+            } else {
+              toast.error("This account does not have Super Admin privileges.")
+            }
+          }
+        }}
+        onBack={() => setView("landing")}
+      />
+    )
+  }
+
+  // PLATFORM ADMIN VIEW — super admin panel (reached after super admin login)
   if (view === "platform" && user && user.role === "ADMIN") {
     return (
       <PlatformAdminShell

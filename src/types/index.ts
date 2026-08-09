@@ -21,6 +21,7 @@ export type ViewName =
   | "terms"
   | "contact"
   | "platform"
+  | "superadmin"
 
 export type AdminTab =
   | "dashboard"
