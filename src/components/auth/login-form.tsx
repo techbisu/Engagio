@@ -9,6 +9,7 @@ import {
   Loader2,
   ShieldCheck,
   Building2,
+  GraduationCap,
   Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
