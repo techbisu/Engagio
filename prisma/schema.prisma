@@ -489,6 +489,7 @@ model Organization {
   events        Event[]
   questions     Question[]
   domains       OrganizationDomain[]
+  paymentConfigs PaymentProviderConfig[]
 
   @@index([status])
 }
@@ -705,4 +706,40 @@ model AchievementShare {
   @@index([organizationId])
   @@index([achievementId])
   @@index([platform])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ORGANIZATION PAYMENT PROVIDER CONFIG — per-org payment gateway credentials
+// Separates SaaS billing (Org → Engagio) from event registration payments
+// (Participant → Org's event). Credentials are encrypted at rest.
+// ────────────────────────────────────────────────────────────────────────────
+
+model PaymentProviderConfig {
+  id              String   @id @default(cuid())
+  organizationId  String
+
+  // RAZORPAY | STRIPE | MANUAL | CASHFREE | PAYPAL | OTHER
+  provider        String
+  // The type of integration (e.g. "STANDARD", "CONNECTED_ACCOUNT")
+  type            String   @default("STANDARD")
+
+  status          String   @default("ACTIVE") // ACTIVE | DISABLED
+
+  displayName     String   @default("Default")
+
+  // Encrypted credentials JSON — never store secrets in plaintext.
+  // The server decrypts these only when making API calls to the provider.
+  // Format: { apiKey: "encrypted...", secretKey: "encrypted...", webhookSecret: "encrypted..." }
+  credentialsEncrypted String
+
+  // Non-sensitive settings (e.g. { testMode: true, region: "in" })
+  settings        String   @default("{}")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([provider])
 }

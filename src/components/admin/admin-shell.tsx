@@ -52,6 +52,7 @@ import { PaymentsPanel } from "./payments-panel"
 import { ResultsCertDashboard } from "./results-cert-dashboard"
 import { ActivitiesPanel } from "./activities/activities-panel"
 import { OrgSwitcher } from "@/components/organization/org-switcher"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -318,6 +319,8 @@ export function AdminShell({
             <ShieldCheck className="size-3" />
             {user.role === "ADMIN" ? "Admin" : "Participant"}
           </Badge>
+
+          <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

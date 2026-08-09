@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { BrandLogo } from "@/components/shared/brand-logo"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { cn, initials } from "@/lib/utils"
 import type { SafeUser } from "@/types"
 
@@ -70,6 +71,8 @@ export function StudentShell({
                 <span className="md:hidden">Certificates</span>
               </Button>
             )}
+
+            <ThemeToggle />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

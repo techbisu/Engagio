@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/shared/theme-toggle'
 import {
   Sheet,
   SheetContent,
@@ -65,6 +66,7 @@ export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) 
 
         {/* Desktop auth */}
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           {user ? (
             <>
               <Button
@@ -168,6 +170,9 @@ export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) 
                   </Button>
                 </>
               )}
+              <div className="flex items-center gap-2 pt-3 border-t border-border/60 mt-3">
+                <ThemeToggle />
+              </div>
             </div>
           </SheetContent>
         </Sheet>
