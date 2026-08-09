@@ -90,7 +90,7 @@ export function Hero({ onNavigate }: HeroProps) {
               onClick={() => onNavigate('login')}
               className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-600/20 hover:from-emerald-600/95 hover:to-teal-500/95"
             >
-              Create your first event
+              Get started free
               <ArrowRight className="size-4" />
             </Button>
             <Button
@@ -105,6 +105,10 @@ export function Hero({ onNavigate }: HeroProps) {
               Explore the platform
             </Button>
           </div>
+
+          <p className="mt-4 text-sm text-muted-foreground">
+            Start free. No payment required. Create your organization in seconds.
+          </p>
 
           <dl className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
             {STATS.map((s) => (

@@ -248,7 +248,20 @@ export default function Home() {
           // Pending org invitation — keep the deep-link.
           setView("accept-invitation")
         } else if (me.role === "ADMIN" || role === "ADMIN") {
-          setView("admin")
+          // Check if the admin has an organization. If not, send to onboarding.
+          try {
+            const orgRes = await fetch("/api/organizations")
+            const orgData = await orgRes.json()
+            if (orgData.organizations && orgData.organizations.length > 0) {
+              setView("admin")
+            } else {
+              // No org yet — send to onboarding to create one.
+              setView("org-onboarding")
+            }
+          } catch {
+            // If the org check fails, fall back to admin view.
+            setView("admin")
+          }
         } else {
           if (quizSlug) {
             setStudentSubView("quiz-start")
@@ -537,11 +550,21 @@ export default function Home() {
   // ORG DASHBOARD VIEW — full-screen shell (clean, not the admin chrome).
   if (view === "org-dashboard" && user) {
     const org = fullOrgQuery.data?.organization
-    if (!org) {
+    const isLoading = currentOrgQuery.isLoading || fullOrgQuery.isLoading
+    if (!org && isLoading) {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         </div>
+      )
+    }
+    if (!org) {
+      // No organization found — redirect to onboarding to create one.
+      return (
+        <OrgOnboarding
+          onCreated={handleOrgCreated}
+          onCancel={() => setView("landing")}
+        />
       )
     }
     return (
@@ -567,11 +590,21 @@ export default function Home() {
   // ORG SETTINGS VIEW — uses the same clean shell.
   if (view === "org-settings" && user) {
     const org = fullOrgQuery.data?.organization
-    if (!org) {
+    const isLoading = currentOrgQuery.isLoading || fullOrgQuery.isLoading
+    if (!org && isLoading) {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
         </div>
+      )
+    }
+    if (!org) {
+      // No organization found — redirect to onboarding to create one.
+      return (
+        <OrgOnboarding
+          onCreated={handleOrgCreated}
+          onCancel={() => setView("landing")}
+        />
       )
     }
     return (
