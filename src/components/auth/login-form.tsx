@@ -86,16 +86,14 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   }
 
   // ─── Demo logins ──────────────────────────────────────────────────────
-  // 3 demo accounts with pre-seeded data:
+  // 2 admin demo accounts (participants login from event pages only):
   //   superadmin → platform admin (manages all orgs, plans, billing)
   //   orgadmin   → org admin of "Demo Medical Association" (has a demo event + quiz)
-  //   participant → participant who can take the demo quiz
-  const handleDemo = async (type: 'superadmin' | 'orgadmin' | 'participant') => {
+  const handleDemo = async (type: 'superadmin' | 'orgadmin') => {
     setDemoLoading(type)
     const demoConfig = {
       superadmin: { email: 'superadmin@engagio.app', name: 'Super Admin', asAdmin: 'true' },
       orgadmin: { email: 'demo.admin@engagio.app', name: 'Demo Admin', asAdmin: 'true' },
-      participant: { email: 'demo.participant@engagio.app', name: 'Demo Participant', asAdmin: 'false' },
     }
     const config = demoConfig[type]
     try {
@@ -134,12 +132,12 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
             <BrandLogo size="md" />
           </div>
           <CardTitle className="text-center text-2xl">
-            {tab === 'signin' ? 'Welcome to Engagio' : 'Quick Demo'}
+            {tab === 'signin' ? 'Organization Login' : 'Quick Demo'}
           </CardTitle>
           <CardDescription className="text-center">
             {tab === 'signin'
               ? 'Sign in to manage your events, activities, and assessments.'
-              : 'Try Engagio instantly — no setup needed.'}
+              : 'Try Engagio as an admin — participants access via event links.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -229,15 +227,15 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
                 description="Demo Medical Association — manage events, activities & certificates."
                 accent="from-emerald-600 to-teal-500"
               />
-              <DemoButton
-                onClick={() => handleDemo('participant')}
-                loading={demoLoading === 'participant'}
-                icon={GraduationCap}
-                title="Participant"
-                description="Take a quiz with anti-cheat, view results & certificates."
-                accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300"
-                textOnDark
-              />
+              <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Participant? 🎓
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Participants access events via the link shared by the organizer.
+                  No separate login needed — just open the event link and sign in.
+                </p>
+              </div>
             </TabsContent>
           </Tabs>
 

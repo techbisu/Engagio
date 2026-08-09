@@ -15,6 +15,7 @@ import type { SafeUser } from "@/types"
 import { SiteHeader } from "@/components/shared/site-header"
 import { SiteFooter } from "@/components/shared/site-footer"
 import { LoginForm } from "@/components/auth/login-form"
+import { ParticipantLogin } from "@/components/auth/participant-login"
 
 import { Hero } from "@/components/landing/hero"
 import { TrustStrip } from "@/components/landing/trust-strip"
@@ -203,15 +204,9 @@ export default function Home() {
     if (!isAuthed && (view === "admin" || view === "student" || view === "platform")) {
       setView("login")
     }
-    // Quiz view: show login first if not authed; the quiz-start screen
-    // will be rendered after auth.
-    if (!isAuthed && view === "quiz") {
-      setView("login")
-    }
-    // Activity view: same login-first pattern as the quiz deep-link.
-    if (!isAuthed && view === "activity") {
-      setView("login")
-    }
+    // Quiz view: if not authed, STAY on quiz view — the participant login
+    // is rendered inline (not redirected to the org admin login).
+    // Activity view: same — show participant login inline.
     // Org dashboard/settings: require auth.
     if (!isAuthed && (view === "org-dashboard" || view === "org-settings")) {
       setView("login")
@@ -771,7 +766,8 @@ export default function Home() {
     // Not authed — fall through to login (guard already redirected).
   }
 
-  // QUIZ deep-link view: requires auth. If authed, route to participant quiz-start.
+  // QUIZ deep-link view: If authed → participant quiz-start. If not authed →
+  // show participant login inline (NOT redirected to org admin login).
   if (view === "quiz" && quizSlug) {
     if (user) {
       return (
@@ -793,7 +789,28 @@ export default function Home() {
         </StudentShell>
       )
     }
-    // Not authed — fall through to login (guard already redirected).
+    // Not authed → show participant login (with event context)
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader session={null} onNavigate={handleNavigate} onSignOut={handleSignOut} />
+        <main className="flex-1 flex items-center justify-center px-4 py-12">
+          <ParticipantLogin
+            slug={quizSlug}
+            onSuccess={async () => {
+              // After participant login, refetch user + go to quiz-start
+              const me = await fetchMe()
+              if (me) {
+                setUser(me)
+                meQuery.refetch()
+                setStudentSubView("quiz-start")
+                setView("student")
+              }
+            }}
+          />
+        </main>
+        <SiteFooter onNavigate={handleNavigate} />
+      </div>
+    )
   }
 
   // LOGIN VIEW
