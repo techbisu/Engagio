@@ -790,11 +790,28 @@ export default function Home() {
           <ParticipantLogin
             slug={quizSlug}
             onSuccess={async () => {
-              // After participant login, refetch user + go to quiz-start
+              // After participant login:
+              // 1. Fetch the user
+              // 2. Auto-register them as a PARTICIPANT in the event's org
+              // 3. Go to quiz-start
               const me = await fetchMe()
               if (me) {
                 setUser(me)
                 meQuery.refetch()
+
+                // Auto-register as participant in the org that owns this event.
+                // This adds them to the org's participant list so the org admin
+                // can see who registered. Idempotent — safe if already a member.
+                try {
+                  await fetch("/api/events/register-participant", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ quizSlug }),
+                  })
+                } catch {
+                  // Non-blocking — the quiz still works even if registration fails
+                }
+
                 setStudentSubView("quiz-start")
                 setView("student")
               }

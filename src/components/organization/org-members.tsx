@@ -137,15 +137,26 @@ export function OrgMembers({ orgId, canManage = true, hideHeader = false }: OrgM
 
   const members = React.useMemo(() => membersQuery.data?.members ?? [], [membersQuery.data])
 
+  // Filter by role (All / Staff / Participants)
+  const [roleFilter, setRoleFilter] = React.useState<"ALL" | "STAFF" | "PARTICIPANT">("ALL")
+
   const filtered = React.useMemo(() => {
-    if (!search) return members
-    const s = search.toLowerCase()
-    return members.filter(
-      (m) =>
-        m.user.email.toLowerCase().includes(s) ||
-        (m.user.name?.toLowerCase().includes(s) ?? false),
-    )
-  }, [members, search])
+    let result = members
+    if (roleFilter === "STAFF") {
+      result = result.filter((m) => m.role !== "PARTICIPANT")
+    } else if (roleFilter === "PARTICIPANT") {
+      result = result.filter((m) => m.role === "PARTICIPANT")
+    }
+    if (search) {
+      const s = search.toLowerCase()
+      result = result.filter(
+        (m) =>
+          m.user.email.toLowerCase().includes(s) ||
+          (m.user.name?.toLowerCase().includes(s) ?? false),
+      )
+    }
+    return result
+  }, [members, search, roleFilter])
 
   // ─── Invite dialog ───────────────────────────────────────────────────
   const [inviteOpen, setInviteOpen] = React.useState(false)
@@ -278,15 +289,31 @@ export function OrgMembers({ orgId, canManage = true, hideHeader = false }: OrgM
       )}
 
       {!hideHeader && (
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search by email or name…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-            aria-label="Search members"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search by email or name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+              aria-label="Search members"
+            />
+          </div>
+          <div className="flex gap-1 rounded-lg border border-border p-1">
+            <button
+              onClick={() => setRoleFilter("ALL")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${roleFilter === "ALL" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+            >All</button>
+            <button
+              onClick={() => setRoleFilter("STAFF")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${roleFilter === "STAFF" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+            >Staff</button>
+            <button
+              onClick={() => setRoleFilter("PARTICIPANT")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${roleFilter === "PARTICIPANT" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+            >Participants</button>
+          </div>
         </div>
       )}
 
