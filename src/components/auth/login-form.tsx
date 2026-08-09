@@ -64,9 +64,13 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
     }
     setSubmitting(true)
     try {
+      // Anyone using the "Organization Login" page is an organizer — not a
+      // participant. Pass asAdmin=true so they're created with role=ADMIN.
+      // Participants log in from the event page (/?quiz=SLUG) instead.
       const res = await signIn('credentials', {
         email,
         name: name || undefined,
+        asAdmin: 'true',
         redirect: false,
         callbackUrl: '/',
       })
@@ -76,7 +80,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
       }
       toast.success('Welcome to Engagio!')
       const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
-      const role = sessionRes?.user?.role || 'STUDENT'
+      const role = sessionRes?.user?.role || 'ADMIN'
       onSuccess(role)
     } catch (err) {
       toast.error('Something went wrong. Please try again.')

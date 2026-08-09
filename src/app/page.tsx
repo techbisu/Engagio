@@ -246,21 +246,20 @@ export default function Home() {
           return
         }
 
-        // 2. Quiz deep-link → participant quiz flow
-        if (quizSlug) {
+        // 2. Quiz deep-link → participant quiz flow (only for participant logins)
+        if (quizSlug && role !== "ADMIN") {
           setStudentSubView("quiz-start")
           setView("student")
           return
         }
 
-        // 3. Activity deep-link → participant activity flow
-        if (activitySlug) {
+        // 3. Activity deep-link → participant activity flow (only for participants)
+        if (activitySlug && role !== "ADMIN") {
           setView("activity")
           return
         }
 
         // 4. Check if this is the superadmin (platform admin)
-        //    Superadmin goes to the platform admin panel.
         const sessionRes = await fetch("/api/auth/session").then((r) => r.json())
         const isSuperAdmin = sessionRes?.user?.isSuperAdmin === true
         if (isSuperAdmin) {
@@ -269,28 +268,22 @@ export default function Home() {
         }
 
         // 5. Check if the user has an organization membership
+        //    Anyone logging in via the Organization Login page is an admin.
+        //    If they have an org → admin panel.
+        //    If they don't have an org → org onboarding (create one).
+        //    NEVER send org-login users to the participant dashboard.
         try {
           const orgRes = await fetch("/api/organizations")
           const orgData = await orgRes.json()
           if (orgData.organizations && orgData.organizations.length > 0) {
-            // Has org → go to admin panel (org-scoped)
             setView("admin")
-          } else if (role === "ADMIN") {
-            // Admin without org → create organization
-            setView("org-onboarding")
           } else {
-            // Participant without org → participant dashboard
-            setStudentSubView("dashboard")
-            setView("student")
+            // No org → create organization
+            setView("org-onboarding")
           }
         } catch {
-          // Org check failed → fall back based on role
-          if (role === "ADMIN") {
-            setView("admin")
-          } else {
-            setStudentSubView("dashboard")
-            setView("student")
-          }
+          // Org check failed → go to admin panel
+          setView("admin")
         }
       } else {
         meQuery.refetch()
