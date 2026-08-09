@@ -48,37 +48,39 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
-  const [tab, setTab] = React.useState<'org' | 'demo'>('org')
+  const [tab, setTab] = React.useState<'login' | 'demo'>('login')
 
-  // Org login form
-  const [orgEmail, setOrgEmail] = React.useState('')
-  const [orgPassword, setOrgPassword] = React.useState('')
-  const [orgSubmitting, setOrgSubmitting] = React.useState(false)
-
-  // Demo
+  // Email fallback (for dev/demo when Google OAuth isn't configured)
+  const [email, setEmail] = React.useState('')
+  const [name, setName] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
 
-  // ─── Org Login (email + optional password) ───────────────────────────
-  // Super admin is auto-detected: if the email matches SUPERADMIN_EMAIL env
-  // var, the user gets isSuperAdmin=true in the JWT + session, and is routed
-  // to the Platform Admin panel. No separate super admin login tab needed.
-  const handleOrgLogin = async (e: React.FormEvent) => {
+  // ─── Google Login (primary) ───────────────────────────────────────────
+  const handleGoogleLogin = () => {
+    signIn('google', { callbackUrl: '/' }).catch(() => {
+      toast.error('Google sign-in failed. Make sure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.')
+    })
+  }
+
+  // ─── Email fallback login ────────────────────────────────────────────
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!orgEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orgEmail)) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast.error('Please enter a valid email address.')
       return
     }
-    setOrgSubmitting(true)
+    setSubmitting(true)
     try {
       const res = await signIn('credentials', {
-        email: orgEmail,
-        password: orgPassword || undefined,
+        email,
+        name: name || undefined,
         asAdmin: 'true',
         redirect: false,
         callbackUrl: '/',
       })
       if (!res || res.error) {
-        toast.error('Invalid email or password.')
+        toast.error('Sign-in failed.')
         return
       }
       toast.success('Welcome to Engagio!')
@@ -88,14 +90,11 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
     } catch (err) {
       toast.error('Something went wrong.')
     } finally {
-      setOrgSubmitting(false)
+      setSubmitting(false)
     }
   }
 
-  // ─── Demo logins ──────────────────────────────────────────────────────
-  // Only 2 demo accounts (NO super admin demo — that's a separate secure login):
-  //   orgadmin    → org admin of "Demo Organization" (has a demo event + quiz)
-  //   participant → participant who can take the demo quiz
+  // ─── Demo logins (2 only — NO super admin) ──────────────────────────
   const handleDemo = async (type: 'orgadmin' | 'participant') => {
     setDemoLoading(type)
     const demoConfig = {
@@ -117,7 +116,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
       }
       toast.success(`Signed in as ${config.name}`)
       const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
-      const role = sessionRes?.user?.role || 'ADMIN'
+      const role = sessionRes?.user?.role || (config.asAdmin === 'true' ? 'ADMIN' : 'STUDENT')
       onSuccess(role)
     } catch (err) {
       toast.error('Something went wrong.')
@@ -139,38 +138,44 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as 'org' | 'demo')} className="w-full">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as 'login' | 'demo')} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="org">Organization Login</TabsTrigger>
+              <TabsTrigger value="login">Sign In</TabsTrigger>
               <TabsTrigger value="demo">Quick Demo</TabsTrigger>
             </TabsList>
 
-            {/* ─── Organization Login ─────────────────────────────────── */}
-            <TabsContent value="org" className="mt-5 space-y-4">
-              <form onSubmit={handleOrgLogin} className="space-y-3.5">
+            {/* ─── Sign In Tab ──────────────────────────────────────── */}
+            <TabsContent value="login" className="mt-5 space-y-4">
+              {/* Google — primary login method */}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogleLogin}
+              >
+                <GoogleIcon className="size-4" />
+                Continue with Google
+              </Button>
+
+              <div className="relative my-3">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or email (demo)</span></div>
+              </div>
+
+              <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="org-email">Email</Label>
-                  <Input id="org-email" type="email" placeholder="you@organization.com" value={orgEmail} onChange={(e) => setOrgEmail(e.target.value)} autoComplete="email" required disabled={orgSubmitting} />
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" placeholder="you@organization.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required disabled={submitting} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="org-pass">Password <span className="text-xs text-muted-foreground">(optional for demo)</span></Label>
-                  <Input id="org-pass" type="password" placeholder="••••••••" value={orgPassword} onChange={(e) => setOrgPassword(e.target.value)} autoComplete="current-password" disabled={orgSubmitting} />
+                  <Label htmlFor="name">Name <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                  <Input id="name" type="text" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
                 </div>
-                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95" disabled={orgSubmitting}>
-                  {orgSubmitting ? (<><Loader2 className="size-4 animate-spin" /> Signing in…</>) : (<>Continue <ArrowRight className="size-4" /></>)}
+                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95" disabled={submitting}>
+                  {submitting ? (<><Loader2 className="size-4 animate-spin" /> Signing in…</>) : (<>Continue <ArrowRight className="size-4" /></>)}
                 </Button>
               </form>
 
-              {/* Google for org login */}
-              <div className="relative my-3">
-                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or</span></div>
-              </div>
-              <Button type="button" variant="outline" className="w-full" onClick={() => signIn('google', { callbackUrl: '/' }).catch(() => toast.error('Google sign-in failed.'))}>
-                <GoogleIcon className="size-4" /> Continue with Google
-              </Button>
-
-              {/* Register org */}
               {onRegisterOrg && (
                 <button onClick={onRegisterOrg} className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400">
                   Don&apos;t have an organization? Register one →
@@ -179,18 +184,19 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
 
               <div className="rounded-lg border border-dashed border-border p-3 text-center">
                 <p className="text-xs text-muted-foreground">
-                  🎓 Participant? Use the event link shared by your organizer.
+                  🎓 Participant? Use the event link shared by your organizer.<br />
+                  🔒 Super Admin? Use <code className="font-mono">/?view=superadmin</code>
                 </p>
               </div>
             </TabsContent>
 
-            {/* ─── Quick Demo ───────────────────────────────────────── */}
+            {/* ─── Quick Demo Tab (2 only — NO super admin) ──────────── */}
             <TabsContent value="demo" className="mt-5 space-y-3">
               <DemoButton onClick={() => handleDemo('orgadmin')} loading={demoLoading === 'orgadmin'} icon={Building2} title="Organization Admin" description="Demo Medical Association — manage events & certificates." accent="from-emerald-600 to-teal-500" />
               <DemoButton onClick={() => handleDemo('participant')} loading={demoLoading === 'participant'} icon={GraduationCap} title="Participant" description="Take a quiz with anti-cheat, view results & certificates." accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300" textOnDark />
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900 dark:bg-amber-950/20">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                  🔒 Super Admin login is separate. Use <code className="font-mono">/?view=superadmin</code> for platform admin access.
+                  🔒 Super Admin has a separate secure login at <code className="font-mono">/?view=superadmin</code>
                 </p>
               </div>
             </TabsContent>
