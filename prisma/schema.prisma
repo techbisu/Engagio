@@ -17,6 +17,8 @@ model User {
   name          String?
   image         String?
   role          String   @default("STUDENT") // ADMIN | STUDENT
+  // i18n: user's preferred locale (falls back to org locale, then 'en')
+  locale        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -476,6 +478,8 @@ model Organization {
   industry      String?
   // SaaS billing (future-ready stubs)
   planId        String?
+  // Multi-currency: org's preferred billing currency (INR | USD | EUR | GBP)
+  billingCurrency String  @default("INR")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -574,12 +578,36 @@ model Plan {
   displayName     String
   // JSON: { maxEvents, maxParticipantsPerEvent, maxMembers, maxStorage, customBranding, certificates, advancedSecurity, aiProctor, customDomain }
   limits          String   @default("{}")
+  // Legacy single-price fields (kept for backward compat — prefer PlanPrice)
   priceMonthly    Int      @default(0) // in paise
   priceYearly     Int      @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
 
   subscriptions Subscription[]
+  prices        PlanPrice[]
+}
+
+// Multi-currency plan pricing. Each plan can have prices in multiple currencies.
+// Money is stored as integer minor units (paise for INR, cents for USD, etc.).
+model PlanPrice {
+  id              String   @id @default(cuid())
+  planId          String
+  // INR | USD | EUR | GBP | AUD | CAD
+  currency        String
+  // Integer minor units (e.g. 49900 = ₹499.00, 999 = $9.99)
+  monthlyAmount   Int      @default(0)
+  yearlyAmount    Int      @default(0)
+  // Optional: provider-specific price IDs for future payment integration
+  monthlyPriceId  String?
+  yearlyPriceId   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, currency])
+  @@index([currency])
 }
 
 model Subscription {

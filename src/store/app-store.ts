@@ -263,7 +263,8 @@ export function parseInitialRoute(): {
     view === "student" ||
     view === "org-onboarding" ||
     view === "org-dashboard" ||
-    view === "org-settings"
+    view === "org-settings" ||
+    view === "pricing"
   ) {
     return {
       view,
@@ -327,7 +328,8 @@ export function syncUrl(
     view === "student" ||
     view === "org-onboarding" ||
     view === "org-dashboard" ||
-    view === "org-settings"
+    view === "org-settings" ||
+    view === "pricing"
   ) {
     url.searchParams.set("view", view)
   }

@@ -25,6 +25,7 @@ interface SiteHeaderProps {
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
   { label: 'Solutions', href: '#solutions' },
+  { label: 'Pricing', href: '/?view=pricing' },
   { label: 'How it works', href: '#how-it-works' },
 ] as const
 

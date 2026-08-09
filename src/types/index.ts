@@ -15,6 +15,7 @@ export type ViewName =
   | "org-settings"
   | "accept-invitation"
   | "share"
+  | "pricing"
 
 export type AdminTab =
   | "dashboard"

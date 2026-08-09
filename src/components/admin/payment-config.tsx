@@ -4,24 +4,17 @@ import * as React from "react"
 import {
   Banknote,
   CreditCard,
-  ImageUp,
-  Loader2,
   ReceiptIndianRupee,
   Sparkles,
-  Trash2,
-  Upload,
   Wallet,
-  X,
 } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { fileToCompressedDataUrl, dataUrlSizeKb } from "@/lib/image-client"
+import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
 
 import type { EventDto, PaymentMethod } from "@/types"
 
@@ -41,7 +34,8 @@ export interface PaymentConfigValue {
   paymentInstructions: string
   upiId: string
   upiLink: string
-  qrCodeUrl: string // base64 data URL
+  qrCodeUrl: string // Cloudinary URL (or base64 data URL fallback)
+  qrCodePublicId: string | null // Cloudinary publicId for delete-on-replace
   requireTransactionRef: boolean
   requireScreenshot: boolean
 }
@@ -56,6 +50,7 @@ export interface PaymentConfigProps {
     | "upiId"
     | "upiLink"
     | "qrCodeUrl"
+    | "qrCodePublicId"
     | "requireTransactionRef"
     | "requireScreenshot"
   >
@@ -134,6 +129,10 @@ export function PaymentConfig({
         upiId: patch.upiId ?? (event.upiId ?? ""),
         upiLink: patch.upiLink ?? (event.upiLink ?? ""),
         qrCodeUrl: patch.qrCodeUrl ?? (event.qrCodeUrl ?? ""),
+        qrCodePublicId:
+          patch.qrCodePublicId !== undefined
+            ? patch.qrCodePublicId
+            : (event.qrCodePublicId ?? null),
         requireTransactionRef:
           patch.requireTransactionRef ?? (event.requireTransactionRef ?? true),
         requireScreenshot:
@@ -143,32 +142,6 @@ export function PaymentConfig({
     },
     [event, onChange],
   )
-
-  // ---- QR code upload -----------------------------------------------------
-  const [qrBusy, setQrBusy] = React.useState(false)
-  const [qrError, setQrError] = React.useState<string | null>(null)
-
-  const handleQrUpload = async (file: File | null) => {
-    if (!file) return
-    setQrBusy(true)
-    setQrError(null)
-    try {
-      // Compress to max 400x400 (square-ish QR codes are small).
-      const dataUrl = await fileToCompressedDataUrl(file, 400, 0.85)
-      emit({ qrCodeUrl: dataUrl })
-    } catch (e) {
-      setQrError("Failed to process the QR image. Try a different file.")
-    } finally {
-      setQrBusy(false)
-    }
-  }
-
-  const handleQrRemove = () => {
-    emit({ qrCodeUrl: "" })
-    setQrError(null)
-  }
-
-  const qrSizeKb = event.qrCodeUrl ? dataUrlSizeKb(event.qrCodeUrl) : 0
 
   // ---- Render ------------------------------------------------------------
   return (
@@ -345,92 +318,20 @@ export function PaymentConfig({
             </div>
           </div>
 
-          {/* QR Code upload */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">QR Code Image</Label>
-            {event.qrCodeUrl ? (
-              <div className="flex items-start gap-3">
-                <img
-                  src={event.qrCodeUrl}
-                  alt="UPI QR code preview"
-                  className="size-24 rounded-lg border border-slate-200 object-contain bg-white p-1 dark:border-slate-700"
-                />
-                <div className="flex-1 space-y-2">
-                  <Badge
-                    variant="outline"
-                    className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                  >
-                    {qrSizeKb} KB
-                  </Badge>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        document.getElementById("qr-upload-input")?.click()
-                      }
-                    >
-                      <Upload className="size-3.5" />
-                      Replace
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleQrRemove}
-                      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
-                    >
-                      <Trash2 className="size-3.5" />
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  document.getElementById("qr-upload-input")?.click()
-                }
-                disabled={qrBusy}
-                className={cn(
-                  "flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed",
-                  "border-slate-300 bg-white p-6 text-center transition-colors",
-                  "hover:border-emerald-400 hover:bg-emerald-50/50",
-                  "dark:border-slate-600 dark:bg-slate-900 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-950/20",
-                  qrBusy && "opacity-60",
-                )}
-              >
-                {qrBusy ? (
-                  <Loader2 className="size-5 animate-spin text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <ImageUp className="size-5 text-slate-400" />
-                )}
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {qrBusy ? "Processing…" : "Upload QR code image"}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  PNG / JPG — auto-compressed to 400×400.
-                </span>
-              </button>
-            )}
-            <input
-              id="qr-upload-input"
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0] ?? null
-                handleQrUpload(f)
-                // Reset so the same file can be re-selected later.
-                e.target.value = ""
-              }}
-            />
-            {qrError && (
-              <p className="text-xs text-rose-600 dark:text-rose-400">{qrError}</p>
-            )}
-          </div>
+          {/* QR Code upload (CloudinaryImageUpload handles compression,
+              progress, replace + remove, and validation) */}
+          <CloudinaryImageUpload
+            value={event.qrCodeUrl ?? ""}
+            publicId={event.qrCodePublicId ?? null}
+            onChange={(url, publicId) =>
+              emit({ qrCodeUrl: url, qrCodePublicId: publicId })
+            }
+            folder="events/qr"
+            label="QR Code Image"
+            description="PNG / JPG / WebP — auto-compressed before upload. Square image works best."
+            aspectRatio="1/1"
+            maxSize={2 * 1024 * 1024}
+          />
 
           {/* Toggles */}
           <div className="grid gap-2 sm:grid-cols-2">

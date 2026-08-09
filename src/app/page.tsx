@@ -29,6 +29,8 @@ import { CertificateSection } from "@/components/landing/certificate-section"
 import { OrganizationSection } from "@/components/landing/organization-section"
 import { TeamSection } from "@/components/landing/team-section"
 import { CtaSection } from "@/components/landing/cta-section"
+import { PricingSection } from "@/components/landing/pricing-section"
+import { Faq } from "@/components/landing/faq"
 
 import { AdminShell } from "@/components/admin/admin-shell"
 import { StudentShell } from "@/components/student/student-shell"
@@ -738,6 +740,24 @@ export default function Home() {
     )
   }
 
+  // PRICING VIEW — standalone /?view=pricing page. Renders the full
+  // PricingSection centered with the site header/footer chrome. No auth needed.
+  if (view === "pricing") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader
+          session={user ? { user } : null}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+        />
+        <main className="flex-1">
+          <PricingSection onNavigate={handleNavigate} standalone />
+        </main>
+        <SiteFooter />
+      </div>
+    )
+  }
+
   // LANDING VIEW (default)
   return (
     <div className="min-h-screen flex flex-col">
@@ -756,21 +776,38 @@ export default function Home() {
         onSignOut={handleSignOut}
       />
       <main className="flex-1">
-        <Hero
-          onNavigate={handleNavigate}
-          session={user ? { user } : null}
-        />
+        {/*
+          Section order per the marketing-page consolidation spec:
+            1. Hero
+            2. Trust Strip
+            3. Problem
+            4. Features (Product Overview)
+            5. How It Works (Event Journey)
+            6. Activities
+            7. Assessment
+            8. Certificates
+            9. (Achievement Sharing — covered by CertificateSection)
+           10. Organization / SaaS
+           11. Use Cases
+           12. Security
+           13. Pricing (DB-driven)
+           14. FAQ
+           15. Final CTA
+        */}
+        <Hero onNavigate={handleNavigate} session={user ? { user } : null} />
         <TrustStrip />
         <ProblemSection />
         <Features />
-        <ActivitiesSection />
         <HowItWorks />
-        <UseCases />
+        <ActivitiesSection />
         <AssessmentSection />
-        <SecuritySection />
         <CertificateSection />
         <OrganizationSection onNavigate={handleNavigate} />
         <TeamSection />
+        <UseCases />
+        <SecuritySection />
+        <PricingSection onNavigate={handleNavigate} />
+        <Faq />
         <CtaSection onNavigate={handleNavigate} />
       </main>
       <SiteFooter />

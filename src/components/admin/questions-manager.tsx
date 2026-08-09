@@ -66,6 +66,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
 import {
   Popover,
   PopoverContent,
@@ -292,7 +293,8 @@ interface QuestionFormState {
   negativeMarks: number
   category: string
   explanation: string
-  imageUrl: string | null // base64 data URL (compressed client-side)
+  imageUrl: string | null // Cloudinary URL (or base64 data URL fallback)
+  imageUrlPublicId: string | null // Cloudinary publicId for delete-on-replace
   difficulty: QuestionDifficulty // EASY | MEDIUM | HARD
   tags: string[] // free-form tags
 }
@@ -314,6 +316,7 @@ function emptyForm(): QuestionFormState {
     category: "",
     explanation: "",
     imageUrl: null,
+    imageUrlPublicId: null,
     difficulty: "MEDIUM",
     tags: [],
   }
@@ -342,6 +345,7 @@ function formFromQuestion(q: QuestionDto): QuestionFormState {
     category: q.category || "",
     explanation: q.explanation || "",
     imageUrl: q.imageUrl || null,
+    imageUrlPublicId: q.imageUrlPublicId || null,
     difficulty: q.difficulty || "MEDIUM",
     tags: Array.isArray(q.tags) ? [...q.tags] : [],
   }
@@ -358,6 +362,7 @@ function formToPayload(form: QuestionFormState, eventId: string) {
     category: form.category.trim() || null,
     explanation: form.explanation.trim() || null,
     imageUrl: form.imageUrl || null,
+    imageUrlPublicId: form.imageUrlPublicId || null,
     difficulty: form.difficulty,
     tags: form.tags,
   }
@@ -957,17 +962,19 @@ function QuestionForm({
         )}
       </div>
 
-      {/* Image upload */}
+      {/* Image upload — uses the shared CloudinaryImageUpload component so
+          uploads go through /api/upload (Cloudinary or base64 fallback). */}
       <div className="space-y-1.5">
-        <Label>Question Image (optional)</Label>
-        <QuestionImageUpload
-          imageUrl={form.imageUrl}
-          onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+        <CloudinaryImageUpload
+          value={form.imageUrl}
+          publicId={form.imageUrlPublicId}
+          onChange={(url, publicId) =>
+            setForm((f) => ({ ...f, imageUrl: url || null, imageUrlPublicId: publicId }))
+          }
+          folder="questions"
+          label="Question Image (optional)"
+          description="Attach a diagram, screenshot, or figure. Auto-compressed before upload (max 800×600)."
         />
-        <p className="text-xs text-muted-foreground">
-          Attach a diagram, screenshot, or figure. Max 800×600, auto-compressed
-          to a JPEG data URL.
-        </p>
       </div>
 
       {/* Type-specific fields */}

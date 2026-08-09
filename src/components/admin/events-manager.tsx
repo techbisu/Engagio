@@ -53,6 +53,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn, formatDate, truncate } from "@/lib/utils"
+import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
 
 import { api } from "./api"
 import {
@@ -84,6 +85,7 @@ interface EventFormState {
   upiId: string
   upiLink: string
   qrCodeUrl: string
+  qrCodePublicId: string | null // Cloudinary publicId for delete-on-replace
   requireTransactionRef: boolean
   requireScreenshot: boolean
 }
@@ -102,6 +104,7 @@ const emptyForm: EventFormState = {
   upiId: "",
   upiLink: "",
   qrCodeUrl: "",
+  qrCodePublicId: null,
   requireTransactionRef: true,
   requireScreenshot: true,
 }
@@ -145,6 +148,7 @@ export function EventsManager({
           upiId: payload.upiId || null,
           upiLink: payload.upiLink || null,
           qrCodeUrl: payload.qrCodeUrl || null,
+          qrCodePublicId: payload.qrCodePublicId || null,
           requireTransactionRef: payload.requireTransactionRef,
           requireScreenshot: payload.requireScreenshot,
         }),
@@ -178,6 +182,7 @@ export function EventsManager({
           upiId: payload.upiId || null,
           upiLink: payload.upiLink || null,
           qrCodeUrl: payload.qrCodeUrl || null,
+          qrCodePublicId: payload.qrCodePublicId || null,
           requireTransactionRef: payload.requireTransactionRef,
           requireScreenshot: payload.requireScreenshot,
         }),
@@ -228,6 +233,7 @@ export function EventsManager({
       upiId: ev.upiId ?? "",
       upiLink: ev.upiLink ?? "",
       qrCodeUrl: ev.qrCodeUrl ?? "",
+      qrCodePublicId: ev.qrCodePublicId ?? null,
       requireTransactionRef: ev.requireTransactionRef ?? true,
       requireScreenshot: ev.requireScreenshot ?? true,
     })
@@ -245,9 +251,8 @@ export function EventsManager({
     if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate)) {
       e.endDate = "End date must be after start date"
     }
-    if (form.image && !/^https?:\/\//.test(form.image)) {
-      e.image = "Image must be a URL"
-    }
+    // Image is either a Cloudinary URL, base64 data URL, or empty.
+    // No client-side URL validation needed — uploads go through /api/upload.
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -507,17 +512,16 @@ export function EventsManager({
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ev-image">Image URL</Label>
-              <Input
-                id="ev-image"
+              <CloudinaryImageUpload
                 value={form.image}
-                onChange={(e) => setForm({ ...form, image: e.target.value })}
-                placeholder="https://..."
-                aria-invalid={!!errors.image}
+                onChange={(url) =>
+                  setForm((prev) => ({ ...prev, image: url }))
+                }
+                folder="events"
+                label="Event Image"
+                description="Optional hero image shown on the event landing page. JPG / PNG / WebP up to 5MB."
+                aspectRatio="16/9"
               />
-              {errors.image && (
-                <p className="text-xs text-rose-500">{errors.image}</p>
-              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -579,6 +583,7 @@ export function EventsManager({
                   upiId: form.upiId,
                   upiLink: form.upiLink,
                   qrCodeUrl: form.qrCodeUrl,
+                  qrCodePublicId: form.qrCodePublicId,
                   requireTransactionRef: form.requireTransactionRef,
                   requireScreenshot: form.requireScreenshot,
                 }}
@@ -592,6 +597,7 @@ export function EventsManager({
                     upiId: value.upiId,
                     upiLink: value.upiLink,
                     qrCodeUrl: value.qrCodeUrl,
+                    qrCodePublicId: value.qrCodePublicId,
                     requireTransactionRef: value.requireTransactionRef,
                     requireScreenshot: value.requireScreenshot,
                   }))

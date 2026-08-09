@@ -209,6 +209,63 @@ async function main() {
   }
   console.log(`  ✓ Synced ${PLANS.length} plans (FREE, STARTER, PROFESSIONAL, ENTERPRISE)`)
 
+  // 6b. Seed multi-currency PlanPrice rows (INR / USD / EUR / GBP).
+  //     Money is stored as integer minor units (paise for INR, cents for USD,
+  //     etc.). FREE + ENTERPRISE have no prices — the UI shows "Free" / "Custom".
+  //     Yearly is 12 × monthly × 0.8 (20% annual discount).
+  const PLAN_PRICES: Array<{
+    plan: string
+    prices: Array<{ currency: string; monthly: number }>
+  }> = [
+    {
+      plan: "STARTER",
+      prices: [
+        { currency: "INR", monthly: 99900 }, // ₹999.00
+        { currency: "USD", monthly: 1499 }, // $14.99
+        { currency: "EUR", monthly: 1399 }, // €13.99
+        { currency: "GBP", monthly: 1199 }, // £11.99
+      ],
+    },
+    {
+      plan: "PROFESSIONAL",
+      prices: [
+        { currency: "INR", monthly: 299900 }, // ₹2,999.00
+        { currency: "USD", monthly: 4999 }, // $49.99
+        { currency: "EUR", monthly: 4499 }, // €44.99
+        { currency: "GBP", monthly: 3999 }, // £39.99
+      ],
+    },
+  ]
+
+  let pricesSynced = 0
+  for (const { plan: planName, prices } of PLAN_PRICES) {
+    const planRow = await db.plan.findUnique({ where: { name: planName } })
+    if (!planRow) continue
+    for (const { currency, monthly } of prices) {
+      // 20% off for annual billing (12 months → 9.6 months equivalent).
+      const yearly = Math.round(monthly * 12 * 0.8)
+      await db.planPrice.upsert({
+        where: { planId_currency: { planId: planRow.id, currency } },
+        create: {
+          planId: planRow.id,
+          currency,
+          monthlyAmount: monthly,
+          yearlyAmount: yearly,
+          isActive: true,
+        },
+        update: {
+          monthlyAmount: monthly,
+          yearlyAmount: yearly,
+          isActive: true,
+        },
+      })
+      pricesSynced++
+    }
+  }
+  console.log(
+    `  ✓ Synced ${pricesSynced} PlanPrice rows (STARTER + PROFESSIONAL × INR/USD/EUR/GBP)`,
+  )
+
   // 7. Assign FREE plan subscription to the Default Org
   if (!defaultOrg.planId) {
     const freePlan = await db.plan.findUnique({ where: { name: "FREE" } })

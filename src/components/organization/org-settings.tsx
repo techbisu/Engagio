@@ -15,7 +15,6 @@ import {
   Palette,
   Save,
   Settings as SettingsIcon,
-  Upload,
   Users as UsersIcon,
 } from "lucide-react"
 import { format, parseISO } from "date-fns"
@@ -50,7 +49,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { EmptyState } from "@/components/shared/empty-state"
-import { uploadImage } from "@/lib/upload-client"
+import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
 
 import {
   api,
@@ -476,6 +475,7 @@ function GeneralTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
 
 interface BrandingFormState {
   logoUrl: string | null
+  logoPublicId: string | null
   primaryColor: string
   secondaryColor: string
 }
@@ -492,12 +492,12 @@ function BrandingTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
   const org = orgQuery.data?.organization
 
   const [form, setForm] = React.useState<BrandingFormState | null>(null)
-  const [uploading, setUploading] = React.useState(false)
 
   React.useEffect(() => {
     if (!org) return
     setForm({
       logoUrl: org.logoUrl ?? null,
+      logoPublicId: org.logoPublicId ?? null,
       primaryColor: org.primaryColor || "#10b981",
       secondaryColor: org.secondaryColor || "#14b8a6",
     })
@@ -517,6 +517,7 @@ function BrandingTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
       const o = data.organization
       setForm({
         logoUrl: o.logoUrl ?? null,
+        logoPublicId: o.logoPublicId ?? null,
         primaryColor: o.primaryColor,
         secondaryColor: o.secondaryColor,
       })
@@ -530,20 +531,13 @@ function BrandingTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
     },
   })
 
-  async function handleLogoUpload(file: File) {
-    setUploading(true)
-    try {
-      const res = await uploadImage(file, "organizations")
-      // Optimistic local update; persisted on save.
-      setForm((f) => (f ? { ...f, logoUrl: res.url } : f))
+  async function handleLogoChange(url: string, publicId: string | null) {
+    // Optimistic local update; persisted on save.
+    setForm((f) => (f ? { ...f, logoUrl: url || null, logoPublicId: publicId } : f))
+    if (url) {
       toast.success("Logo uploaded", {
         description: "Click Save changes to apply it to your organization.",
       })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Upload failed"
-      toast.error("Logo upload failed", { description: msg })
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -627,52 +621,20 @@ function BrandingTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
       {/* Editor */}
       <Card className="border-slate-200 dark:border-slate-800">
         <CardContent className="space-y-5 py-6">
-          {/* Logo upload */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Logo</Label>
-            <div className="flex items-center gap-4">
-              <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                {form.logoUrl ? (
-                  <img
-                    src={form.logoUrl}
-                    alt="Logo"
-                    className="size-full object-cover"
-                  />
-                ) : (
-                  <Building2 className="size-6 text-slate-400" />
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <label
-                  className={cn(
-                    "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700",
-                    (!canEdit || uploading) && "cursor-not-allowed opacity-50",
-                  )}
-                >
-                  {uploading ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Upload className="size-4" />
-                  )}
-                  Upload logo
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                    disabled={!canEdit || uploading}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) handleLogoUpload(f)
-                      e.target.value = ""
-                    }}
-                    className="sr-only"
-                  />
-                </label>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  PNG, JPG, or SVG. Up to 1MB.
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* Logo upload (CloudinaryImageUpload handles compression,
+              progress, replace + remove, validation) */}
+          <CloudinaryImageUpload
+            value={form.logoUrl}
+            publicId={form.logoPublicId}
+            onChange={handleLogoChange}
+            folder="organizations"
+            label="Logo"
+            description="PNG, JPG, WebP, or SVG. Up to 1MB — auto-compressed before upload."
+            aspectRatio="1/1"
+            maxSize={1024 * 1024}
+            acceptedTypes={["image/png", "image/jpeg", "image/webp", "image/svg+xml"]}
+            disabled={!canEdit}
+          />
 
           {/* Color pickers */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -705,7 +667,7 @@ function BrandingTab({ orgId, canEdit }: { orgId: string; canEdit: boolean }) {
               <Button
                 type="button"
                 onClick={() => updateMutation.mutate(form)}
-                disabled={updateMutation.isPending || uploading}
+                disabled={updateMutation.isPending}
                 className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 {updateMutation.isPending ? (
