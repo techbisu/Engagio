@@ -47,7 +47,8 @@ import {
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { SignOutButton } from "@/components/shared/sign-out-button"
-import { cn, formatCurrency, formatDateTime, formatNumber } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n"
 import type { SafeUser } from "@/types"
 
 interface PlatformAdminShellProps {
