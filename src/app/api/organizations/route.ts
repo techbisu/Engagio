@@ -76,21 +76,77 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST /api/organizations — create a new organization (caller becomes OWNER). */
+/** POST /api/organizations — create a new organization.
+ * If adminName/adminEmail/adminPassword are provided (from the registration
+ * flow), creates the user + org + membership in one transaction.
+ * Otherwise, uses the currently authenticated session user. */
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id || !session.user.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
     const body = await req.json().catch(() => ({}));
-    const { name, slug, description, industry } = body || {};
+    const { name, slug, description, industry, adminName, adminEmail, adminPassword } = body || {};
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "Organization name is required" }, { status: 400 });
     }
 
-    // Resolve the final slug: provided slug (validated) or generated from name.
+    // ─── Determine the owner user ─────────────────────────────────────
+    let ownerId: string;
+    let ownerEmail: string;
+    let ownerName: string | null;
+
+    if (adminEmail && adminPassword) {
+      // Registration flow: create the admin user with a hashed password
+      const email = adminEmail.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return NextResponse.json({ error: "Invalid admin email" }, { status: 400 });
+      }
+      if (adminPassword.length < 6) {
+        return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      }
+
+      // Check if user already exists
+      const existing = await db.user.findUnique({ where: { email } });
+      if (existing) {
+        // If they already have an org membership, tell them to login instead
+        const existingMembership = await db.organizationMember.findFirst({
+          where: { userId: existing.id },
+        });
+        if (existingMembership) {
+          return NextResponse.json(
+            { error: "This email already has an organization. Please login instead." },
+            { status: 409 }
+          );
+        }
+        ownerId = existing.id;
+        ownerEmail = existing.email;
+        ownerName = existing.name;
+      } else {
+        // Create the admin user with hashed password
+        const { hashPassword } = await import("@/lib/password");
+        const passwordHash = await hashPassword(adminPassword);
+        const newUser = await db.user.create({
+          data: {
+            email,
+            name: adminName?.trim() || email.split("@")[0],
+            role: "ADMIN",
+            passwordHash,
+          },
+        });
+        ownerId = newUser.id;
+        ownerEmail = newUser.email;
+        ownerName = newUser.name;
+      }
+    } else if (session?.user?.id && session.user.email) {
+      // Using existing session (e.g., Google OAuth user creating org)
+      ownerId = session.user.id;
+      ownerEmail = session.user.email;
+      ownerName = session.user.name ?? null;
+    } else {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    // ─── Resolve the slug ─────────────────────────────────────────────
     let finalSlug: string;
     if (typeof slug === "string" && slug.trim()) {
       finalSlug = slugify(slug);
@@ -99,26 +155,22 @@ export async function POST(req: NextRequest) {
       }
       const clash = await db.organization.findUnique({ where: { slug: finalSlug } });
       if (clash) {
-        return NextResponse.json(
-          { error: "Slug is already taken" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Slug is already taken" }, { status: 400 });
       }
     } else {
       finalSlug = await generateUniqueSlug(name);
     }
 
-    // Fetch the FREE plan (assign by default to new orgs).
+    // ─── Fetch FREE plan ──────────────────────────────────────────────
     const freePlan = await db.plan.findUnique({ where: { name: "FREE" } });
 
-    // Create org + OWNER membership in a transaction.
+    // ─── Create org + OWNER membership + subscription ─────────────────
     const org = await db.$transaction(async (tx) => {
       const created = await tx.organization.create({
         data: {
           name: name.trim(),
           slug: finalSlug,
-          description:
-            typeof description === "string" ? description.trim() || null : null,
+          description: typeof description === "string" ? description.trim() || null : null,
           industry: typeof industry === "string" && industry.trim() ? industry.trim() : null,
           planId: freePlan?.id ?? null,
           status: "ACTIVE",
@@ -127,25 +179,35 @@ export async function POST(req: NextRequest) {
       await tx.organizationMember.create({
         data: {
           organizationId: created.id,
-          userId: session.user.id,
+          userId: ownerId,
           role: "OWNER",
           status: "ACTIVE",
         },
       });
+      // Create subscription
+      if (freePlan) {
+        await tx.subscription.create({
+          data: {
+            organizationId: created.id,
+            planId: freePlan.id,
+            status: "ACTIVE",
+          },
+        });
+      }
       return created;
     });
 
     // Build a TenantContext for the audit log entry.
     const ctx: TenantContext = {
-      userId: session.user.id,
-      userEmail: session.user.email,
-      userName: session.user.name ?? null,
-      userRole: (session.user as any).role,
+      userId: ownerId,
+      userEmail: ownerEmail,
+      userName: ownerName,
+      userRole: "ADMIN",
       orgId: org.id,
       orgSlug: org.slug,
       orgName: org.name,
       orgRole: "OWNER",
-      isPlatformAdmin: (session.user as any).role === "ADMIN",
+      isPlatformAdmin: false,
     };
     await auditLog(ctx, "ORGANIZATION_CREATED", "Organization", org.id, {
       name: org.name,

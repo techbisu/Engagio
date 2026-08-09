@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   ArrowLeft,
+  ArrowRight,
   Building2,
   Check,
   Info,
@@ -70,6 +71,12 @@ function slugify(name: string): string {
 
 export function OrgOnboarding({ onCreated, onCancel }: OrgOnboardingProps) {
   const queryClient = useQueryClient()
+  const [step, setStep] = React.useState<1 | 2>(1)
+  // Step 1: Admin account
+  const [adminName, setAdminName] = React.useState("")
+  const [adminEmail, setAdminEmail] = React.useState("")
+  const [adminPassword, setAdminPassword] = React.useState("")
+  // Step 2: Organization
   const [name, setName] = React.useState("")
   const [slug, setSlug] = React.useState("")
   const [slugTouched, setSlugTouched] = React.useState(false)
@@ -84,24 +91,34 @@ export function OrgOnboarding({ onCreated, onCancel }: OrgOnboardingProps) {
   }, [name, slugTouched])
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      api<CreateOrgResponse>("/api/organizations", {
+    mutationFn: async () => {
+      const data = await api<CreateOrgResponse>("/api/organizations", {
         method: "POST",
         body: JSON.stringify({
           name: name.trim(),
           slug: slug.trim() || undefined,
           description: description.trim() || undefined,
           industry: industry || undefined,
+          adminName: adminName.trim(),
+          adminEmail: adminEmail.trim().toLowerCase(),
+          adminPassword: adminPassword,
         }),
-      }),
+      })
+      // After creating the org + admin account, sign in with the new credentials
+      const { signIn } = await import("next-auth/react")
+      await signIn("credentials", {
+        email: adminEmail.trim().toLowerCase(),
+        password: adminPassword,
+        asAdmin: "true",
+        redirect: false,
+      })
+      return data
+    },
     onSuccess: (data) => {
-      // Persist the new org as the active org so all subsequent org-scoped
-      // queries target it immediately.
       setOrgSlug(data.organization.slug)
-      // Invalidate the orgs list so the switcher reflects the new membership.
       queryClient.invalidateQueries({ queryKey: ["organizations"] })
       queryClient.invalidateQueries({ queryKey: ["organizations", "current"] })
-      toast.success("Organization created", {
+      toast.success("Organization created!", {
         description: `${data.organization.name} is ready. You're the owner.`,
       })
       onCreated(data.organization.id)
@@ -112,15 +129,23 @@ export function OrgOnboarding({ onCreated, onCancel }: OrgOnboardingProps) {
     },
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) {
-      toast.error("Organization name is required")
-      return
+    if (!adminName.trim()) { toast.error("Your name is required"); return }
+    if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+      toast.error("Please enter a valid email"); return
     }
+    if (!adminPassword || adminPassword.length < 6) {
+      toast.error("Password must be at least 6 characters"); return
+    }
+    setStep(2)
+  }
+
+  const handleStep2Submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) { toast.error("Organization name is required"); return }
     if (slug && !/^[a-z0-9-]+$/.test(slug)) {
-      toast.error("Slug can only contain lowercase letters, numbers, and hyphens")
-      return
+      toast.error("Slug can only contain lowercase letters, numbers, and hyphens"); return
     }
     createMutation.mutate()
   }
@@ -181,133 +206,71 @@ export function OrgOnboarding({ onCreated, onCancel }: OrgOnboardingProps) {
 
             <CardHeader className="pt-6">
               <CardTitle className="text-base text-slate-900 dark:text-slate-50">
-                Organization details
+                {step === 1 ? "Step 1: Your Admin Account" : "Step 2: Organization Details"}
               </CardTitle>
               <CardDescription>
-                You can change everything later in organization settings.
+                {step === 1
+                  ? "Create your organization admin account."
+                  : "Tell us about your organization. You can change everything later."}
               </CardDescription>
             </CardHeader>
 
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Name */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="org-name" className="text-sm font-medium">
-                    Organization name <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    id="org-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Acme Learning Academy"
-                    maxLength={100}
-                    required
-                    autoFocus
-                  />
-                </div>
-
-                {/* Slug */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="org-slug" className="text-sm font-medium">
-                    Slug <span className="text-slate-400 font-normal">(optional)</span>
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                        engagio.app/
-                      </span>
-                      <Input
-                        id="org-slug"
-                        value={slug}
-                        onChange={(e) => {
-                          setSlugTouched(true)
-                          setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
-                        }}
-                        placeholder="acme-learning"
-                        maxLength={40}
-                        className="pl-[88px]"
-                      />
-                    </div>
-                    {slug && (
-                      <span className="hidden items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 sm:flex">
-                        <Check className="size-3.5" /> looks good
-                      </span>
-                    )}
+              {step === 1 ? (
+                <form onSubmit={handleStep1Submit} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="admin-name" className="text-sm font-medium">Your Name <span className="text-rose-500">*</span></Label>
+                    <Input id="admin-name" value={adminName} onChange={(e) => setAdminName(e.target.value)} placeholder="John Doe" maxLength={100} required autoFocus />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Auto-generated from your name. Used in URLs and deep links.
-                  </p>
-                </div>
-
-                {/* Description */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="org-description"
-                    className="text-sm font-medium"
-                  >
-                    Description <span className="text-slate-400 font-normal">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="org-description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What does your organization do?"
-                    rows={3}
-                    maxLength={500}
-                  />
-                </div>
-
-                {/* Industry */}
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Industry</Label>
-                  <Select value={industry} onValueChange={setIndustry}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select your industry" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INDUSTRIES.map((ind) => (
-                        <SelectItem key={ind} value={ind}>
-                          {ind}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="flex items-start gap-1 text-xs text-slate-500 dark:text-slate-400">
-                    <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
-                    Helps us tailor templates and analytics to your use case.
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onCancel}
-                    disabled={isSubmitting}
-                    className="border-slate-200 dark:border-slate-800"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || !name.trim()}
-                    className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/20 hover:from-emerald-700 hover:to-teal-700"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Creating…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="size-4" />
-                        Create Organization
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="admin-email" className="text-sm font-medium">Email <span className="text-rose-500">*</span></Label>
+                    <Input id="admin-email" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="john@organization.com" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="admin-pass" className="text-sm font-medium">Password <span className="text-rose-500">*</span></Label>
+                    <Input id="admin-pass" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Min 6 characters" required />
+                    <p className="text-xs text-slate-500">You'll use this to log in to your organization dashboard.</p>
+                  </div>
+                  <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+                    <Button type="submit" className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">Continue <ArrowRight className="size-4" /></Button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleStep2Submit} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="org-name" className="text-sm font-medium">Organization name <span className="text-rose-500">*</span></Label>
+                    <Input id="org-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Learning Academy" maxLength={100} required autoFocus />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="org-slug" className="text-sm font-medium">Slug <span className="text-slate-400 font-normal">(optional)</span></Label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">engagio.app/</span>
+                        <Input id="org-slug" value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")) }} placeholder="acme-learning" maxLength={40} className="pl-[88px]" />
+                      </div>
+                      {slug && (<span className="hidden items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 sm:flex"><Check className="size-3.5" /> looks good</span>)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="org-description" className="text-sm font-medium">Description <span className="text-slate-400 font-normal">(optional)</span></Label>
+                    <Textarea id="org-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does your organization do?" rows={3} maxLength={500} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Industry</Label>
+                    <Select value={industry} onValueChange={setIndustry}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select your industry" /></SelectTrigger>
+                      <SelectContent>{INDUSTRIES.map((ind) => (<SelectItem key={ind} value={ind}>{ind}</SelectItem>))}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="outline" onClick={() => setStep(1)} disabled={isSubmitting}>Back</Button>
+                    <Button type="submit" disabled={isSubmitting || !name.trim()} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/20 hover:from-emerald-700 hover:to-teal-700">
+                      {isSubmitting ? (<><Loader2 className="size-4 animate-spin" /> Creating…</>) : (<><Sparkles className="size-4" /> Create Organization</>)}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </CardContent>
           </Card>
 

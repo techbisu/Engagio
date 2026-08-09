@@ -9,9 +9,10 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
-  GraduationCap,
-  Sparkles,
   Building2,
+  Sparkles,
+  Lock,
+  UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,7 +38,6 @@ interface LoginFormProps {
   onRegisterOrg?: () => void
 }
 
-/** Official Google "G" logo (multi-color) — used on the Continue with Google button. */
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
@@ -50,32 +50,40 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
-  const [tab, setTab] = React.useState<'signin' | 'demo'>('signin')
-  const [email, setEmail] = React.useState('')
-  const [name, setName] = React.useState('')
-  const [submitting, setSubmitting] = React.useState(false)
+  const [tab, setTab] = React.useState<'org' | 'superadmin' | 'demo'>('org')
+
+  // Org login form
+  const [orgEmail, setOrgEmail] = React.useState('')
+  const [orgPassword, setOrgPassword] = React.useState('')
+  const [orgSubmitting, setOrgSubmitting] = React.useState(false)
+
+  // Super admin login
+  const [saEmail, setSaEmail] = React.useState('')
+  const [saPassword, setSaPassword] = React.useState('')
+  const [saSubmitting, setSaSubmitting] = React.useState(false)
+
+  // Demo
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  // ─── Org Login (email + password) ────────────────────────────────────
+  const handleOrgLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!orgEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orgEmail)) {
       toast.error('Please enter a valid email address.')
       return
     }
-    setSubmitting(true)
+    setOrgSubmitting(true)
     try {
-      // Anyone using the "Organization Login" page is an organizer — not a
-      // participant. Pass asAdmin=true so they're created with role=ADMIN.
-      // Participants log in from the event page (/?quiz=SLUG) instead.
       const res = await signIn('credentials', {
-        email,
-        name: name || undefined,
+        email: orgEmail,
+        password: orgPassword || undefined,
+        name: undefined,
         asAdmin: 'true',
         redirect: false,
         callbackUrl: '/',
       })
       if (!res || res.error) {
-        toast.error('Sign-in failed. Please try again.')
+        toast.error('Invalid email or password.')
         return
       }
       toast.success('Welcome to Engagio!')
@@ -83,16 +91,48 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
       const role = sessionRes?.user?.role || 'ADMIN'
       onSuccess(role)
     } catch (err) {
-      toast.error('Something went wrong. Please try again.')
+      toast.error('Something went wrong.')
     } finally {
-      setSubmitting(false)
+      setOrgSubmitting(false)
+    }
+  }
+
+  // ─── Super Admin Login (email + password, strict) ────────────────────
+  const handleSuperAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!saEmail || !saPassword) {
+      toast.error('Email and password are required.')
+      return
+    }
+    setSaSubmitting(true)
+    try {
+      const res = await signIn('credentials', {
+        email: saEmail,
+        password: saPassword,
+        asAdmin: 'true',
+        redirect: false,
+        callbackUrl: '/',
+      })
+      if (!res || res.error) {
+        toast.error('Invalid super admin credentials.')
+        return
+      }
+      toast.success('Welcome, Super Admin!')
+      const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
+      const isSuper = sessionRes?.user?.isSuperAdmin === true
+      if (!isSuper) {
+        toast.error('This account is not a super admin.')
+        return
+      }
+      onSuccess('ADMIN')
+    } catch (err) {
+      toast.error('Something went wrong.')
+    } finally {
+      setSaSubmitting(false)
     }
   }
 
   // ─── Demo logins ──────────────────────────────────────────────────────
-  // 2 admin demo accounts (participants login from event pages only):
-  //   superadmin → platform admin (manages all orgs, plans, billing)
-  //   orgadmin   → org admin of "Demo Medical Association" (has a demo event + quiz)
   const handleDemo = async (type: 'superadmin' | 'orgadmin') => {
     setDemoLoading(type)
     const demoConfig = {
@@ -109,185 +149,121 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
         callbackUrl: '/',
       })
       if (!res || res.error) {
-        toast.error('Demo sign-in failed. Please try again.')
+        toast.error('Demo sign-in failed.')
         return
       }
       toast.success(`Signed in as ${config.name}`)
       const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
-      const role = sessionRes?.user?.role || (config.asAdmin === 'true' ? 'ADMIN' : 'STUDENT')
+      const role = sessionRes?.user?.role || 'ADMIN'
       onSuccess(role)
     } catch (err) {
-      toast.error('Something went wrong. Please try again.')
+      toast.error('Something went wrong.')
     } finally {
       setDemoLoading(null)
     }
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="w-full"
-    >
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
       <Card className="w-full border-border/60 shadow-xl shadow-emerald-900/5">
         <CardHeader className="space-y-3 pb-2">
           <div className="flex justify-center">
             <BrandLogo size="md" />
           </div>
-          <CardTitle className="text-center text-2xl">
-            {tab === 'signin' ? 'Organization Login' : 'Quick Demo'}
-          </CardTitle>
+          <CardTitle className="text-center text-2xl">Welcome to Engagio</CardTitle>
           <CardDescription className="text-center">
-            {tab === 'signin'
-              ? 'Sign in to manage your events, activities, and assessments.'
-              : 'Try Engagio as an admin — participants access via event links.'}
+            Sign in to manage your events, activities, and assessments.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs
-            value={tab}
-            onValueChange={(v) => setTab(v as 'signin' | 'demo')}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="demo">Quick Demo</TabsTrigger>
+          <Tabs value={tab} onValueChange={(v) => setTab(v as 'org' | 'superadmin' | 'demo')} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="org">Organization</TabsTrigger>
+              <TabsTrigger value="superadmin">Super Admin</TabsTrigger>
+              <TabsTrigger value="demo">Demo</TabsTrigger>
             </TabsList>
 
-            {/* ─── Sign In Tab ─────────────────────────────────────────── */}
-            <TabsContent value="signin" className="mt-5 space-y-4">
-              <form onSubmit={handleSignIn} className="space-y-3.5">
+            {/* ─── Organization Login ─────────────────────────────────── */}
+            <TabsContent value="org" className="mt-5 space-y-4">
+              <form onSubmit={handleOrgLogin} className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">Name (optional)</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Ada Lovelace"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                    disabled={submitting}
-                  />
+                  <Label htmlFor="org-email">Email</Label>
+                  <Input id="org-email" type="email" placeholder="you@organization.com" value={orgEmail} onChange={(e) => setOrgEmail(e.target.value)} autoComplete="email" required disabled={orgSubmitting} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    required
-                    disabled={submitting}
-                  />
+                  <Label htmlFor="org-pass">Password <span className="text-xs text-muted-foreground">(optional for demo)</span></Label>
+                  <Input id="org-pass" type="password" placeholder="••••••••" value={orgPassword} onChange={(e) => setOrgPassword(e.target.value)} autoComplete="current-password" disabled={orgSubmitting} />
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Signing in…
-                    </>
-                  ) : (
-                    <>
-                      Continue
-                      <ArrowRight className="size-4" />
-                    </>
-                  )}
+                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95" disabled={orgSubmitting}>
+                  {orgSubmitting ? (<><Loader2 className="size-4 animate-spin" /> Signing in…</>) : (<>Continue <ArrowRight className="size-4" /></>)}
                 </Button>
               </form>
 
-              {/* Register Organization */}
+              {/* Google for org login */}
+              <div className="relative my-3">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or</span></div>
+              </div>
+              <Button type="button" variant="outline" className="w-full" onClick={() => signIn('google', { callbackUrl: '/' }).catch(() => toast.error('Google sign-in failed.'))}>
+                <GoogleIcon className="size-4" /> Continue with Google
+              </Button>
+
+              {/* Register org */}
               {onRegisterOrg && (
-                <button
-                  onClick={onRegisterOrg}
-                  className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400"
-                >
+                <button onClick={onRegisterOrg} className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400">
                   Don&apos;t have an organization? Register one →
                 </button>
               )}
+
+              <div className="rounded-lg border border-dashed border-border p-3 text-center">
+                <p className="text-xs text-muted-foreground">
+                  🎓 Participant? Use the event link shared by your organizer.
+                </p>
+              </div>
             </TabsContent>
 
-            {/* ─── Quick Demo Tab ──────────────────────────────────────── */}
+            {/* ─── Super Admin Login ────────────────────────────────── */}
+            <TabsContent value="superadmin" className="mt-5 space-y-4">
+              <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/20">
+                <ShieldCheck className="size-5 shrink-0 text-amber-600" />
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Platform-level admin. Manages all organizations, plans, and billing.
+                </p>
+              </div>
+              <form onSubmit={handleSuperAdminLogin} className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="sa-email">Super Admin Email</Label>
+                  <Input id="sa-email" type="email" placeholder="superadmin@engagio.app" value={saEmail} onChange={(e) => setSaEmail(e.target.value)} autoComplete="email" required disabled={saSubmitting} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sa-pass">Password</Label>
+                  <Input id="sa-pass" type="password" placeholder="••••••••" value={saPassword} onChange={(e) => setSaPassword(e.target.value)} autoComplete="current-password" required disabled={saSubmitting} />
+                </div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-amber-600 to-orange-500 text-white hover:from-amber-600/95 hover:to-orange-500/95" disabled={saSubmitting}>
+                  {saSubmitting ? (<><Loader2 className="size-4 animate-spin" /> Authenticating…</>) : (<><Lock className="size-4" /> Super Admin Login</>)}
+                </Button>
+              </form>
+            </TabsContent>
+
+            {/* ─── Quick Demo ───────────────────────────────────────── */}
             <TabsContent value="demo" className="mt-5 space-y-3">
-              <DemoButton
-                onClick={() => handleDemo('superadmin')}
-                loading={demoLoading === 'superadmin'}
-                icon={ShieldCheck}
-                title="Super Admin"
-                description="Platform admin — manage all orgs, plans & billing."
-                accent="from-amber-600 to-orange-500"
-              />
-              <DemoButton
-                onClick={() => handleDemo('orgadmin')}
-                loading={demoLoading === 'orgadmin'}
-                icon={Building2}
-                title="Organization Admin"
-                description="Demo Medical Association — manage events, activities & certificates."
-                accent="from-emerald-600 to-teal-500"
-              />
+              <DemoButton onClick={() => handleDemo('superadmin')} loading={demoLoading === 'superadmin'} icon={ShieldCheck} title="Super Admin" description="Platform admin — manage all orgs, plans & billing." accent="from-amber-600 to-orange-500" />
+              <DemoButton onClick={() => handleDemo('orgadmin')} loading={demoLoading === 'orgadmin'} icon={Building2} title="Organization Admin" description="Demo Medical Association — manage events & certificates." accent="from-emerald-600 to-teal-500" />
               <div className="rounded-lg border border-dashed border-border p-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Participant? 🎓
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Participants access events via the link shared by the organizer.
-                  No separate login needed — just open the event link and sign in.
-                </p>
+                <p className="text-sm text-muted-foreground">Participant? 🎓</p>
+                <p className="mt-1 text-xs text-muted-foreground">Participants access events via the link shared by the organizer.</p>
               </div>
             </TabsContent>
           </Tabs>
-
-          {/* Google OAuth — always visible */}
-          <>
-            <div className="relative my-5">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  or
-                </span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() =>
-                signIn('google', { callbackUrl: '/' }).catch(() => {
-                  toast.error('Google sign-in failed.')
-                })
-              }
-            >
-              <GoogleIcon className="size-4" />
-              Continue with Google
-            </Button>
-            <p className="text-center text-[11px] text-muted-foreground">
-              Public users can sign in with Google — no pre-created account needed.
-            </p>
-          </>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
           <p className="text-center text-xs text-muted-foreground">
             By continuing you agree to our{' '}
-            <a href="#" className="underline hover:text-foreground" onClick={(e) => { e.preventDefault(); window.location.href = '/?view=terms' }}>
-              Terms
-            </a>{' '}
-            &{' '}
-            <a href="#" className="underline hover:text-foreground" onClick={(e) => { e.preventDefault(); window.location.href = '/?view=privacy' }}>
-              Privacy
-            </a>
-            .
+            <a href="/?view=terms" className="underline hover:text-foreground">Terms</a> &{' '}
+            <a href="/?view=privacy" className="underline hover:text-foreground">Privacy</a>.
           </p>
           <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-400">
-            <Sparkles className="size-3" />
-            Start free. No payment required.
+            <Sparkles className="size-3" /> Start free. No payment required.
           </div>
         </CardFooter>
       </Card>
@@ -295,42 +271,19 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   )
 }
 
-// ─── Demo Button ─────────────────────────────────────────────────────────────
-
 function DemoButton({
-  onClick,
-  loading,
-  icon: Icon,
-  title,
-  description,
-  accent,
-  textOnDark = false,
+  onClick, loading, icon: Icon, title, description, accent, textOnDark = false,
 }: {
-  onClick: () => void
-  loading: boolean
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  description: string
-  accent: string
-  textOnDark?: boolean
+  onClick: () => void; loading: boolean; icon: React.ComponentType<{ className?: string }>; title: string; description: string; accent: string; textOnDark?: boolean
 }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className={`group relative flex w-full items-center gap-3 rounded-xl border border-border bg-background p-4 text-left transition-all hover:border-transparent hover:shadow-md disabled:opacity-60 ${
-        textOnDark ? 'text-white' : 'text-foreground'
-      }`}
-    >
-      <div
-        className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accent} text-white shadow-sm`}
-      >
+    <button onClick={onClick} disabled={loading}
+      className={`group relative flex w-full items-center gap-3 rounded-xl border border-border bg-background p-4 text-left transition-all hover:border-transparent hover:shadow-md disabled:opacity-60 ${textOnDark ? 'text-white' : 'text-foreground'}`}>
+      <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accent} text-white shadow-sm`}>
         {loading ? <Loader2 className="size-5 animate-spin" /> : <Icon className="size-5" />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold ${textOnDark ? 'text-white' : 'text-foreground'}`}>
-          {title}
-        </p>
+        <p className={`text-sm font-semibold ${textOnDark ? 'text-white' : 'text-foreground'}`}>{title}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
