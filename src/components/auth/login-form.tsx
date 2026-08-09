@@ -7,12 +7,9 @@ import { toast } from 'sonner'
 import {
   ArrowRight,
   Loader2,
-  Mail,
   ShieldCheck,
   Building2,
   Sparkles,
-  Lock,
-  UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,22 +47,20 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
-  const [tab, setTab] = React.useState<'org' | 'superadmin' | 'demo'>('org')
+  const [tab, setTab] = React.useState<'org' | 'demo'>('org')
 
   // Org login form
   const [orgEmail, setOrgEmail] = React.useState('')
   const [orgPassword, setOrgPassword] = React.useState('')
   const [orgSubmitting, setOrgSubmitting] = React.useState(false)
 
-  // Super admin login
-  const [saEmail, setSaEmail] = React.useState('')
-  const [saPassword, setSaPassword] = React.useState('')
-  const [saSubmitting, setSaSubmitting] = React.useState(false)
-
   // Demo
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
 
-  // ─── Org Login (email + password) ────────────────────────────────────
+  // ─── Org Login (email + optional password) ───────────────────────────
+  // Super admin is auto-detected: if the email matches SUPERADMIN_EMAIL env
+  // var, the user gets isSuperAdmin=true in the JWT + session, and is routed
+  // to the Platform Admin panel. No separate super admin login tab needed.
   const handleOrgLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!orgEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orgEmail)) {
@@ -77,7 +72,6 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
       const res = await signIn('credentials', {
         email: orgEmail,
         password: orgPassword || undefined,
-        name: undefined,
         asAdmin: 'true',
         redirect: false,
         callbackUrl: '/',
@@ -94,41 +88,6 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
       toast.error('Something went wrong.')
     } finally {
       setOrgSubmitting(false)
-    }
-  }
-
-  // ─── Super Admin Login (email + password, strict) ────────────────────
-  const handleSuperAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!saEmail || !saPassword) {
-      toast.error('Email and password are required.')
-      return
-    }
-    setSaSubmitting(true)
-    try {
-      const res = await signIn('credentials', {
-        email: saEmail,
-        password: saPassword,
-        asAdmin: 'true',
-        redirect: false,
-        callbackUrl: '/',
-      })
-      if (!res || res.error) {
-        toast.error('Invalid super admin credentials.')
-        return
-      }
-      toast.success('Welcome, Super Admin!')
-      const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
-      const isSuper = sessionRes?.user?.isSuperAdmin === true
-      if (!isSuper) {
-        toast.error('This account is not a super admin.')
-        return
-      }
-      onSuccess('ADMIN')
-    } catch (err) {
-      toast.error('Something went wrong.')
-    } finally {
-      setSaSubmitting(false)
     }
   }
 
@@ -176,11 +135,10 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as 'org' | 'superadmin' | 'demo')} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="org">Organization</TabsTrigger>
-              <TabsTrigger value="superadmin">Super Admin</TabsTrigger>
-              <TabsTrigger value="demo">Demo</TabsTrigger>
+          <Tabs value={tab} onValueChange={(v) => setTab(v as 'org' | 'demo')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="org">Organization Login</TabsTrigger>
+              <TabsTrigger value="demo">Quick Demo</TabsTrigger>
             </TabsList>
 
             {/* ─── Organization Login ─────────────────────────────────── */}
@@ -220,29 +178,6 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
                   🎓 Participant? Use the event link shared by your organizer.
                 </p>
               </div>
-            </TabsContent>
-
-            {/* ─── Super Admin Login ────────────────────────────────── */}
-            <TabsContent value="superadmin" className="mt-5 space-y-4">
-              <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/20">
-                <ShieldCheck className="size-5 shrink-0 text-amber-600" />
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                  Platform-level admin. Manages all organizations, plans, and billing.
-                </p>
-              </div>
-              <form onSubmit={handleSuperAdminLogin} className="space-y-3.5">
-                <div className="space-y-1.5">
-                  <Label htmlFor="sa-email">Super Admin Email</Label>
-                  <Input id="sa-email" type="email" placeholder="superadmin@engagio.app" value={saEmail} onChange={(e) => setSaEmail(e.target.value)} autoComplete="email" required disabled={saSubmitting} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sa-pass">Password</Label>
-                  <Input id="sa-pass" type="password" placeholder="••••••••" value={saPassword} onChange={(e) => setSaPassword(e.target.value)} autoComplete="current-password" required disabled={saSubmitting} />
-                </div>
-                <Button type="submit" className="w-full bg-gradient-to-r from-amber-600 to-orange-500 text-white hover:from-amber-600/95 hover:to-orange-500/95" disabled={saSubmitting}>
-                  {saSubmitting ? (<><Loader2 className="size-4 animate-spin" /> Authenticating…</>) : (<><Lock className="size-4" /> Super Admin Login</>)}
-                </Button>
-              </form>
             </TabsContent>
 
             {/* ─── Quick Demo ───────────────────────────────────────── */}
