@@ -484,7 +484,33 @@ model Organization {
   auditLogs     AuditLog[]
   events        Event[]
   questions     Question[]
+  domains       OrganizationDomain[]
 
+  @@index([status])
+}
+
+// Custom + subdomain management for an organization.
+// Subdomains ({slug}.engagio.com) are auto-created. Custom domains
+// (events.abcmedical.org) require DNS verification + a paid plan.
+model OrganizationDomain {
+  id              String   @id @default(cuid())
+  organizationId  String
+  domain          String   @unique // e.g. "abcmedical.engagio.com" or "events.abcmedical.org"
+  // SUBDOMAIN | CUSTOM_DOMAIN
+  type            String   @default("SUBDOMAIN")
+  isPrimary       Boolean  @default(false)
+  // PENDING | VERIFYING | VERIFIED | ACTIVE | FAILED | DISABLED
+  status          String   @default("PENDING")
+  // For custom domains: DNS verification token + records
+  verificationToken String?
+  verifiedAt      DateTime?
+  lastCheckedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
   @@index([status])
 }
 

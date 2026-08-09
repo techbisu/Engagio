@@ -57,6 +57,33 @@ import {
 } from "@/components/organization/api"
 import { OrgDashboardShell } from "@/components/organization/org-dashboard-shell"
 
+import {
+  buildOrganizationJsonLd,
+  buildWebSiteJsonLd,
+  publicOrigin,
+} from "@/lib/seo"
+
+// ---------------------------------------------------------------------------
+// SEO structured data — Organization + WebSite schema for the Engagio
+// platform. Emitted as JSON-LD <script> tags on the landing view so search
+// engines understand the product / brand. Built once at module load.
+// ---------------------------------------------------------------------------
+const ENGAGIO_ORIGIN = publicOrigin()
+const LANDING_ORG_JSON_LD = buildOrganizationJsonLd({
+  name: "Engagio",
+  description:
+    "Interactive event & learning platform for hosting engaging events, workshops, conferences, training programs, and assessments — with registration, live activities, quizzes, results, and certificates.",
+  url: ENGAGIO_ORIGIN,
+  logo: `${ENGAGIO_ORIGIN}/logo.svg`,
+  sameAs: [],
+})
+const LANDING_WEBSITE_JSON_LD = buildWebSiteJsonLd({
+  name: "Engagio",
+  url: ENGAGIO_ORIGIN,
+  description:
+    "Create engaging events, workshops, conferences, training programs, and assessments — with registration, live activities, quizzes, results, and certificates.",
+})
+
 /**
  * Helper: GET /api/me → returns { id, email, name, image, role } or null.
  * Used as the source of truth for the current user on the client.
@@ -714,6 +741,15 @@ export default function Home() {
   // LANDING VIEW (default)
   return (
     <div className="min-h-screen flex flex-col">
+      {/* SEO: Organization + WebSite structured data for search engines. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(LANDING_ORG_JSON_LD) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(LANDING_WEBSITE_JSON_LD) }}
+      />
       <SiteHeader
         session={user ? { user } : null}
         onNavigate={handleNavigate}

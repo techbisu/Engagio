@@ -111,6 +111,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No organization context" }, { status: 403 });
     }
     ctx = ctxResult;
+
+    // ── Usage limit enforcement (server-side) ──
+    const { checkUsageLimit } = await import("@/lib/usage");
+    const usageCheck = await checkUsageLimit(ctx, "events");
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        { error: usageCheck.reason, code: "USAGE_LIMIT_EXCEEDED" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,

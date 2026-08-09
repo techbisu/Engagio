@@ -8,6 +8,8 @@ import {
   Building2,
   Check,
   ClipboardList,
+  CreditCard,
+  Globe,
   History,
   Loader2,
   Palette,
@@ -56,6 +58,8 @@ import {
   type OrganizationDto,
 } from "./api"
 import { OrgMembers } from "./org-members"
+import { DomainManager } from "./domain-manager"
+import { BillingDashboard } from "./billing-dashboard"
 
 interface OrgSettingsProps {
   orgId: string
@@ -64,7 +68,13 @@ interface OrgSettingsProps {
   /** Hide the page header (when embedded in another shell). */
   hideHeader?: boolean
   /** Initial tab. */
-  initialTab?: "general" | "branding" | "members" | "audit"
+  initialTab?:
+    | "general"
+    | "branding"
+    | "members"
+    | "domains"
+    | "billing"
+    | "audit"
   onBack?: () => void
 }
 
@@ -107,6 +117,14 @@ const LOCALES = [
   { value: "ja", label: "Japanese" },
 ] as const
 
+type SettingsTab =
+  | "general"
+  | "branding"
+  | "members"
+  | "domains"
+  | "billing"
+  | "audit"
+
 export function OrgSettings({
   orgId,
   canEdit = true,
@@ -114,7 +132,17 @@ export function OrgSettings({
   initialTab = "general",
   onBack,
 }: OrgSettingsProps) {
-  const [tab, setTab] = React.useState<"general" | "branding" | "members" | "audit">(initialTab)
+  const [tab, setTab] = React.useState<SettingsTab>(initialTab)
+
+  // The current org's slug — passed to DomainManager for the subdomain preview.
+  // We pull it from the org detail query (already cached on the client).
+  const orgDetailQuery = useQuery<OrganizationDto>({
+    queryKey: ["organizations", orgId],
+    queryFn: () => api<OrganizationDto>(`/api/organizations/${orgId}`),
+    retry: 1,
+    staleTime: 60_000,
+  })
+  const orgSlug = orgDetailQuery.data?.slug
 
   return (
     <div className="space-y-5">
@@ -137,8 +165,8 @@ export function OrgSettings({
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:flex sm:w-auto">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="w-full">
+        <TabsList className="grid h-auto w-full grid-cols-3 sm:flex sm:h-9 sm:w-auto sm:flex-wrap">
           <TabsTrigger value="general" className="gap-1.5">
             <SettingsIcon className="size-3.5" />
             General
@@ -150,6 +178,14 @@ export function OrgSettings({
           <TabsTrigger value="members" className="gap-1.5">
             <UsersIcon className="size-3.5" />
             Members
+          </TabsTrigger>
+          <TabsTrigger value="domains" className="gap-1.5">
+            <Globe className="size-3.5" />
+            Domains
+          </TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1.5">
+            <CreditCard className="size-3.5" />
+            Billing
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-1.5">
             <History className="size-3.5" />
@@ -167,6 +203,19 @@ export function OrgSettings({
 
         <TabsContent value="members" className="mt-5">
           <OrgMembers orgId={orgId} canManage={canEdit} hideHeader />
+        </TabsContent>
+
+        <TabsContent value="domains" className="mt-5">
+          <DomainManager
+            orgId={orgId}
+            orgSlug={orgSlug}
+            hideHeader
+            onViewPlans={() => setTab("billing")}
+          />
+        </TabsContent>
+
+        <TabsContent value="billing" className="mt-5">
+          <BillingDashboard orgId={orgId} hideHeader />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-5">

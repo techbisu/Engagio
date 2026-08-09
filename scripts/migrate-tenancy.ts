@@ -92,76 +92,122 @@ async function main() {
     console.log("  ✓ Questions: all already have organizationId")
   }
 
-  // 6. Seed default plans (future-ready stubs)
-  const existingPlans = await db.plan.count()
-  if (existingPlans === 0) {
-    await db.plan.createMany({
-      data: [
-        {
-          name: "FREE",
-          displayName: "Free",
-          limits: JSON.stringify({
-            maxEvents: 3,
-            maxParticipantsPerEvent: 100,
-            maxMembers: 3,
-            customBranding: false,
-            certificates: true,
-            aiProctor: false,
-          }),
-          priceMonthly: 0,
-          priceYearly: 0,
-        },
-        {
-          name: "STARTER",
-          displayName: "Starter",
-          limits: JSON.stringify({
-            maxEvents: 10,
-            maxParticipantsPerEvent: 500,
-            maxMembers: 10,
-            customBranding: true,
-            certificates: true,
-            aiProctor: false,
-          }),
-          priceMonthly: 99900, // ₹999
-          priceYearly: 999900,
-        },
-        {
-          name: "PROFESSIONAL",
-          displayName: "Professional",
-          limits: JSON.stringify({
-            maxEvents: 50,
-            maxParticipantsPerEvent: 5000,
-            maxMembers: 50,
-            customBranding: true,
-            certificates: true,
-            aiProctor: true,
-            advancedSecurity: true,
-          }),
-          priceMonthly: 299900, // ₹2,999
-          priceYearly: 2999900,
-        },
-        {
-          name: "ENTERPRISE",
-          displayName: "Enterprise",
-          limits: JSON.stringify({
-            maxEvents: -1, // unlimited
-            maxParticipantsPerEvent: -1,
-            maxMembers: -1,
-            customBranding: true,
-            certificates: true,
-            aiProctor: true,
-            advancedSecurity: true,
-            customDomain: true,
-          }),
-          priceMonthly: 0, // contact sales
-          priceYearly: 0,
-        },
-      ],
+  // 6. Seed / sync default plans (idempotent — re-running updates limits).
+  //    Limit keys use snake_case (`max_events`, `max_custom_domains`, ...)
+  //    to match the `Limit` type in src/lib/entitlements.ts. Custom domains
+  //    are gated to paid plans (STARTER+).
+  const PLANS = [
+    {
+      name: "FREE",
+      displayName: "Free",
+      limits: {
+        max_events: 3,
+        max_participants_per_event: 100,
+        max_members: 3,
+        max_storage_bytes: 500 * 1024 * 1024,
+        max_custom_domains: 0,
+        max_assessments: 10,
+        customBranding: false,
+        certificates: true,
+        aiProctor: false,
+        advancedSecurity: false,
+        advancedAnalytics: false,
+        customDomain: false,
+        removeEngagioBranding: false,
+        prioritySupport: false,
+      },
+      priceMonthly: 0,
+      priceYearly: 0,
+    },
+    {
+      name: "STARTER",
+      displayName: "Starter",
+      limits: {
+        max_events: 10,
+        max_participants_per_event: 500,
+        max_members: 10,
+        max_storage_bytes: 5 * 1024 * 1024 * 1024,
+        max_custom_domains: 1,
+        max_assessments: 50,
+        customBranding: true,
+        certificates: true,
+        aiProctor: false,
+        advancedSecurity: false,
+        advancedAnalytics: false,
+        customDomain: true,
+        removeEngagioBranding: false,
+        prioritySupport: false,
+      },
+      priceMonthly: 99900, // ₹999
+      priceYearly: 999900,
+    },
+    {
+      name: "PROFESSIONAL",
+      displayName: "Professional",
+      limits: {
+        max_events: 50,
+        max_participants_per_event: 5000,
+        max_members: 50,
+        max_storage_bytes: 50 * 1024 * 1024 * 1024,
+        max_custom_domains: 5,
+        max_assessments: 250,
+        customBranding: true,
+        certificates: true,
+        aiProctor: true,
+        advancedSecurity: true,
+        advancedAnalytics: true,
+        customDomain: true,
+        removeEngagioBranding: true,
+        prioritySupport: true,
+      },
+      priceMonthly: 299900, // ₹2,999
+      priceYearly: 2999900,
+    },
+    {
+      name: "ENTERPRISE",
+      displayName: "Enterprise",
+      limits: {
+        max_events: -1, // unlimited
+        max_participants_per_event: -1,
+        max_members: -1,
+        max_storage_bytes: -1,
+        max_custom_domains: 20,
+        max_assessments: -1,
+        customBranding: true,
+        certificates: true,
+        aiProctor: true,
+        advancedSecurity: true,
+        advancedAnalytics: true,
+        customDomain: true,
+        removeEngagioBranding: true,
+        prioritySupport: true,
+      },
+      priceMonthly: 0, // contact sales
+      priceYearly: 0,
+    },
+  ] as const
+
+  for (const plan of PLANS) {
+    await db.plan.upsert({
+      where: { name: plan.name },
+      create: {
+        name: plan.name,
+        displayName: plan.displayName,
+        limits: JSON.stringify(plan.limits),
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        isActive: true,
+      },
+      update: {
+        displayName: plan.displayName,
+        limits: JSON.stringify(plan.limits),
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        isActive: true,
+      },
     })
-    console.log("  ✓ Seeded 4 plans (FREE, STARTER, PROFESSIONAL, ENTERPRISE)")
-  } else {
-    console.log(`  ✓ Plans already seeded (${existingPlans} found)`)
   }
+  console.log(`  ✓ Synced ${PLANS.length} plans (FREE, STARTER, PROFESSIONAL, ENTERPRISE)`)
 
   // 7. Assign FREE plan subscription to the Default Org
   if (!defaultOrg.planId) {
