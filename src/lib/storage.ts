@@ -70,26 +70,30 @@ export async function uploadImage(
     }
   }
 
-  const folder = options.folder || "quizmaster"
+  const folder = options.folder || "engagio"
   const timestamp = Math.floor(Date.now() / 1000)
 
-  // Build the upload params
-  const params: Record<string, string> = {
+  // Build the upload params that need to be signed.
+  // Cloudinary signing: only these params go into the signature string
+  // (sorted alphabetically, joined as key=value&key=value, then append API secret).
+  // Do NOT include: api_key, file, signature, resource_type in the signature.
+  const signParams: Record<string, string> = {
     folder,
     timestamp: String(timestamp),
-    resource_type: "image",
   }
-  if (options.publicIdPrefix) params.public_id = `${options.publicIdPrefix}-${timestamp}`
-  if (options.transformation) params.transformation = options.transformation
-  if (options.tags?.length) params.tags = options.tags.join(",")
+  if (options.publicIdPrefix) signParams.public_id = `${options.publicIdPrefix}-${timestamp}`
+  if (options.transformation) signParams.transformation = options.transformation
+  if (options.tags?.length) signParams.tags = options.tags.join(",")
 
   // Sign the params
-  const signature = await signCloudinaryParams(params)
+  const signature = signCloudinaryParams(signParams)
 
+  // Build the full FormData (includes signed params + api_key + file + resource_type)
   const formData = new FormData()
-  for (const [k, v] of Object.entries(params)) formData.append(k, v)
+  for (const [k, v] of Object.entries(signParams)) formData.append(k, v)
   formData.append("signature", signature)
   formData.append("api_key", CLOUDINARY_API_KEY!)
+  formData.append("resource_type", "image")
   formData.append("file", new Blob([buffer], { type: mimeType }))
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
@@ -122,21 +126,23 @@ export async function uploadImage(
 
 /**
  * Sign Cloudinary upload params using SHA-1 + the API secret.
- * Mirrors Cloudinary's server-side signing algorithm.
+ *
+ * Cloudinary's algorithm:
+ * 1. Sort params alphabetically (excluding api_key, file, signature, resource_type)
+ * 2. Join as: key=value&key=value
+ * 3. Append API secret directly (no & before it): key=value&key=valueAPI_SECRET
+ * 4. SHA-1 hash → hex string
  */
-async function signCloudinaryParams(
-  params: Record<string, string>
-): Promise<string> {
+import { createHash } from "crypto"
+
+function signCloudinaryParams(params: Record<string, string>): string {
   const sorted = Object.keys(params)
-    .filter((k) => k !== "api_key" && k !== "file")
+    .filter((k) => k !== "api_key" && k !== "file" && k !== "signature" && k !== "resource_type")
     .sort()
     .map((k) => `${k}=${params[k]}`)
     .join("&")
   const toSign = `${sorted}${CLOUDINARY_API_SECRET}`
-  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(toSign))
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+  return createHash("sha1").update(toSign).digest("hex")
 }
 
 /**
@@ -169,11 +175,11 @@ export async function deleteImage(publicId: string): Promise<boolean> {
   if (!publicId || !isCloudinaryConfigured()) return false
 
   const timestamp = Math.floor(Date.now() / 1000)
-  const params = {
+  const params: Record<string, string> = {
     public_id: publicId,
     timestamp: String(timestamp),
   }
-  const signature = await signCloudinaryParams(params)
+  const signature = signCloudinaryParams(params)
 
   const formData = new FormData()
   formData.append("public_id", params.public_id)
