@@ -1,7 +1,8 @@
 // Engagio - Prisma schema
-// Production: PostgreSQL (Neon / Supabase / Vercel Postgres / standard Postgres)
-// Local dev:  Set DATABASE_URL to a local Postgres or a free Neon dev branch.
-//             The schema is portable — no Postgres-specific features are used.
+// For local dev: SQLite (DATABASE_URL=file:./db/custom.db)
+// For Vercel:   PostgreSQL (DATABASE_URL=postgresql://...)
+// The vercel.json buildCommand runs a script that auto-switches the provider
+// based on whether DATABASE_URL starts with "postgresql://" or "file:".
 
 generator client {
   provider = "prisma-client-js"
