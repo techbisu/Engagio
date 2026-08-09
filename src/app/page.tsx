@@ -239,44 +239,65 @@ export default function Home() {
 
   const handleLoginSuccess = React.useCallback(
     async (role: string) => {
-      // Fetch the freshly-issued session user BEFORE switching views so the
-      // protected-view guard doesn't bounce us back to login.
       const me = await fetchMe()
       if (me) {
         setUser(me)
-        // Refetch the React Query cache so useSession-derived queries stay in sync.
         meQuery.refetch()
+
+        // ─── Clear routing logic ───────────────────────────────────
+        // 1. Invitation deep-link → accept invitation
         if (inviteToken) {
-          // Pending org invitation — keep the deep-link.
           setView("accept-invitation")
-        } else if (me.role === "ADMIN" || role === "ADMIN") {
-          // Check if the admin has an organization. If not, send to onboarding.
-          try {
-            const orgRes = await fetch("/api/organizations")
-            const orgData = await orgRes.json()
-            if (orgData.organizations && orgData.organizations.length > 0) {
-              setView("admin")
-            } else {
-              // No org yet — send to onboarding to create one.
-              setView("org-onboarding")
-            }
-          } catch {
-            // If the org check fails, fall back to admin view.
+          return
+        }
+
+        // 2. Quiz deep-link → participant quiz flow
+        if (quizSlug) {
+          setStudentSubView("quiz-start")
+          setView("student")
+          return
+        }
+
+        // 3. Activity deep-link → participant activity flow
+        if (activitySlug) {
+          setView("activity")
+          return
+        }
+
+        // 4. Check if this is the superadmin (platform admin)
+        //    Superadmin goes to the platform admin panel.
+        const sessionRes = await fetch("/api/auth/session").then((r) => r.json())
+        const isSuperAdmin = sessionRes?.user?.isSuperAdmin === true
+        if (isSuperAdmin) {
+          setView("platform")
+          return
+        }
+
+        // 5. Check if the user has an organization membership
+        try {
+          const orgRes = await fetch("/api/organizations")
+          const orgData = await orgRes.json()
+          if (orgData.organizations && orgData.organizations.length > 0) {
+            // Has org → go to admin panel (org-scoped)
             setView("admin")
-          }
-        } else {
-          if (quizSlug) {
-            setStudentSubView("quiz-start")
+          } else if (role === "ADMIN") {
+            // Admin without org → create organization
+            setView("org-onboarding")
+          } else {
+            // Participant without org → participant dashboard
+            setStudentSubView("dashboard")
             setView("student")
-          } else if (activitySlug) {
-            setView("activity")
+          }
+        } catch {
+          // Org check failed → fall back based on role
+          if (role === "ADMIN") {
+            setView("admin")
           } else {
             setStudentSubView("dashboard")
             setView("student")
           }
         }
       } else {
-        // Couldn't fetch /me — fall back to the React Query refetch path.
         meQuery.refetch()
       }
     },
@@ -782,7 +803,10 @@ export default function Home() {
         <SiteHeader session={null} onNavigate={handleNavigate} onSignOut={handleSignOut} />
         <main className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md">
-            <LoginForm onSuccess={handleLoginSuccess} />
+            <LoginForm
+              onSuccess={handleLoginSuccess}
+              onRegisterOrg={() => setView("org-onboarding")}
+            />
           </div>
         </main>
         <SiteFooter onNavigate={handleNavigate} />

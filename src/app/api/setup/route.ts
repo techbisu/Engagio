@@ -208,6 +208,13 @@ export async function GET() {
 
     results.push("")
     results.push("Setup complete! You can now sign in and use the app.")
+    results.push("")
+    results.push("Demo accounts (use on the login page's Quick Demo tab):")
+    results.push("  Super Admin:   superadmin@engagio.app")
+    results.push("  Org Admin:     demo.admin@engagio.app")
+    results.push("  Participant:   demo.participant@engagio.app")
+    results.push("")
+    results.push("Or visit /scripts/seed-demo.ts to seed demo org + event + quiz data.")
 
     return NextResponse.json({
       success: true,

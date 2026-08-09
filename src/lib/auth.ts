@@ -4,21 +4,35 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "./db"
 
-const adminEmails = (process.env.ADMIN_EMAILS || "admin@quizmaster.pro")
+// ─── Super Admin ────────────────────────────────────────────────────────────
+// The permanent superadmin email. This account always gets platform-admin
+// access. Set via env var or use the default.
+const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app")
+  .toLowerCase()
+  .trim()
+
+// Additional admin emails from env (for org-level admins)
+const adminEmails = (process.env.ADMIN_EMAILS || "")
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean)
 
+export const isEmailSuperAdmin = (email?: string | null): boolean => {
+  if (!email) return false
+  return email.toLowerCase().trim() === SUPERADMIN_EMAIL
+}
+
 export const isEmailAdmin = (email?: string | null): boolean => {
   if (!email) return false
-  return adminEmails.includes(email.toLowerCase())
+  const e = email.toLowerCase().trim()
+  return e === SUPERADMIN_EMAIL || adminEmails.includes(e)
 }
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db) as any,
   session: { strategy: "jwt" },
   providers: [
-    // Google OAuth (configure GOOGLE_CLIENT_ID/SECRET for production)
+    // Google OAuth — for all users (org admins, participants, superadmin)
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           GoogleProvider({
@@ -27,7 +41,7 @@ export const authOptions: NextAuthOptions = {
           }),
         ]
       : []),
-    // Credentials provider for demo / email-based access
+    // Email-based credentials — for demo + users without Google
     CredentialsProvider({
       name: "Email",
       credentials: {
@@ -42,13 +56,20 @@ export const authOptions: NextAuthOptions = {
         if (!email) return null
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null
 
+        // Determine role:
+        // - Superadmin email → always ADMIN (platform super admin)
+        // - asAdmin flag → ADMIN (for demo org admin)
+        // - In ADMIN_EMAILS env → ADMIN
+        // - Otherwise → STUDENT (participant)
+        const shouldBeAdmin = asAdmin || isEmailAdmin(email)
+
         const user = await db.user.upsert({
           where: { email },
           update: { name },
           create: {
             email,
             name,
-            role: asAdmin || isEmailAdmin(email) ? "ADMIN" : "STUDENT",
+            role: shouldBeAdmin ? "ADMIN" : "STUDENT",
           },
         })
         return {
@@ -82,6 +103,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = (user as any).id
         token.role = (user as any).role
+        // Mark as superadmin for the frontend
+        token.isSuperAdmin = isEmailSuperAdmin((user as any).email || token.email)
       }
       // Re-fetch role from DB on subsequent calls to stay fresh
       if (!token.role && token.email) {
@@ -89,6 +112,7 @@ export const authOptions: NextAuthOptions = {
         if (dbUser) {
           token.id = dbUser.id
           token.role = dbUser.role
+          token.isSuperAdmin = isEmailSuperAdmin(dbUser.email)
         }
       }
       return token
@@ -97,6 +121,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         ;(session.user as any).id = token.id
         ;(session.user as any).role = token.role
+        ;(session.user as any).isSuperAdmin = token.isSuperAdmin || false
       }
       return session
     },
@@ -116,10 +141,12 @@ declare module "next-auth" {
       email?: string | null
       image?: string | null
       role: string
+      isSuperAdmin?: boolean
     }
   }
   interface User {
     role?: string
+    isSuperAdmin?: boolean
   }
 }
 
@@ -127,5 +154,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string
     role?: string
+    isSuperAdmin?: boolean
   }
 }

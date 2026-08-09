@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "db:seed": "bun run scripts/seed.ts",
+    "db:seed-demo": "bun run scripts/seed-demo.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
