@@ -35,6 +35,8 @@ import { TermsPage } from "@/components/landing/terms-page"
 import { ContactPage } from "@/components/landing/contact-page"
 import { Faq } from "@/components/landing/faq"
 
+import { PlatformAdminShell } from "@/components/platform/platform-admin-shell"
+
 import { AdminShell } from "@/components/admin/admin-shell"
 import { StudentShell } from "@/components/student/student-shell"
 import { StudentDashboard } from "@/components/student/student-dashboard"
@@ -198,7 +200,7 @@ export default function Home() {
   React.useEffect(() => {
     if (sessionStatus === "loading") return
     const isAuthed = !!user
-    if (!isAuthed && (view === "admin" || view === "student")) {
+    if (!isAuthed && (view === "admin" || view === "student" || view === "platform")) {
       setView("login")
     }
     // Quiz view: show login first if not authed; the quiz-start screen
@@ -622,6 +624,18 @@ export default function Home() {
           onBack={() => setView("org-dashboard")}
         />
       </OrgDashboardShell>
+    )
+  }
+
+  // PLATFORM ADMIN VIEW — super admin panel for managing all orgs, users, plans, billing
+  if (view === "platform" && user && user.role === "ADMIN") {
+    return (
+      <PlatformAdminShell
+        user={user}
+        onSignOut={handleSignOut}
+        onNavigateHome={() => setView("landing")}
+        onOpenAdmin={() => setView("admin")}
+      />
     )
   }
 

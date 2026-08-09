@@ -20,6 +20,7 @@ export type ViewName =
   | "privacy"
   | "terms"
   | "contact"
+  | "platform"
 
 export type AdminTab =
   | "dashboard"

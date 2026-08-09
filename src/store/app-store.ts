@@ -268,7 +268,8 @@ export function parseInitialRoute(): {
     view === "about" ||
     view === "privacy" ||
     view === "terms" ||
-    view === "contact"
+    view === "contact" ||
+    view === "platform"
   ) {
     return {
       view,
@@ -337,7 +338,8 @@ export function syncUrl(
     view === "about" ||
     view === "privacy" ||
     view === "terms" ||
-    view === "contact"
+    view === "contact" ||
+    view === "platform"
   ) {
     url.searchParams.set("view", view)
   }

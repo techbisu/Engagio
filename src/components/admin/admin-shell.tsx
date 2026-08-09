@@ -11,6 +11,7 @@ import {
   Menu,
   LogOut,
   ShieldCheck,
+  Shield,
   ChevronRight,
   ReceiptIndianRupee,
   Award,
@@ -57,7 +58,7 @@ import { ThemeToggle } from "@/components/shared/theme-toggle"
 interface AdminShellProps {
   initialTab?: AdminTab
   user: SafeUser
-  onNavigate?: (view: "landing" | "login" | "student") => void
+  onNavigate?: (view: "landing" | "login" | "student" | "platform") => void
   onSignOut: () => void
   onTabChange?: (tab: AdminTab) => void
   /** Called when the user switches org via the OrgSwitcher. */
@@ -366,6 +367,11 @@ export function AdminShell({
               {onNavigate && (
                 <DropdownMenuItem onClick={() => onNavigate("landing")}>
                   <LayoutDashboard className="size-4" /> Back to home
+                </DropdownMenuItem>
+              )}
+              {user.role === "ADMIN" && onNavigate && (
+                <DropdownMenuItem onClick={() => onNavigate("platform" as any)}>
+                  <Shield className="size-4" /> Platform Admin
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
