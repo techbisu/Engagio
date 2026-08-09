@@ -115,6 +115,11 @@ model Event {
   organizationId      String?
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
+  // Public URL slug — unique within the organization.
+  // Used for /?event=SLUG public event pages.
+  // Auto-generated from title if not provided.
+  slug                String?  @unique
+
   questions      Question[]
   quizLinks      QuizLink[]
   attempts       QuizAttempt[]

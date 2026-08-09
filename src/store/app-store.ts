@@ -49,6 +49,12 @@ interface AppState {
   quizSlug: string | null
   setQuizSlug: (slug: string | null) => void
 
+  // Public event/org pages
+  eventSlug: string | null
+  setEventSlug: (slug: string | null) => void
+  orgSlug: string | null
+  setOrgSlug: (slug: string | null) => void
+
   quizMeta: QuizMeta | null
   setQuizMeta: (m: QuizMeta | null) => void
 
@@ -98,6 +104,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   quizSlug: null,
   setQuizSlug: (quizSlug) => set({ quizSlug }),
+
+  eventSlug: null,
+  setEventSlug: (eventSlug) => set({ eventSlug }),
+  orgSlug: null,
+  setOrgSlug: (orgSlug) => set({ orgSlug }),
 
   quizMeta: null,
   setQuizMeta: (quizMeta) => set({ quizMeta }),
@@ -180,6 +191,8 @@ export function parseInitialRoute(): {
   const activity = params.get("activity")
   const live = params.get("live")
   const invite = params.get("invite")
+  const orgParam = params.get("org")
+  const eventParam = params.get("event")
 
   // Public verify deep-link takes priority — no auth required.
   if (verify) {
@@ -241,6 +254,32 @@ export function parseInitialRoute(): {
       verifyToken: null,
       shareToken: null,
       activitySlug: activity,
+      liveActivityId: null,
+      inviteToken: null,
+    }
+  }
+  // Public org landing page (?org=SLUG)
+  if (orgParam) {
+    return {
+      view: "org-landing" as ViewName,
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      shareToken: null,
+      activitySlug: null,
+      liveActivityId: null,
+      inviteToken: null,
+    }
+  }
+  // Public event landing page (?event=SLUG)
+  if (eventParam) {
+    return {
+      view: "event-landing" as ViewName,
+      quizSlug: null,
+      adminTab: "dashboard",
+      verifyToken: null,
+      shareToken: null,
+      activitySlug: null,
       liveActivityId: null,
       inviteToken: null,
     }

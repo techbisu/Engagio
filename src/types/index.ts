@@ -22,6 +22,8 @@ export type ViewName =
   | "contact"
   | "platform"
   | "superadmin"
+  | "org-landing"
+  | "event-landing"
 
 export type AdminTab =
   | "dashboard"
@@ -61,6 +63,7 @@ export type QuestionDifficulty = "EASY" | "MEDIUM" | "HARD"
 export interface EventDto {
   id: string
   title: string
+  slug?: string | null
   description: string
   image?: string | null
   startDate: string

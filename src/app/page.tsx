@@ -18,6 +18,8 @@ import { SiteFooter } from "@/components/shared/site-footer"
 import { LoginForm } from "@/components/auth/login-form"
 import { ParticipantLogin } from "@/components/auth/participant-login"
 import { SuperAdminLogin } from "@/components/auth/super-admin-login"
+import { OrgLandingPage } from "@/components/public/org-landing-page"
+import { EventLandingPage } from "@/components/public/event-landing-page"
 
 import { Hero } from "@/components/landing/hero"
 import { TrustStrip } from "@/components/landing/trust-strip"
@@ -123,6 +125,8 @@ export default function Home() {
     setQuizSlug,
     quizMeta,
     setQuizMeta,
+    eventSlug,
+    setEventSlug,
     user,
     setUser,
     verifyToken,
@@ -794,6 +798,54 @@ export default function Home() {
       )
     }
     // Not authed — fall through to login (guard already redirected).
+  }
+
+  // PUBLIC ORG LANDING PAGE — ?org=SLUG
+  if (view === "org-landing") {
+    const orgSlugParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("org") : null
+    if (orgSlugParam) {
+      return (
+        <OrgLandingPage
+          orgSlug={orgSlugParam}
+          onNavigate={handleNavigate}
+          onOpenEvent={(eventSlug) => {
+            setEventSlug(eventSlug)
+            const url = new URL(window.location.href)
+            url.searchParams.set("event", eventSlug)
+            url.searchParams.delete("org")
+            window.history.replaceState({}, "", url.toString())
+            setView("event-landing")
+          }}
+        />
+      )
+    }
+  }
+
+  // PUBLIC EVENT LANDING PAGE — ?event=SLUG
+  if (view === "event-landing") {
+    const eventSlugParam = eventSlug || (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("event") : null)
+    if (eventSlugParam) {
+      return (
+        <EventLandingPage
+          eventSlug={eventSlugParam}
+          user={user}
+          onNavigate={handleNavigate}
+          onStartQuiz={(quizSlugParam) => {
+            setQuizSlug(quizSlugParam)
+            setStudentSubView("quiz-start")
+            setView("student")
+          }}
+          onSignIn={async () => {
+            const me = await fetchMe()
+            if (me) {
+              setUser(me)
+              meQuery.refetch()
+              // After sign-in, stay on event landing page (user will see "Start Test")
+            }
+          }}
+        />
+      )
+    }
   }
 
   // QUIZ deep-link view: If authed → participant quiz-start. If not authed →

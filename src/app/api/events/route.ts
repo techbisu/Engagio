@@ -17,6 +17,7 @@ function toEventDto(e: any): EventDto {
   return {
     id: e.id,
     title: e.title,
+    slug: e.slug ?? null,
     description: e.description,
     image: e.image ?? null,
     startDate: e.startDate.toISOString(),
@@ -125,10 +126,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
-            certEnabled, certTemplate, certIssueCondition, certPassingScore, certAutoGenerate, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo } = body || {};
+            certEnabled, certTemplate, certIssueCondition, certPassingScore, certAutoGenerate, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo,
+            slug: customSlug } = body || {};
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
+    }
+
+    // Auto-generate slug from title if not provided
+    let eventSlug = customSlug?.trim().toLowerCase() || "";
+    if (!eventSlug) {
+      eventSlug = title.trim().toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 60);
+      // Add random suffix for uniqueness
+      eventSlug += "-" + Math.random().toString(36).slice(2, 6);
     }
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -179,6 +194,7 @@ export async function POST(req: NextRequest) {
         requireRegistration: typeof requireRegistration === "boolean" ? requireRegistration : false,
         // Multi-tenant: assign to the current org
         organizationId: ctx.orgId,
+        slug: eventSlug,
         // Payment
         paymentMethod: typeof paymentMethod === "string" ? paymentMethod : "FREE",
         paymentAmount: typeof paymentAmount === "number" ? paymentAmount : 0,
