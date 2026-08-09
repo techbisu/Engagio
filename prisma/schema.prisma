@@ -1,13 +1,14 @@
 // Engagio - Prisma schema
-// Portable across SQLite (dev) and Postgres (Vercel prod)
-// Note: SQLite doesn't support String[] arrays, so we store options/extras as Json.
+// Production: PostgreSQL (Neon / Supabase / Vercel Postgres / standard Postgres)
+// Local dev:  Set DATABASE_URL to a local Postgres or a free Neon dev branch.
+//             The schema is portable — no Postgres-specific features are used.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
