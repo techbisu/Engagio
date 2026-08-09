@@ -80,11 +80,12 @@ export function Features() {
             id="features-heading"
             className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl"
           >
-            Everything in one place
+            Everything your event needs. Nothing you don&apos;t.
           </h2>
           <p className="mt-4 text-base text-muted-foreground">
-            From registration to certification, Engagio helps you create better
-            participant experiences.
+            Managing registration, engagement, assessments, results, and
+            certificates across different tools creates unnecessary complexity.
+            Engagio brings the entire experience together in one simple platform.
           </p>
         </motion.div>
 

@@ -18,7 +18,6 @@ import { LoginForm } from "@/components/auth/login-form"
 
 import { Hero } from "@/components/landing/hero"
 import { TrustStrip } from "@/components/landing/trust-strip"
-import { ProblemSection } from "@/components/landing/problem-section"
 import { Features } from "@/components/landing/features"
 import { ActivitiesSection } from "@/components/landing/activities-section"
 import { HowItWorks } from "@/components/landing/how-it-works"
@@ -796,7 +795,6 @@ export default function Home() {
         */}
         <Hero onNavigate={handleNavigate} session={user ? { user } : null} />
         <TrustStrip />
-        <ProblemSection />
         <Features />
         <HowItWorks />
         <ActivitiesSection />
