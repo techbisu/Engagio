@@ -261,6 +261,8 @@ export function QuizRunner({
       if (submittedRef.current || !attemptId) return
       submittedRef.current = true
       setStatus("submitting")
+      // Close any open dialogs (confirm dialog) before submitting
+      setConfirmOpen(false)
       const elapsed = startedAtRef.current
         ? Math.floor((Date.now() - startedAtRef.current) / 1000)
         : totalSeconds
@@ -881,7 +883,11 @@ export function QuizRunner({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep working</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => doSubmit(false)}
+              onClick={(e) => {
+                e.preventDefault()
+                setConfirmOpen(false)
+                void doSubmit(false)
+              }}
               className={cn("bg-emerald-600 text-white hover:bg-emerald-700")}
             >
               <Send className="size-4" /> Submit now

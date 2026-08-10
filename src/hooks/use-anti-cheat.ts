@@ -217,20 +217,16 @@ export function useAntiCheat(options: UseAntiCheatOptions): AntiCheatCounters {
             "Fullscreen exited",
             "Re-enter fullscreen to keep anti-cheat active.",
           )
-          // Auto-submit after 3s grace period if configured.
+          // Auto-submit immediately if configured (no grace period).
           if (config.autoSubmitOnExit) {
             cancelAutoSubmit()
             fireToast(
               "fullscreenExit",
-              "Re-entering fullscreen…",
-              "Quiz will auto-submit in 3 seconds if you don't re-enter.",
+              "Auto-submitting quiz",
+              "Fullscreen was exited. The quiz is being submitted now.",
             )
-            autoSubmitTimerRef.current = setTimeout(() => {
-              // Verify still out of fullscreen before firing.
-              if (!document.fullscreenElement) {
-                onAutoSubmitRef.current?.()
-              }
-            }, 3000)
+            // Submit immediately
+            onAutoSubmitRef.current?.()
           }
         } else {
           // Re-entered fullscreen — cancel any pending auto-submit.

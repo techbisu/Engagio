@@ -608,7 +608,10 @@ export function LinksManager({
 
       {/* Create/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={() => setDialogOpen(false)}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {editing ? (
