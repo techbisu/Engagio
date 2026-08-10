@@ -204,8 +204,12 @@ export default function Home() {
 
   // --- Routing guards ----------------------------------------------------
   // If user lands on a protected view without a session, redirect to login.
+  // IMPORTANT: Wait for BOTH session loading AND meQuery to finish before
+  // redirecting — otherwise a page reload would logout the user because
+  // the session hasn't loaded yet.
   React.useEffect(() => {
     if (sessionStatus === "loading") return
+    if (meQuery.isLoading) return // Wait for /api/me to finish
     const isAuthed = !!user
     if (!isAuthed && (view === "admin" || view === "student" || view === "platform")) {
       setView("login")
@@ -252,23 +256,24 @@ export default function Home() {
           return
         }
 
-        // 2. Quiz deep-link → participant quiz flow (only for participant logins)
-        if (quizSlug && role !== "ADMIN") {
+        // 2. Quiz deep-link → participant quiz flow (ALWAYS — even for admins)
+        if (quizSlug) {
           setStudentSubView("quiz-start")
           setView("student")
           return
         }
 
-        // 3. Activity deep-link → participant activity flow (only for participants)
-        if (activitySlug && role !== "ADMIN") {
+        // 3. Activity deep-link → participant activity flow
+        if (activitySlug) {
           setView("activity")
           return
         }
 
-        // 4. Organization login NEVER routes to Super Admin / Platform Admin.
-        //    Super Admin has a separate login at /?view=superadmin.
-        //    If someone tries to login with the superadmin email via the org
-        //    login, show them a message to use the super admin login instead.
+        // 4. Event deep-link → event landing page
+        if (eventSlug) {
+          setView("event-landing")
+          return
+        }
 
         // 5. Check if the user has an organization membership
         //    Anyone logging in via the Organization Login page is an admin.
@@ -292,7 +297,7 @@ export default function Home() {
         meQuery.refetch()
       }
     },
-    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug, inviteToken],
+    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug, inviteToken, eventSlug],
   )
 
   const handleNavigate = React.useCallback(
@@ -641,9 +646,17 @@ export default function Home() {
 
   // SUPER ADMIN LOGIN VIEW — separate from org login
   if (view === "superadmin") {
+    // Wait for session + me to load before checking super admin status
+    if (sessionStatus === "loading" || meQuery.isLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-900">
+          <div className="size-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+        </div>
+      )
+    }
     if (user && user.role === "ADMIN") {
-      // Already authed as admin → check if super admin
-      const isSuper = (session as any)?.user?.isSuperAdmin
+      // Check if super admin via session
+      const isSuper = (session as any)?.user?.isSuperAdmin === true
       if (isSuper) {
         return (
           <PlatformAdminShell

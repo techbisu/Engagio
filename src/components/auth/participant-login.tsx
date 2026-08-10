@@ -69,7 +69,7 @@ export function ParticipantLogin({
         email,
         name: name || undefined,
         redirect: false,
-        callbackUrl: '/',
+        callbackUrl: slug ? `/?quiz=${slug}` : '/',
       })
       if (!res || res.error) {
         toast.error('Sign-in failed. Please try again.')
@@ -187,7 +187,7 @@ export function ParticipantLogin({
             variant="outline"
             className="w-full"
             onClick={() =>
-              signIn('google', { callbackUrl: '/' }).catch(() => {
+              signIn('google', { callbackUrl: slug ? `/?quiz=${slug}` : '/' }).catch(() => {
                 toast.error('Google sign-in failed.')
               })
             }
