@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { resolveImageField } from "@/lib/storage";
 import { requireOrgRole, orgScope, auditLog, type TenantContext } from "@/lib/tenant";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
@@ -166,22 +165,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Upload the optional base64 images (QR code, signee image, org logo) to
-    // the storage provider (Cloudinary if configured, else base64 data URL).
-    // The DB stores the resolved URL (Cloudinary URL or base64 data URL) + the
-    // Cloudinary publicId (so we can delete the asset later if replaced).
-    const qr = await resolveImageField(qrCodeUrl, null, {
-      folder: "events/qr",
-      transformations: ["w_400", "h_400", "c_fit", "q_auto", "f_auto"],
-    });
-    const signee = await resolveImageField(certSigneeImage, null, {
-      folder: "events/signatures",
-      transformations: ["w_400", "h_200", "c_fit", "q_auto", "f_auto"],
-    });
-    const logo = await resolveImageField(certLogo, null, {
-      folder: "events/logos",
-      transformations: ["w_300", "h_300", "c_fit", "q_auto", "f_auto"],
-    });
+    // Image fields — for JSON API (not FormData), just pass the string URL
+    // directly. If it's a data URL (base64), keep it. If Cloudinary is
+    // configured and it's a base64 image, upload it. Otherwise, store as-is.
+    const qrCodeUrlResolved = typeof qrCodeUrl === "string" && qrCodeUrl.trim() ? qrCodeUrl.trim() : null;
+    const certSigneeImageResolved = typeof certSigneeImage === "string" && certSigneeImage.trim() ? certSigneeImage.trim() : null;
+    const certLogoResolved = typeof certLogo === "string" && certLogo.trim() ? certLogo.trim() : null;
 
     const event = await db.event.create({
       data: {
@@ -192,7 +181,6 @@ export async function POST(req: NextRequest) {
         endDate: end,
         isActive: typeof isActive === "boolean" ? isActive : true,
         requireRegistration: typeof requireRegistration === "boolean" ? requireRegistration : false,
-        // Multi-tenant: assign to the current org
         organizationId: ctx.orgId,
         slug: eventSlug,
         // Payment
@@ -202,8 +190,8 @@ export async function POST(req: NextRequest) {
         paymentInstructions: typeof paymentInstructions === "string" ? paymentInstructions : null,
         upiId: typeof upiId === "string" ? upiId : null,
         upiLink: typeof upiLink === "string" ? upiLink : null,
-        qrCodeUrl: qr ? qr.url : null,
-        qrCodePublicId: qr ? qr.publicId : null,
+        qrCodeUrl: qrCodeUrlResolved,
+        qrCodePublicId: null,
         requireTransactionRef: typeof requireTransactionRef === "boolean" ? requireTransactionRef : true,
         requireScreenshot: typeof requireScreenshot === "boolean" ? requireScreenshot : true,
         // Certificate
@@ -215,10 +203,10 @@ export async function POST(req: NextRequest) {
         certOrgName: typeof certOrgName === "string" ? certOrgName : null,
         certSigneeName: typeof certSigneeName === "string" ? certSigneeName : null,
         certSigneeTitle: typeof certSigneeTitle === "string" ? certSigneeTitle : null,
-        certSigneeImage: signee ? signee.url : null,
-        certSigneeImagePublicId: signee ? signee.publicId : null,
-        certLogo: logo ? logo.url : null,
-        certLogoPublicId: logo ? logo.publicId : null,
+        certSigneeImage: certSigneeImageResolved,
+        certSigneeImagePublicId: null,
+        certLogo: certLogoResolved,
+        certLogoPublicId: null,
       },
       include: {
         _count: {
