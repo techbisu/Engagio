@@ -512,7 +512,7 @@ export function QuizRunner({
   return (
     <div
       ref={containerRef}
-      className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
+      className="quiz-fullscreen flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
     >
       {/* Watermark overlay — always rendered as a sibling of the quiz content.
           Renders nothing when security.watermarkOverlay is false. */}

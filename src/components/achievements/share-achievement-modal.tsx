@@ -312,9 +312,11 @@ export function ShareAchievementModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-md gap-0 overflow-hidden p-0 sm:max-w-md sm:rounded-2xl"
+        className="max-h-[90vh] max-w-md gap-0 overflow-y-auto p-0 sm:max-w-md sm:rounded-2xl"
         showCloseButton
         data-slot="share-achievement-modal"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={() => onOpenChange(false)}
       >
         <DialogDescription className="sr-only">
           Share your {draft.title} achievement card via WhatsApp, LinkedIn,

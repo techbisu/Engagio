@@ -610,16 +610,25 @@ export async function renderCardSvg(p: CardRenderParams): Promise<string> {
  */
 export async function renderCard(p: CardRenderParams): Promise<RenderedCard> {
   const svg = await renderTemplate(p)
+  // Try sharp for SVG → PNG conversion. If it fails (e.g., missing native
+  // binaries on Vercel serverless), return the SVG as-is — the caller handles
+  // the fallback by checking PNG magic bytes.
   try {
     const png = await sharp(Buffer.from(svg), { density: 144 })
       .resize(1200, 1200, { fit: "cover" })
       .png()
       .toBuffer()
-    return { png, svg }
+
+    // Verify the output is actually a PNG (magic bytes: 89 50 4E 47)
+    if (png.length > 4 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47) {
+      return { png, svg }
+    }
+    // Not a valid PNG — fall through to SVG fallback
+    throw new Error("Invalid PNG output")
   } catch (e) {
-    console.error("[card-renderer] sharp SVG→PNG failed; returning SVG buffer:", e)
-    // Fall back to encoding the SVG as UTF-8 bytes — callers can detect via
-    // the content type or by inspecting the first bytes ("<svg" vs PNG magic).
+    console.error("[card-renderer] sharp SVG→PNG failed; using SVG fallback:", e)
+    // Return the SVG buffer — the achievement-image.ts module detects this
+    // via PNG magic byte check and uploads as image/svg+xml instead.
     return { png: Buffer.from(svg, "utf-8"), svg }
   }
 }
