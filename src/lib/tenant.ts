@@ -15,7 +15,7 @@
  * existing data remains accessible.
  */
 
-import { getServerSession } from "next-auth"
+import { getServerSession } from "@/lib/auth"
 import type { NextRequest } from "next/server"
 import { authOptions } from "./auth"
 import { db } from "./db"

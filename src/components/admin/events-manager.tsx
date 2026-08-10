@@ -15,6 +15,7 @@ import {
   Inbox,
   ClipboardList,
   Users,
+  PanelsTopLeft,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
@@ -68,6 +69,7 @@ interface EventsManagerProps {
   onViewAnalytics?: (eventId: string) => void
   onManageRegistration?: (eventId: string, eventTitle: string) => void
   onViewRegistrations?: (eventId: string, eventTitle: string) => void
+  onBuildLandingPage?: (eventId: string, eventTitle: string) => void
 }
 
 interface EventFormState {
@@ -115,6 +117,7 @@ export function EventsManager({
   onViewAnalytics,
   onManageRegistration,
   onViewRegistrations,
+  onBuildLandingPage,
 }: EventsManagerProps) {
   const qc = useQueryClient()
   const { data, isLoading, isError, error } = useQuery<EventDto[]>({
@@ -437,6 +440,11 @@ export function EventsManager({
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onGenerateLink?.(ev.id)}>
                       <Link2 className="size-4" /> Generate Link
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onBuildLandingPage?.(ev.id, ev.title)}
+                    >
+                      <PanelsTopLeft className="size-4" /> Build Landing Page
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => onManageRegistration?.(ev.id, ev.title)}

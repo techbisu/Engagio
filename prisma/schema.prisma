@@ -127,6 +127,36 @@ model Event {
   registrations  Registration[]
   certificates   Certificate[]
   activities     Activity[]
+  landingSections EventLandingSection[]
+}
+
+// ─── Event Landing Page Builder ─────────────────────────────────────────────
+// Org admins compose their public event landing page from a sequence of
+// prebuilt section types (HERO, ABOUT, SPEAKERS, SCHEDULE, SPONSORS, VENUE,
+// AGENDA, FAQ, GALLERY, CTA, STATS, CUSTOM). The `data` field is a
+// JSON-encoded string whose shape varies by `type` (see
+// src/components/admin/landing-page-builder.tsx for the per-type contract).
+model EventLandingSection {
+  id          String   @id @default(cuid())
+  eventId     String
+  // One of: HERO | ABOUT | SPEAKERS | SCHEDULE | SPONSORS | VENUE | AGENDA |
+  // FAQ | GALLERY | CTA | STATS | CUSTOM
+  type        String
+  title       String?
+  subtitle    String?
+  // JSON-encoded payload for the section's content. Kept as a string so it
+  // works with both SQLite (local dev) and Postgres (Vercel).
+  data        String   @default("{}")
+  // Sort order — ascending. The landing page builder uses @dnd-kit to reorder.
+  order       Int      @default(0)
+  isVisible   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([order])
 }
 
 model Question {

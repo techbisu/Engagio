@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ParticipantLogin } from '@/components/auth/participant-login'
 import { BrandLogo } from '@/components/shared/brand-logo'
-import type { ViewName, SafeUser } from '@/types'
+import { LandingSectionsRenderer } from '@/components/public/landing-sections-renderer'
+import type { ViewName, SafeUser, LandingSectionDto } from '@/types'
 
 interface EventLandingPageProps {
   eventSlug: string
@@ -61,6 +62,19 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
     retry: false,
   })
 
+  // Fetch custom landing sections for this event (visible only, public).
+  const eventId = data?.event?.id
+  const { data: sections } = useQuery<LandingSectionDto[]>({
+    queryKey: ['public-event-landing-sections', eventId],
+    queryFn: () =>
+      fetch(`/api/public/event-landing?eventId=${encodeURIComponent(eventId!)}`).then((r) => {
+        if (!r.ok) throw new Error('Failed to load sections')
+        return r.json() as Promise<LandingSectionDto[]>
+      }),
+    enabled: !!eventId,
+    staleTime: 60_000,
+  })
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -81,6 +95,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
 
   const { event, quizLink, questionCount } = data
   const org = event.organization
+  const customSections = sections ?? []
 
   // If user is signed in → show "Start Test" button
   // If not signed in → show ParticipantLogin
@@ -117,7 +132,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
         </div>
       </header>
 
-      {/* Event hero */}
+      {/* Event hero (basic info) */}
       <main className="flex-1 mx-auto max-w-4xl w-full px-4 py-8 sm:px-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           {/* Event image */}
@@ -161,8 +176,17 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
               </p>
             </div>
           )}
+        </motion.div>
+      </main>
 
-          {/* Start test or login */}
+      {/* Custom landing page sections (built by org admins) */}
+      {customSections.length > 0 && (
+        <LandingSectionsRenderer sections={customSections} />
+      )}
+
+      {/* Start test or login */}
+      <main id="start" className="mx-auto max-w-4xl w-full px-4 py-8 sm:px-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           {showLogin ? (
             <Card className="border-emerald-200 dark:border-emerald-900">
               <CardHeader>

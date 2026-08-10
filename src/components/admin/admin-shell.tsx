@@ -52,6 +52,7 @@ import { CertificatesPanel } from "./certificates-panel"
 import { PaymentsPanel } from "./payments-panel"
 import { ResultsCertDashboard } from "./results-cert-dashboard"
 import { ActivitiesPanel } from "./activities/activities-panel"
+import { LandingPageBuilder } from "./landing-page-builder"
 import { OrgSwitcher } from "@/components/organization/org-switcher"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 
@@ -153,6 +154,13 @@ export function AdminShell({
     eventTitle: string
   } | null>(null)
 
+  // Sub-view state for Landing Page Builder (event context). Set from the
+  // events manager "Build Landing Page" action.
+  const [landingPageCtx, setLandingPageCtx] = React.useState<{
+    eventId: string
+    eventTitle: string
+  } | null>(null)
+
   const changeTab = React.useCallback(
     (next: AdminTab) => {
       setTab(next)
@@ -191,6 +199,16 @@ export function AdminShell({
   const handleManageRegistration = React.useCallback(
     (eventId: string, eventTitle: string) => {
       setRegistrationCtx({ eventId, eventTitle })
+      setRegistrationsListCtx(null)
+      changeTab("events")
+    },
+    [changeTab]
+  )
+
+  const handleBuildLandingPage = React.useCallback(
+    (eventId: string, eventTitle: string) => {
+      setLandingPageCtx({ eventId, eventTitle })
+      setRegistrationCtx(null)
       setRegistrationsListCtx(null)
       changeTab("events")
     },
@@ -411,7 +429,13 @@ export function AdminShell({
             )}
 
             {tab === "events" &&
-              (registrationCtx ? (
+              (landingPageCtx ? (
+                <LandingPageBuilder
+                  eventId={landingPageCtx.eventId}
+                  eventTitle={landingPageCtx.eventTitle}
+                  onBack={() => setLandingPageCtx(null)}
+                />
+              ) : registrationCtx ? (
                 <RegistrationFormBuilder
                   eventId={registrationCtx.eventId}
                   eventTitle={registrationCtx.eventTitle}
@@ -430,6 +454,7 @@ export function AdminShell({
                   onViewAnalytics={handleViewAnalytics}
                   onManageRegistration={handleManageRegistration}
                   onViewRegistrations={handleViewRegistrations}
+                  onBuildLandingPage={handleBuildLandingPage}
                 />
               ))}
 

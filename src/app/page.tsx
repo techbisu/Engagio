@@ -242,63 +242,104 @@ export default function Home() {
     setView("landing")
   }, [setUser, setView, queryClient, setCurrentOrgSlug])
 
+  // ─── Auth-aware routing ────────────────────────────────────────────────
+  // routeAfterAuth runs the post-login routing logic. It's called from:
+  //   1. LoginForm.onSuccess (email login flow)
+  //   2. The auto-route useEffect (Google OAuth flow — the Google callback
+  //      redirects back to /?view=login, then this effect detects the new
+  //      session and routes the user to the right view).
+  // `didAutoRouteRef` prevents double-routing when both paths fire for the
+  // same user id.
+  const didAutoRouteRef = React.useRef<string | null>(null)
+
+  const routeAfterAuth = React.useCallback(
+    async (me: SafeUser) => {
+      // 1. Invitation deep-link → accept invitation
+      if (inviteToken) {
+        setView("accept-invitation")
+        return
+      }
+
+      // 2. Quiz deep-link → participant quiz flow (ALWAYS — even for admins)
+      if (quizSlug) {
+        setStudentSubView("quiz-start")
+        setView("student")
+        return
+      }
+
+      // 3. Activity deep-link → participant activity flow
+      if (activitySlug) {
+        setView("activity")
+        return
+      }
+
+      // 4. Event deep-link → event landing page
+      if (eventSlug) {
+        setView("event-landing")
+        return
+      }
+
+      // 5. Check if the user has an organization membership.
+      //    If they have an org → admin panel.
+      //    If they don't have an org → org onboarding (create one).
+      //    NEVER send org-login users to the participant dashboard.
+      try {
+        const orgRes = await fetch("/api/organizations")
+        const orgData = await orgRes.json()
+        if (orgData.organizations && orgData.organizations.length > 0) {
+          setView("admin")
+        } else {
+          // No org → create organization (Google OAuth users land here directly)
+          setView("org-onboarding")
+        }
+      } catch {
+        // Org check failed → go to admin panel
+        setView("admin")
+      }
+    },
+    [setView, setStudentSubView, quizSlug, activitySlug, inviteToken, eventSlug],
+  )
+
   const handleLoginSuccess = React.useCallback(
     async (role: string) => {
       const me = await fetchMe()
       if (me) {
         setUser(me)
         meQuery.refetch()
-
-        // ─── Clear routing logic ───────────────────────────────────
-        // 1. Invitation deep-link → accept invitation
-        if (inviteToken) {
-          setView("accept-invitation")
-          return
-        }
-
-        // 2. Quiz deep-link → participant quiz flow (ALWAYS — even for admins)
-        if (quizSlug) {
-          setStudentSubView("quiz-start")
-          setView("student")
-          return
-        }
-
-        // 3. Activity deep-link → participant activity flow
-        if (activitySlug) {
-          setView("activity")
-          return
-        }
-
-        // 4. Event deep-link → event landing page
-        if (eventSlug) {
-          setView("event-landing")
-          return
-        }
-
-        // 5. Check if the user has an organization membership
-        //    Anyone logging in via the Organization Login page is an admin.
-        //    If they have an org → admin panel.
-        //    If they don't have an org → org onboarding (create one).
-        //    NEVER send org-login users to the participant dashboard.
-        try {
-          const orgRes = await fetch("/api/organizations")
-          const orgData = await orgRes.json()
-          if (orgData.organizations && orgData.organizations.length > 0) {
-            setView("admin")
-          } else {
-            // No org → create organization
-            setView("org-onboarding")
-          }
-        } catch {
-          // Org check failed → go to admin panel
-          setView("admin")
-        }
+        didAutoRouteRef.current = me.id
+        await routeAfterAuth(me)
       } else {
         meQuery.refetch()
       }
     },
-    [meQuery, setView, setStudentSubView, setUser, quizSlug, activitySlug, inviteToken, eventSlug],
+    [meQuery, routeAfterAuth, setUser],
   )
+
+  // Auto-route when a user becomes authenticated via Google OAuth (or any
+  // session change that brings in a new user while sitting on the login view).
+  React.useEffect(() => {
+    if (sessionStatus === "loading" || meQuery.isLoading) return
+    if (!user) {
+      // Reset the auto-route ref when the user signs out.
+      didAutoRouteRef.current = null
+      return
+    }
+    // Only auto-route when we haven't already routed for this user AND the
+    // user is currently sitting on the login view (Google OAuth callback lands
+    // here). For other views, the user has already been routed (or is on a
+    // deep-link view like quiz/event that should not be overridden).
+    if (
+      didAutoRouteRef.current !== user.id &&
+      (view === "login" || view === "landing")
+    ) {
+      didAutoRouteRef.current = user.id
+      void routeAfterAuth(user)
+    } else if (didAutoRouteRef.current !== user.id) {
+      // For any other view, just mark that we've seen this user (so we don't
+      // re-run the routing logic if they navigate away and back).
+      didAutoRouteRef.current = user.id
+    }
+  }, [user, sessionStatus, meQuery.isLoading, view, routeAfterAuth])
 
   const handleNavigate = React.useCallback(
     (target: typeof view) => {
@@ -536,11 +577,14 @@ export default function Home() {
   }
 
   // ORG ONBOARDING VIEW — full-screen, for new users without an org.
+  // This view is FORCED: the user must complete Step 1 (Google login) and
+  // Step 2 (org details) before they can proceed. No cancel option.
   if (view === "org-onboarding") {
     return (
       <OrgOnboarding
         onCreated={handleOrgCreated}
-        onCancel={() => setView(user ? "admin" : "landing")}
+        onCancel={user ? () => setView("admin") : undefined}
+        forced={!user}
       />
     )
   }

@@ -1,9 +1,73 @@
-import { NextAuthOptions } from "next-auth"
+import { NextAuthOptions, getServerSession as _getServerSession } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import bcrypt from "bcryptjs"
+import { headers as nextHeaders, cookies as nextCookies } from "next/headers"
+import type { NextRequest } from "next/server"
 import { db } from "./db"
+
+// ─── Next.js 16 + next-auth v4 compatibility shim ───────────────────────────
+// next-auth v4.24.x calls `req.headers.get("cookie")` internally, but when
+// `getServerSession(authOptions)` is used in App Router style (1-arg form),
+// it builds `req.headers = Object.fromEntries(await headers())` — a plain JS
+// object that has NO `.get()` method, causing:
+//   TypeError: Cannot read properties of null (reading 'get')
+// (or "req.headers.get is not a function").
+//
+// Fix: We bypass next-auth's internal header/cookie extraction and build the
+// request ourselves, wrapping headers in a proper `Headers` instance so
+// `.get()` works. We also support an optional NextRequest for route handlers
+// where we already have the request available.
+export async function getAuthSession(options: NextAuthOptions, incomingReq?: NextRequest) {
+  // Prefer building from the incoming NextRequest when available — fastest path.
+  if (incomingReq) {
+    const cookieHeader = incomingReq.headers.get("cookie") || ""
+    const cookieMap: Record<string, string> = {}
+    for (const part of cookieHeader.split(";")) {
+      const idx = part.indexOf("=")
+      if (idx > 0) {
+        const k = part.slice(0, idx).trim()
+        const v = part.slice(idx + 1).trim()
+        if (k) cookieMap[k] = v
+      }
+    }
+    const req = {
+      headers: incomingReq.headers,
+      cookies: cookieMap,
+      method: incomingReq.method,
+    }
+    const res = {
+      getHeader() {},
+      setHeader() {},
+      setCookie() {},
+    }
+    return _getServerSession(req as any, res as any, options)
+  }
+
+  // Fallback: read from next/headers (works in server components & route handlers
+  // that don't receive a NextRequest).
+  const h = await nextHeaders()
+  const c = await nextCookies()
+  const req = {
+    headers: new Headers(h.entries()),
+    cookies: Object.fromEntries(c.getAll().map((ck) => [ck.name, ck.value])),
+    method: "GET",
+  }
+  const res = {
+    getHeader() {},
+    setHeader() {},
+    setCookie() {},
+  }
+  return _getServerSession(req as any, res as any, options)
+}
+
+// Backwards-compatible alias. Many existing route handlers call
+// `getServerSession(authOptions)` — keep that working but route through
+// our robust helper.
+export async function getServerSession(options: NextAuthOptions, incomingReq?: NextRequest) {
+  return getAuthSession(options, incomingReq)
+}
 
 // ─── Super Admin ────────────────────────────────────────────────────────────
 // Super Admin is NOT auto-detected from email. It's a separate login at

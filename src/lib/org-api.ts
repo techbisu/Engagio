@@ -13,7 +13,7 @@
  * using `include: { plan: true }`.
  */
 
-import { getServerSession } from "next-auth"
+import { getServerSession } from "@/lib/auth"
 import { authOptions } from "./auth"
 import { db } from "./db"
 import { hasRole, type TenantContext, type OrgRole } from "./tenant"

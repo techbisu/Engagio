@@ -57,8 +57,11 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
 
   // ─── Google Login (primary) ───────────────────────────────────────────
+  // After Google OAuth completes, redirect back to /?view=login so the
+  // auto-route logic in page.tsx picks up the new session and routes the
+  // user to the right view (admin / org-onboarding / quiz / event / etc.).
   const handleGoogleLogin = () => {
-    signIn('google', { callbackUrl: '/' }).catch(() => {
+    signIn('google', { callbackUrl: '/?view=login' }).catch(() => {
       toast.error('Google sign-in failed. Make sure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.')
     })
   }

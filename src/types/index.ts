@@ -559,3 +559,148 @@ export interface OrgAchievementStatsDto {
   totalShares: number
   sharesByPlatform: Record<SharePlatform, number>
 }
+
+// ─── Event Landing Page Builder ─────────────────────────────────────────────
+
+export type LandingSectionType =
+  | "HERO"
+  | "ABOUT"
+  | "SPEAKERS"
+  | "SCHEDULE"
+  | "SPONSORS"
+  | "VENUE"
+  | "AGENDA"
+  | "FAQ"
+  | "GALLERY"
+  | "CTA"
+  | "STATS"
+  | "CUSTOM"
+
+export interface LandingSectionBaseData {
+  [key: string]: unknown
+}
+
+export interface LandingSectionDto {
+  id: string
+  eventId: string
+  type: LandingSectionType
+  title: string | null
+  subtitle: string | null
+  data: LandingSectionBaseData
+  order: number
+  isVisible: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Per-type data shapes (informational — kept loose on the wire) ────────────
+export interface HeroSectionData {
+  title?: string
+  subtitle?: string
+  backgroundImageUrl?: string
+  buttonText?: string
+  buttonUrl?: string
+}
+
+export interface AboutSectionData {
+  body?: string
+}
+
+export interface SpeakerItem {
+  id: string
+  name: string
+  title?: string
+  company?: string
+  bio?: string
+  avatarUrl?: string
+}
+
+export interface SpeakersSectionData {
+  speakers: SpeakerItem[]
+}
+
+export interface ScheduleItem {
+  id: string
+  date?: string
+  time?: string
+  title: string
+  description?: string
+  speakerName?: string
+  track?: string
+}
+
+export interface ScheduleSectionData {
+  items: ScheduleItem[]
+}
+
+export interface SponsorItem {
+  id: string
+  name: string
+  logoUrl?: string
+  tier?: "gold" | "silver" | "bronze"
+  websiteUrl?: string
+}
+
+export interface SponsorsSectionData {
+  sponsors: SponsorItem[]
+}
+
+export interface VenueSectionData {
+  name?: string
+  address?: string
+  mapUrl?: string
+  imageUrl?: string
+  capacity?: number
+}
+
+export interface AgendaItem {
+  id: string
+  time: string
+  title: string
+  description?: string
+  location?: string
+}
+
+export interface AgendaSectionData {
+  items: AgendaItem[]
+}
+
+export interface FaqItem {
+  id: string
+  question: string
+  answer: string
+}
+
+export interface FaqSectionData {
+  items: FaqItem[]
+}
+
+export interface GalleryItem {
+  id: string
+  imageUrl: string
+  caption?: string
+}
+
+export interface GallerySectionData {
+  items: GalleryItem[]
+}
+
+export interface CtaSectionData {
+  buttonText?: string
+  buttonUrl?: string
+}
+
+export interface StatItem {
+  id: string
+  label: string
+  value: string
+  icon?: string
+}
+
+export interface StatsSectionData {
+  items: StatItem[]
+}
+
+export interface CustomSectionData {
+  body?: string
+}
