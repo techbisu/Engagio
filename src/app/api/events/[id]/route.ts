@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { resolveImageField, deleteFile } from "@/lib/storage";
+import { resolveImageValue, deleteFile } from "@/lib/storage";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 async function requireAdmin(): Promise<boolean> {
@@ -112,7 +112,14 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const data: Record<string, unknown> = {};
     if (typeof title === "string" && title.trim()) data.title = title.trim();
     if (typeof description === "string") data.description = description;
-    if (typeof image === "string") data.image = image.trim() || null;
+    if (image !== undefined) {
+      // Event hero image: handle string URL passthrough, data URL upload, or null to clear.
+      const img = await resolveImageValue(image, null, {
+        folder: "events/hero",
+        transformation: "w_1200,h_525,c_fill,q_auto,f_auto",
+      });
+      data.image = img.url;
+    }
     if (typeof isActive === "boolean") data.isActive = isActive;
     if (typeof requireRegistration === "boolean") data.requireRegistration = requireRegistration;
     // Payment
@@ -126,16 +133,14 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     // - undefined  -> no change.
     // - null/""    -> delete the old Cloudinary asset + clear both fields.
     // - data:image/* -> upload (replacing the old asset) + store url + publicId.
-    // - other string -> external URL passthrough (publicId cleared).
+    // - other string -> external URL passthrough (publicId kept for cleanup).
     if (qrCodeUrl !== undefined) {
-      const qr = await resolveImageField(qrCodeUrl, existing.qrCodePublicId, {
+      const qr = await resolveImageValue(qrCodeUrl, existing.qrCodePublicId ?? null, {
         folder: "events/qr",
-        transformations: ["w_400", "h_400", "c_fit", "q_auto", "f_auto"],
+        transformation: "w_400,h_400,c_fit,q_auto,f_auto",
       });
-      if (qr) {
-        data.qrCodeUrl = qr.url;
-        data.qrCodePublicId = qr.publicId;
-      }
+      data.qrCodeUrl = qr.url;
+      data.qrCodePublicId = qr.publicId;
     }
     if (typeof requireTransactionRef === "boolean") data.requireTransactionRef = requireTransactionRef;
     if (typeof requireScreenshot === "boolean") data.requireScreenshot = requireScreenshot;
@@ -150,25 +155,21 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     if (typeof certSigneeTitle === "string") data.certSigneeTitle = certSigneeTitle || null;
     // Signee image: upload/clear/passthrough (see QR code above).
     if (certSigneeImage !== undefined) {
-      const signee = await resolveImageField(certSigneeImage, existing.certSigneeImagePublicId, {
+      const signee = await resolveImageValue(certSigneeImage, existing.certSigneeImagePublicId ?? null, {
         folder: "events/signatures",
-        transformations: ["w_400", "h_200", "c_fit", "q_auto", "f_auto"],
+        transformation: "w_400,h_200,c_fit,q_auto,f_auto",
       });
-      if (signee) {
-        data.certSigneeImage = signee.url;
-        data.certSigneeImagePublicId = signee.publicId;
-      }
+      data.certSigneeImage = signee.url;
+      data.certSigneeImagePublicId = signee.publicId;
     }
     // Org logo: upload/clear/passthrough (see QR code above).
     if (certLogo !== undefined) {
-      const logo = await resolveImageField(certLogo, existing.certLogoPublicId, {
+      const logo = await resolveImageValue(certLogo, existing.certLogoPublicId ?? null, {
         folder: "events/logos",
-        transformations: ["w_300", "h_300", "c_fit", "q_auto", "f_auto"],
+        transformation: "w_300,h_300,c_fit,q_auto,f_auto",
       });
-      if (logo) {
-        data.certLogo = logo.url;
-        data.certLogoPublicId = logo.publicId;
-      }
+      data.certLogo = logo.url;
+      data.certLogoPublicId = logo.publicId;
     }
 
     let start = existing.startDate;

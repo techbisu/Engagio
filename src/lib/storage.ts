@@ -290,3 +290,74 @@ export async function resolveImageField(
   // Case 3: no value — keep existing
   return { url: existingUrl, publicId: existingPublicId, deletedOld: false }
 }
+
+/**
+ * Resolve an image field that comes from a JSON body (NOT a FormData).
+ *
+ * Accepts a value that is either:
+ *   - a string URL (data URL, Cloudinary URL, or external URL) → passthrough
+ *   - a File/Blob object → upload it
+ *   - null/"" → clear (delete old asset, return null)
+ *   - undefined → no change (return existing)
+ *
+ * Used by JSON-based PATCH handlers (e.g., events PATCH) that receive
+ * image values in the JSON body rather than multipart form data.
+ *
+ * @param value           The incoming value (string | File | null | undefined)
+ * @param existingPublicId The current publicId in the DB (for cleanup)
+ * @param options          Upload options (folder, transformation, etc.)
+ * @returns `{ url, publicId }` — url is null when cleared, publicId is null
+ *          when not a Cloudinary upload.
+ */
+export async function resolveImageValue(
+  value: string | File | Blob | null | undefined,
+  existingPublicId: string | null,
+  options: UploadOptions = {}
+): Promise<{
+  url: string | null
+  publicId: string | null
+}> {
+  // Case 1: File/Blob upload — upload to Cloudinary (or local fallback)
+  if ((value instanceof File || value instanceof Blob) && value.size > 0) {
+    if (existingPublicId) {
+      await deleteImage(existingPublicId).catch(() => {})
+    }
+    const buffer = await fileToBuffer(value)
+    const result = await uploadImage(buffer, (value as File).type || "image/png", options)
+    return {
+      url: result.url,
+      publicId: result.publicId || null,
+    }
+  }
+
+  // Case 2: non-empty string — could be a data URL, Cloudinary URL, or external URL
+  if (typeof value === "string" && value.trim()) {
+    const trimmed = value.trim()
+    // If it's a data URL → upload it (otherwise the DB would bloat with base64)
+    if (trimmed.startsWith("data:image/")) {
+      if (existingPublicId) {
+        await deleteImage(existingPublicId).catch(() => {})
+      }
+      const base64Match = trimmed.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/)
+      if (base64Match) {
+        const mimeType = `image/${base64Match[1]}`
+        const buffer = Buffer.from(base64Match[2], "base64")
+        const result = await uploadImage(buffer, mimeType, options)
+        return { url: result.url, publicId: result.publicId || null }
+      }
+    }
+    // Otherwise treat as a URL passthrough — optimize Cloudinary URLs if applicable
+    return { url: optimizeCloudinaryUrl(trimmed, options.transformation), publicId: existingPublicId }
+  }
+
+  // Case 3: null or empty string → clear the field (delete old asset if any)
+  if (value === null || (typeof value === "string" && !value.trim())) {
+    if (existingPublicId) {
+      await deleteImage(existingPublicId).catch(() => {})
+    }
+    return { url: null, publicId: null }
+  }
+
+  // Case 4: undefined → no change
+  return { url: null, publicId: existingPublicId }
+}
