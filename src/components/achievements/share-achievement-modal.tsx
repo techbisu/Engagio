@@ -21,6 +21,7 @@ import {
   Sparkles,
   Twitter,
   MessageCircle,
+  X,
 } from "lucide-react"
 import { format } from "date-fns"
 
@@ -327,7 +328,6 @@ export function ShareAchievementModal({
         className="max-h-[90vh] max-w-md gap-0 overflow-y-auto p-0 sm:max-w-md sm:rounded-2xl"
         showCloseButton
         data-slot="share-achievement-modal"
-        onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={() => onOpenChange(false)}
       >
         <DialogDescription className="sr-only">
@@ -337,7 +337,7 @@ export function ShareAchievementModal({
 
         {/* Body */}
         <div className="max-h-[88vh] overflow-y-auto sm:max-h-[80vh]">
-          {/* Header band */}
+          {/* Header band with close button */}
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-white/90 px-4 py-3 backdrop-blur dark:bg-slate-950/90">
             <div className="flex min-w-0 items-center gap-2">
               <span className="grid size-7 place-items-center rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -352,7 +352,17 @@ export function ShareAchievementModal({
                 </p>
               </div>
             </div>
-            <VisibilityBadge visibility={draft.visibility} />
+            <div className="flex items-center gap-2">
+              <VisibilityBadge visibility={draft.visibility} />
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="grid size-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
 
           {/* Card preview */}
