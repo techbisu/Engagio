@@ -289,7 +289,9 @@ export function ShareAchievementModal({
     }
     try {
       // Fetch as blob to ensure download works cross-origin.
-      const res = await fetch(draft.imageUrl)
+      // Append cache-busting param to avoid getting the old cached version.
+      const imgUrl = draft.imageUrl + (draft.imageUrl.includes("?") ? "&" : "?") + "v=" + draft.dataVersion
+      const res = await fetch(imgUrl)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -378,7 +380,7 @@ export function ShareAchievementModal({
               >
                 {draft.imageUrl ? (
                   <img
-                    src={draft.imageUrl}
+                    src={draft.imageUrl + (draft.imageUrl.includes("?") ? "&" : "?") + "v=" + draft.dataVersion}
                     alt={`${draft.title} achievement card`}
                     className="w-full rounded-xl shadow-lg ring-1 ring-black/5"
                   />
