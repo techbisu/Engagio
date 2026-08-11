@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, Share2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -101,14 +101,16 @@ export function ShareAchievementButton({
       )}
       onClick={handleClick}
       disabled={createMutation.isPending || !!disabledReason}
-      aria-label={label}
+      aria-label={label || "Share Achievement"}
     >
       {createMutation.isPending ? (
         <Loader2 className="size-4 animate-spin" />
-      ) : (
+      ) : label ? (
         <Sparkles className="size-4" />
+      ) : (
+        <Share2 className="size-4" />
       )}
-      <span className="hidden sm:inline">✨</span>
+      {label && <span className="hidden sm:inline">✨</span>}
       {label}
     </Button>
   )

@@ -281,11 +281,15 @@ export default function Home() {
         return
       }
 
-      // 5. Check if the user has an organization membership.
-      //    If they have an org → admin panel.
-      //    If they don't have an org → show the intermediate "no org" page
-      //    (which explains the situation and routes them to registration).
-      //    NEVER send org-login users to the participant dashboard.
+      // 5. Role-based routing:
+      //    - STUDENT role → student dashboard (participants don't need an org)
+      //    - ADMIN role with org → admin panel
+      //    - ADMIN role without org → "no org" intermediate page → registration
+      if (me.role === "STUDENT") {
+        setView("student")
+        return
+      }
+
       try {
         const orgRes = await fetch("/api/organizations")
         const orgData = await orgRes.json()

@@ -10,6 +10,7 @@ import {
   KeyRound,
   Link2,
   PlayCircle,
+  Share2,
   Sparkles,
   Trophy,
   Users,
@@ -29,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ShareAchievementButton } from "@/components/achievements/share-achievement-button"
 
 import { api } from "./api"
 import type { AttemptListResponse, AttemptListItem } from "./api"
@@ -300,6 +302,7 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
               <th className="px-4 py-2.5 text-center font-medium">Result</th>
               <th className="px-4 py-2.5 text-right font-medium">Time</th>
               <th className="px-4 py-2.5 text-right font-medium">Date</th>
+              <th className="px-4 py-2.5 text-center font-medium">Share</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -342,6 +345,34 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                     ? formatDistanceToNow(new Date(a.startedAt), { addSuffix: true })
                     : "—"}
                 </td>
+                <td className="px-4 py-3 text-center">
+                  {a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED" ? (
+                    <ShareAchievementButton
+                      achievementInput={{
+                        type: "QUIZ_RESULT",
+                        eventId: a.event?.id,
+                        title: a.event?.title
+                          ? `${a.event.title} · Quiz Result`
+                          : "Quiz Result",
+                        subtitle: a.event?.title ?? undefined,
+                        score: a.score ?? undefined,
+                        totalScore: a.totalMarks ?? undefined,
+                        percentage: a.percentage ?? undefined,
+                        achievementData: {
+                          eventTitle: a.event?.title,
+                        },
+                        templateId: "modern",
+                        visibility: "LINK_ONLY",
+                      }}
+                      label=""
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -382,15 +413,42 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
               )}
             </div>
             <Separator className="my-2" />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                {a.timeTaken != null ? formatDuration(a.timeTaken) : "—"}
-              </span>
-              <span>
-                {a.startedAt
-                  ? formatDistanceToNow(new Date(a.startedAt), { addSuffix: true })
-                  : "—"}
-              </span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {a.timeTaken != null ? formatDuration(a.timeTaken) : "—"}
+                </span>
+                <span>·</span>
+                <span>
+                  {a.startedAt
+                    ? formatDistanceToNow(new Date(a.startedAt), { addSuffix: true })
+                    : "—"}
+                </span>
+              </div>
+              {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && (
+                <ShareAchievementButton
+                  achievementInput={{
+                    type: "QUIZ_RESULT",
+                    eventId: a.event?.id,
+                    title: a.event?.title
+                      ? `${a.event.title} · Quiz Result`
+                      : "Quiz Result",
+                    subtitle: a.event?.title ?? undefined,
+                    score: a.score ?? undefined,
+                    totalScore: a.totalMarks ?? undefined,
+                    percentage: a.percentage ?? undefined,
+                    achievementData: {
+                      eventTitle: a.event?.title,
+                    },
+                    templateId: "modern",
+                    visibility: "LINK_ONLY",
+                  }}
+                  label="Share"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                />
+              )}
             </div>
           </div>
         ))}
