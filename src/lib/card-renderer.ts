@@ -22,9 +22,8 @@
  */
 
 import sharp from "sharp"
-import { readFileSync } from "fs"
-import { join } from "path"
 import { generateAchievementQr } from "./achievement"
+import { DEJAVU_SANS, DEJAVU_SANS_BOLD, DEJAVU_SANS_MONO } from "./font-data"
 import type {
   AchievementTemplateId,
   AchievementType,
@@ -61,51 +60,37 @@ const FONT_SANS = "DejaVu Sans, sans-serif"
 const FONT_MONO = "DejaVu Sans Mono, monospace"
 
 // ─── Load embedded fonts (subsetted, ~13KB each) ────────────────────────────
-let fontSansB64: string | null = null
-let fontSansBoldB64: string | null = null
-let fontMonoB64: string | null = null
-
-function loadFonts(): void {
-  if (fontSansB64) return
-  try {
-    const fontsDir = join(process.cwd(), "public", "fonts")
-    fontSansB64 = readFileSync(join(fontsDir, "DejaVuSans.ttf")).toString("base64")
-    fontSansBoldB64 = readFileSync(join(fontsDir, "DejaVuSans-Bold.ttf")).toString("base64")
-    fontMonoB64 = readFileSync(join(fontsDir, "DejaVuSansMono.ttf")).toString("base64")
-  } catch {
-    // Fallback: fonts not found — SVG will use generic sans-serif
-    fontSansB64 = ""
-    fontSansBoldB64 = ""
-    fontMonoB64 = ""
-  }
-}
+// Fonts are imported as base64 strings from font-data.ts so they are
+// available in Vercel serverless functions (files in public/ are NOT
+// available to server-side code at runtime).
+let fontCssCache: string | null = null
 
 /** Build the @font-face CSS block with embedded base64 fonts. */
 function fontFaceCss(): string {
-  loadFonts()
-  if (!fontSansB64) return ""
-  return `
+  if (fontCssCache) return fontCssCache
+  fontCssCache = `
     <style type="text/css">
       @font-face {
         font-family: "DejaVu Sans";
-        src: url("data:font/ttf;base64,${fontSansB64}") format("truetype");
+        src: url("data:font/ttf;base64,${DEJAVU_SANS}") format("truetype");
         font-weight: normal;
         font-style: normal;
       }
       @font-face {
         font-family: "DejaVu Sans";
-        src: url("data:font/ttf;base64,${fontSansBoldB64}") format("truetype");
+        src: url("data:font/ttf;base64,${DEJAVU_SANS_BOLD}") format("truetype");
         font-weight: bold;
         font-style: normal;
       }
       @font-face {
         font-family: "DejaVu Sans Mono";
-        src: url("data:font/ttf;base64,${fontMonoB64}") format("truetype");
+        src: url("data:font/ttf;base64,${DEJAVU_SANS_MONO}") format("truetype");
         font-weight: normal;
         font-style: normal;
       }
     </style>
   `
+  return fontCssCache
 }
 
 // ─── Colors ────────────────────────────────────────────────────────────────
