@@ -1,27 +1,18 @@
 /**
- * Server-side card renderer for shareable achievement cards.
+ * Server-side card renderer using Satori + Resvg.
  *
- * ─── Design: Clean white certificate-style card ─────────────────────────────
- * White background, emerald/teal accents, clean typography.
- * Inspired by digital credentials (Credly, Accredible).
+ * Satori (by Vercel) converts React-like elements to SVG with proper font
+ * support. It accepts font data as ArrayBuffer, so there's no dependency
+ * on system-installed fonts. This fixes the "tofu boxes" (□□□□) issue
+ * that occurred with sharp/librsvg on Vercel.
  *
- * Layout:
- *   - Header: Engagio logo + "Verified" badge
- *   - Type label (QUIZ RESULT / CERTIFICATE OF COMPLETION / etc.)
- *   - Hero metric (score/rank) OR recipient name (for certificates)
- *   - Event/quiz title + subtitle
- *   - Date + org name
- *   - Footer: Serial number (mono) + QR code
- *   - Portrait 1200×1500 (4:5)
+ * Resvg converts the Satori SVG to PNG.
  *
- * ─── Font embedding (fixes tofu boxes on Vercel) ───────────────────────────
- * The SVG embeds DejaVu Sans as a base64 @font-face. This guarantees text
- * renders correctly on ANY server (Vercel, local, etc.) without depending on
- * system-installed fonts. The font is subsetted to ~13KB (Latin + numbers +
- * punctuation only) so it doesn't bloat the SVG.
+ * Design: Clean white certificate-style card with emerald accents.
  */
 
-import sharp from "sharp"
+import satori from "satori"
+import { Resvg } from "@resvg/resvg-js"
 import { generateAchievementQr } from "./achievement"
 import { DEJAVU_SANS, DEJAVU_SANS_BOLD, DEJAVU_SANS_MONO } from "./font-data"
 import type {
@@ -55,49 +46,36 @@ export interface RenderedCard {
 const W = 1200
 const H = 1500
 
-// ─── Font stacks ────────────────────────────────────────────────────────────
-const FONT_SANS = "DejaVu Sans, sans-serif"
-const FONT_MONO = "DejaVu Sans Mono, monospace"
-
-// ─── Load embedded fonts (subsetted, ~13KB each) ────────────────────────────
-// Fonts are imported as base64 strings from font-data.ts so they are
-// available in Vercel serverless functions (files in public/ are NOT
-// available to server-side code at runtime).
-let fontCssCache: string | null = null
-
-/** Build the @font-face CSS block with embedded base64 fonts. */
-function fontFaceCss(): string {
-  if (fontCssCache) return fontCssCache
-  fontCssCache = `
-    <style type="text/css">
-      @font-face {
-        font-family: "DejaVu Sans";
-        src: url("data:font/ttf;base64,${DEJAVU_SANS}") format("truetype");
-        font-weight: normal;
-        font-style: normal;
-      }
-      @font-face {
-        font-family: "DejaVu Sans";
-        src: url("data:font/ttf;base64,${DEJAVU_SANS_BOLD}") format("truetype");
-        font-weight: bold;
-        font-style: normal;
-      }
-      @font-face {
-        font-family: "DejaVu Sans Mono";
-        src: url("data:font/ttf;base64,${DEJAVU_SANS_MONO}") format("truetype");
-        font-weight: normal;
-        font-style: normal;
-      }
-    </style>
-  `
-  return fontCssCache
+// ─── Font data (base64 → Buffer) ────────────────────────────────────────────
+function base64ToBuffer(b64: string): Buffer {
+  return Buffer.from(b64, "base64")
 }
+
+const fonts = [
+  {
+    name: "DejaVu Sans",
+    data: base64ToBuffer(DEJAVU_SANS),
+    weight: 400 as const,
+    style: "normal" as const,
+  },
+  {
+    name: "DejaVu Sans",
+    data: base64ToBuffer(DEJAVU_SANS_BOLD),
+    weight: 700 as const,
+    style: "normal" as const,
+  },
+  {
+    name: "DejaVu Sans Mono",
+    data: base64ToBuffer(DEJAVU_SANS_MONO),
+    weight: 400 as const,
+    style: "normal" as const,
+  },
+]
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 const C = {
   white: "#ffffff",
   bgLight: "#f8fafc",
-  bgCard: "#ffffff",
   slate900: "#0f172a",
   slate700: "#334155",
   slate500: "#64748b",
@@ -116,9 +94,6 @@ const C = {
   amber: "#f59e0b",
   amberDark: "#d97706",
   amberLight: "#fbbf24",
-  gold: "#fbbf24",
-  goldLight: "#fde68a",
-  rose: "#f43f5e",
 }
 
 // ─── Per-template accent colors ─────────────────────────────────────────────
@@ -131,101 +106,33 @@ interface TemplateTheme {
 }
 
 const THEMES: Record<AchievementTemplateId, TemplateTheme> = {
-  minimal: {
-    accent: C.teal,
-    accentDark: C.tealDark,
-    accentLight: C.teal,
-    accentBg: C.emerald50,
-    label: "ACHIEVEMENT",
-  },
-  modern: {
-    accent: C.emerald,
-    accentDark: C.emeraldDark,
-    accentLight: C.emeraldLight,
-    accentBg: C.emerald50,
-    label: "ACHIEVEMENT",
-  },
-  professional: {
-    accent: C.amber,
-    accentDark: C.amberDark,
-    accentLight: C.amberLight,
-    accentBg: "#fffbeb",
-    label: "CERTIFICATE",
-  },
-  celebration: {
-    accent: C.amber,
-    accentDark: C.amberDark,
-    accentLight: C.gold,
-    accentBg: "#fffbeb",
-    label: "ACHIEVEMENT",
-  },
-  conference: {
-    accent: C.teal,
-    accentDark: C.tealDark,
-    accentLight: C.teal,
-    accentBg: C.emerald50,
-    label: "ATTENDEE PASS",
-  },
+  minimal: { accent: C.teal, accentDark: C.tealDark, accentLight: C.teal, accentBg: C.emerald50, label: "ACHIEVEMENT" },
+  modern: { accent: C.emerald, accentDark: C.emeraldDark, accentLight: C.emeraldLight, accentBg: C.emerald50, label: "ACHIEVEMENT" },
+  professional: { accent: C.amber, accentDark: C.amberDark, accentLight: C.amberLight, accentBg: "#fffbeb", label: "CERTIFICATE" },
+  celebration: { accent: C.amber, accentDark: C.amberDark, accentLight: C.amberLight, accentBg: "#fffbeb", label: "ACHIEVEMENT" },
+  conference: { accent: C.teal, accentDark: C.tealDark, accentLight: C.teal, accentBg: C.emerald50, label: "ATTENDEE PASS" },
 }
 
 // ─── Type info ─────────────────────────────────────────────────────────────
-function typeInfo(type: AchievementType): { emoji: string; label: string } {
+function typeInfo(type: AchievementType): { label: string } {
   switch (type) {
     case "QUIZ_RESULT":
     case "KNOWLEDGE_CHECK_RESULT":
-      return { emoji: "", label: "QUIZ RESULT" }
+      return { label: "QUIZ RESULT" }
     case "LIVE_QUIZ_RESULT":
-      return { emoji: "", label: "LIVE QUIZ RESULT" }
+      return { label: "LIVE QUIZ RESULT" }
     case "PRE_POST_RESULT":
-      return { emoji: "", label: "LEARNING PROGRESS" }
+      return { label: "LEARNING PROGRESS" }
     case "CERTIFICATE_EARNED":
-      return { emoji: "", label: "CERTIFICATE OF COMPLETION" }
+      return { label: "CERTIFICATE OF COMPLETION" }
     case "ACTIVITY_COMPLETED":
     case "EVENT_PARTICIPATION":
-      return { emoji: "", label: "PARTICIPATION" }
+      return { label: "PARTICIPATION" }
     case "LEADERBOARD_ACHIEVEMENT":
-      return { emoji: "", label: "LEADERBOARD ACHIEVEMENT" }
+      return { label: "LEADERBOARD ACHIEVEMENT" }
     default:
-      return { emoji: "", label: "ACHIEVEMENT" }
+      return { label: "ACHIEVEMENT" }
   }
-}
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-function escapeXml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;")
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s
-  return s.slice(0, max - 1).trimEnd() + "..."
-}
-
-function wrapText(text: string, maxCharsPerLine: number, maxLines: number): string[] {
-  const words = text.split(/\s+/)
-  const lines: string[] = []
-  let cur = ""
-  for (const w of words) {
-    if (!cur) {
-      cur = w
-    } else if ((cur + " " + w).length <= maxCharsPerLine) {
-      cur += " " + w
-    } else {
-      lines.push(cur)
-      cur = w
-      if (lines.length === maxLines - 1) break
-    }
-  }
-  if (cur) lines.push(cur)
-  if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length + 3) {
-    lines[maxLines - 1] = truncate(lines[maxLines - 1], maxCharsPerLine)
-  }
-  return lines.slice(0, maxLines)
 }
 
 function rankSuffix(rank: number): string {
@@ -251,222 +158,355 @@ function buildSerialNumber(p: CardRenderParams): string {
   return `${orgCode}-${year}-${hash}`
 }
 
-// ─── QR code ───────────────────────────────────────────────────────────────
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s
+  return s.slice(0, max - 1).trimEnd() + "..."
+}
 
-async function buildQrImageTag(shareUrl: string, x: number, y: number, size = 180): Promise<string> {
-  try {
-    const dataUrl = await generateAchievementQr(shareUrl)
-    return `<image href="${dataUrl}" x="${x}" y="${y}" width="${size}" height="${size}" />`
-  } catch {
-    return ""
+// ─── Build the Satori JSX tree ─────────────────────────────────────────────
+
+// Satori uses a subset of React's createElement. We use inline objects.
+type SatoriNode = {
+  type: string
+  props: {
+    style?: Record<string, string | number>
+    children?: SatoriNode | SatoriNode[] | string
+    [key: string]: unknown
   }
 }
 
-function orgLogoTag(url: string, x: number, y: number, size = 48): string {
-  return `<image href="${escapeXml(url)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" />`
+function el(
+  type: string,
+  style: Record<string, string | number>,
+  children?: SatoriNode | SatoriNode[] | string,
+  extra?: Record<string, unknown>,
+): SatoriNode {
+  return { type, props: { style, children, ...extra } }
 }
 
-// ─── Checkmark SVG path (for "Verified" badge) ─────────────────────────────
-const CHECKMARK_PATH = "M 20 6 L 9 17 L 4 12"
-
-// ─── Main card renderer (builds the SVG string) ────────────────────────────
-
-async function renderCardSvgInternal(p: CardRenderParams): Promise<string> {
+async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   const theme = THEMES[p.templateId] || THEMES.modern
   const info = typeInfo(p.type)
   const { title, subtitle, participantName, percentage, rank, score, totalScore, totalParticipants } = p
-
-  // ─── Determine the hero metric ───────────────────────────────────────────
-  let heroLine = ""
-  let heroSub = ""
-  let heroSuffix = ""
 
   const hasPercent = typeof percentage === "number" && percentage >= 0
   const hasRank = typeof rank === "number" && rank > 0
   const hasScore = typeof score === "number" && typeof totalScore === "number"
   const isCertificate = p.type === "CERTIFICATE_EARNED"
 
-  if (isCertificate) {
-    heroLine = ""
-  } else if (hasPercent) {
-    heroLine = String(percentage)
-    heroSuffix = "%"
-    heroSub = "SCORE"
-  } else if (hasRank) {
-    heroLine = String(rank)
-    heroSuffix = rankSuffix(rank)
-    heroSub = totalParticipants ? `RANK OF ${totalParticipants}` : "RANK"
-  } else if (hasScore) {
-    heroLine = `${score}/${totalScore}`
-    heroSub = "POINTS"
-  } else {
-    heroLine = ""
-    heroSub = "COMPLETED"
+  // Hero metric
+  let heroLine = ""
+  let heroSuffix = ""
+  let heroSub = ""
+
+  if (!isCertificate) {
+    if (hasPercent) {
+      heroLine = String(percentage)
+      heroSuffix = "%"
+      heroSub = "SCORE"
+    } else if (hasRank) {
+      heroLine = String(rank)
+      heroSuffix = rankSuffix(rank)
+      heroSub = totalParticipants ? `RANK OF ${totalParticipants}` : "RANK"
+    } else if (hasScore) {
+      heroLine = `${score}/${totalScore}`
+      heroSub = "POINTS"
+    } else {
+      heroSub = "COMPLETED"
+    }
   }
 
-  // ─── Date ────────────────────────────────────────────────────────────────
   const dateStr = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   })
 
-  // ─── Serial number ───────────────────────────────────────────────────────
   const serial = buildSerialNumber(p)
 
-  // ─── Title wrapping ──────────────────────────────────────────────────────
-  const titleLines = wrapText(title, 30, 2)
-  const titleBlock = titleLines
-    .map((line, i) => `<text x="${W / 2}" y="${920 + i * 52}" font-family="${FONT_SANS}" font-size="36" font-weight="700" fill="${C.slate900}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
+  // QR code as data URL
+  let qrDataUrl = ""
+  if (p.shareUrl) {
+    try {
+      qrDataUrl = await generateAchievementQr(p.shareUrl)
+    } catch {
+      // ignore
+    }
+  }
 
-  // ─── Subtitle ────────────────────────────────────────────────────────────
-  const subtitleText = subtitle || p.achievementData?.eventTitle || ""
-  const subtitleLines = subtitleText ? wrapText(subtitleText, 36, 2) : []
-  const subtitleBlock = subtitleLines
-    .map((line, i) => `<text x="${W / 2}" y="${920 + titleLines.length * 52 + 30 + i * 40}" font-family="${FONT_SANS}" font-size="24" font-weight="400" fill="${C.slate500}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
+  // Build hero section
+  const heroSection: SatoriNode[] = []
 
-  // ─── Participant name wrapping ───────────────────────────────────────────
-  const nameLines = wrapText(participantName, 26, 2)
-  const nameY = isCertificate ? 680 : 620
-  const nameBlock = nameLines
-    .map((line, i) => `<text x="${W / 2}" y="${nameY + i * 60}" font-family="${FONT_SANS}" font-size="${isCertificate ? 52 : 44}" font-weight="800" fill="${C.slate900}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
+  if (isCertificate) {
+    heroSection.push(
+      el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
+        el("div", { fontSize: "22px", color: C.slate400, marginBottom: "8px" }, "This certifies that"),
+        el("div", {
+          fontSize: "52px",
+          fontWeight: "800",
+          color: C.slate900,
+          textAlign: "center",
+          maxWidth: "900px",
+        }, participantName),
+        el("div", { fontSize: "24px", fontStyle: "italic", color: C.slate500, marginTop: "8px" }, "has successfully completed"),
+      ]),
+    )
+  } else if (heroLine) {
+    heroSection.push(
+      el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
+        el("div", { display: "flex", alignItems: "baseline", justifyContent: "center" }, [
+          el("span", { fontSize: "130px", fontWeight: "800", color: C.slate900, lineHeight: "1" }, heroLine),
+          el("span", { fontSize: "60px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, heroSuffix),
+        ]),
+        el("div", { fontSize: "20px", fontWeight: "700", color: theme.accent, letterSpacing: "6px", marginTop: "8px" }, heroSub),
+        el("div", { fontSize: "16px", color: C.slate400, marginTop: "16px" }, "Awarded to"),
+        el("div", { fontSize: "40px", fontWeight: "800", color: C.slate900, textAlign: "center", maxWidth: "900px" }, participantName),
+      ]),
+    )
+  } else {
+    heroSection.push(
+      el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
+        el("div", {
+          width: "80px",
+          height: "80px",
+          borderRadius: "50%",
+          backgroundColor: theme.accent,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }, "✓"),
+        el("div", { fontSize: "20px", fontWeight: "700", color: theme.accent, letterSpacing: "6px", marginTop: "12px" }, "COMPLETED"),
+        el("div", { fontSize: "16px", color: C.slate400, marginTop: "16px" }, "Awarded to"),
+        el("div", { fontSize: "40px", fontWeight: "800", color: C.slate900, textAlign: "center", maxWidth: "900px" }, participantName),
+      ]),
+    )
+  }
 
-  // ─── QR code ─────────────────────────────────────────────────────────────
-  const qrSize = 170
-  const qrX = W - 80 - qrSize
-  const qrY = H - 80 - qrSize
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, qrX, qrY, qrSize) : ""
+  // Build the full card
+  const card: SatoriNode = el("div", {
+    display: "flex",
+    flexDirection: "column",
+    width: `${W}px`,
+    height: `${H}px`,
+    backgroundColor: C.bgLight,
+    fontFamily: "DejaVu Sans",
+    padding: "40px",
+  }, [
+    // Card container
+    el("div", {
+      display: "flex",
+      flexDirection: "column",
+      flex: "1",
+      backgroundColor: C.white,
+      borderRadius: "24px",
+      border: `1px solid ${C.slate200}`,
+      overflow: "hidden",
+    }, [
+      // Top accent bar
+      el("div", {
+        height: "6px",
+        backgroundColor: theme.accent,
+      }),
 
-  // ─── Org logo (small, in header) ─────────────────────────────────────────
-  const logoBlock = p.orgLogoUrl ? orgLogoTag(p.orgLogoUrl, W - 80 - 48, 82, 48) : ""
+      // Content padding
+      el("div", {
+        display: "flex",
+        flexDirection: "column",
+        flex: "1",
+        padding: "40px",
+      }, [
+        // ═══ HEADER ═══
+        el("div", {
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+        }, [
+          // Logo
+          el("div", { display: "flex", flexDirection: "row", alignItems: "center" }, [
+            el("div", {
+              width: "48px",
+              height: "48px",
+              borderRadius: "12px",
+              backgroundColor: theme.accent,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "12px",
+            }, "★"),
+            el("span", { fontSize: "24px", fontWeight: "800", color: C.slate900 }, "Engagio"),
+          ]),
+          // Verified badge
+          el("div", {
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            paddingLeft: "16px",
+            paddingRight: "16px",
+            paddingTop: "10px",
+            paddingBottom: "10px",
+            borderRadius: "24px",
+            backgroundColor: theme.accentBg,
+            border: `1.5px solid ${theme.accent}`,
+          }, [
+            el("span", { fontSize: "16px", fontWeight: "700", color: theme.accentDark }, "✓ Verified"),
+          ]),
+        ]),
 
-  // ─── Hero metric block (only for non-certificate types) ──────────────────
-  const heroBlock = isCertificate ? "" : `
-    <text x="${W / 2}" y="530" font-family="${FONT_SANS}" font-size="130" font-weight="800" fill="${C.slate900}" text-anchor="middle">${escapeXml(heroLine)}<tspan font-size="60" font-weight="700" fill="${theme.accent}" dx="4">${heroSuffix}</tspan></text>
-    <text x="${W / 2}" y="575" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${theme.accent}" text-anchor="middle" dy="20">${heroSub}</text>
-  `
+        // Header divider
+        el("div", { height: "1px", backgroundColor: C.slate200, marginBottom: "40px" }),
 
-  // ─── "has successfully completed" text (for certificates) ────────────────
-  const completedText = isCertificate
-    ? `<text x="${W / 2}" y="560" font-family="${FONT_SANS}" font-size="24" font-style="italic" fill="${C.slate500}" text-anchor="middle">has successfully completed</text>`
-    : ""
+        // ═══ TYPE LABEL ═══
+        el("div", {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          marginBottom: "30px",
+        }, [
+          el("div", {
+            fontSize: "18px",
+            fontWeight: "700",
+            color: theme.accent,
+            letterSpacing: "8px",
+          }, info.label),
+          el("div", {
+            width: "60px",
+            height: "2px",
+            backgroundColor: theme.accent,
+            marginTop: "12px",
+          }),
+        ]),
 
-  // ─── "This certifies that" (for certificates) ────────────────────────────
-  const certifiesText = isCertificate
-    ? `<text x="${W / 2}" y="530" font-family="${FONT_SANS}" font-size="22" font-weight="400" fill="${C.slate400}" text-anchor="middle">This certifies that</text>`
-    : ""
+        // ═══ HERO SECTION ═══
+        el("div", {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          flex: "1",
+        }, heroSection),
 
-  // ─── "Awarded to" (for non-certificates) ─────────────────────────────────
-  const awardedToText = !isCertificate
-    ? `<text x="${W / 2}" y="${nameY - 30}" font-family="${FONT_SANS}" font-size="20" font-weight="400" fill="${C.slate400}" text-anchor="middle">Awarded to</text>`
-    : ""
+        // ═══ TITLE ═══
+        el("div", {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          marginTop: "20px",
+        }, [
+          el("div", {
+            fontSize: "36px",
+            fontWeight: "700",
+            color: C.slate900,
+            textAlign: "center",
+            maxWidth: "900px",
+          }, truncate(title, 60)),
+          ...(subtitle ?
+            [el("div", {
+              fontSize: "24px",
+              color: C.slate500,
+              textAlign: "center",
+              marginTop: "8px",
+              maxWidth: "900px",
+            }, truncate(subtitle, 70))]
+            : []
+          ),
+          el("div", { fontSize: "22px", color: C.slate500, marginTop: "16px" }, `Issued on ${dateStr}`),
+          ...(p.achievementData?.orgName ?
+            [el("div", { fontSize: "20px", fontWeight: "600", color: C.slate700, marginTop: "8px" }, truncate(p.achievementData.orgName, 50))]
+            : []
+          ),
+        ]),
 
-  // ─── Assemble the SVG ────────────────────────────────────────────────────
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-  ${fontFaceCss()}
+        // ═══ FOOTER ═══
+        el("div", {
+          display: "flex",
+          flexDirection: "column",
+          marginTop: "30px",
+        }, [
+          // Dashed divider
+          el("div", {
+            height: "1px",
+            borderTop: `1px dashed ${C.slate300}`,
+            marginBottom: "20px",
+          }),
+          // Serial + QR row
+          el("div", {
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+          }, [
+            // Serial number
+            el("div", { display: "flex", flexDirection: "column" }, [
+              el("div", { fontSize: "12px", fontWeight: "700", color: C.slate400, letterSpacing: "3px" }, `${theme.label} NO.`),
+              el("div", {
+                fontSize: "26px",
+                fontWeight: "700",
+                color: C.slate900,
+                fontFamily: "DejaVu Sans Mono",
+                marginTop: "4px",
+              }, serial),
+              el("div", {
+                fontSize: "14px",
+                color: C.slate400,
+                fontFamily: "DejaVu Sans Mono",
+                marginTop: "4px",
+              }, `engagio.app/s/${serial.split("-").pop()}`),
+            ]),
+            // QR code
+            ...(qrDataUrl ? [
+              el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
+                el("img", {
+                  width: "170px",
+                  height: "170px",
+                }, undefined, { src: qrDataUrl }),
+                el("div", { fontSize: "12px", fontWeight: "600", color: C.slate400, letterSpacing: "2px", marginTop: "8px" }, "SCAN TO VERIFY"),
+              ]),
+            ] : []),
+          ]),
+          // Powered by
+          el("div", {
+            fontSize: "14px",
+            color: C.slate400,
+            textAlign: "center",
+            marginTop: "20px",
+          }, "Powered by Engagio"),
+        ]),
+      ]),
+    ]),
+  ])
 
-  <!-- Background -->
-  <rect width="${W}" height="${H}" fill="${C.bgLight}" />
-
-  <!-- Card with subtle shadow -->
-  <rect x="40" y="40" width="${W - 80}" height="${H - 80}" rx="24" ry="24" fill="${C.white}" stroke="${C.slate200}" stroke-width="1" />
-
-  <!-- Top accent bar -->
-  <rect x="40" y="40" width="${W - 80}" height="6" rx="3" ry="3" fill="${theme.accent}" />
-
-  <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
-  <!-- Engagio logo (green rounded square with star) -->
-  <rect x="80" y="82" width="48" height="48" rx="12" ry="12" fill="${theme.accent}" />
-  <path d="M 104 94 L 109 107 L 122 108 L 112 117 L 116 130 L 104 122 L 92 130 L 96 117 L 86 108 L 99 107 Z" fill="${C.white}" />
-  <text x="140" y="116" font-family="${FONT_SANS}" font-size="24" font-weight="800" fill="${C.slate900}" letter-spacing="1">Engagio</text>
-  ${logoBlock}
-
-  <!-- Verified badge (top-right) -->
-  <rect x="${W - 240}" y="82" width="160" height="48" rx="24" ry="24" fill="${theme.accentBg}" stroke="${theme.accent}" stroke-width="1.5" />
-  <circle cx="${W - 210}" cy="106" r="10" fill="${theme.accent}" />
-  <polyline points="${W - 215},106 ${W - 211},110 ${W - 204},102" stroke="${C.white}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-  <text x="${W - 190}" y="113" font-family="${FONT_SANS}" font-size="16" font-weight="700" fill="${theme.accentDark}">Verified</text>
-
-  <!-- Header divider -->
-  <line x1="80" y1="160" x2="${W - 80}" y2="160" stroke="${C.slate200}" stroke-width="1" />
-
-  <!-- ═══ TYPE LABEL ══════════════════════════════════════════════════════ -->
-  <text x="${W / 2}" y="230" font-family="${FONT_SANS}" font-size="18" font-weight="700" letter-spacing="8" fill="${theme.accent}" text-anchor="middle">${info.label}</text>
-
-  <!-- Decorative line under label -->
-  <line x1="${W / 2 - 40}" y1="250" x2="${W / 2 + 40}" y2="250" stroke="${theme.accent}" stroke-width="2" />
-
-  <!-- ═══ HERO METRIC (non-certificate) ═══════════════════════════════════ -->
-  ${heroBlock}
-
-  <!-- ═══ CERTIFICATE TEXT ═════════════════════════════════════════════════ -->
-  ${certifiesText}
-  ${completedText}
-
-  <!-- ═══ AWARDED TO (non-certificate) ═════════════════════════════════════ -->
-  ${awardedToText}
-
-  <!-- ═══ PARTICIPANT NAME ═════════════════════════════════════════════════ -->
-  ${nameBlock}
-
-  <!-- ═══ TITLE / EVENT NAME ═══════════════════════════════════════════════ -->
-  ${!isCertificate && !heroLine ? `<text x="${W / 2}" y="${nameY + nameLines.length * 60 + 30}" font-family="${FONT_SANS}" font-size="20" font-weight="400" fill="${C.slate400}" text-anchor="middle">for</text>` : ""}
-  ${titleBlock}
-  ${subtitleBlock}
-
-  <!-- ═══ DATE ═════════════════════════════════════════════════════════════ -->
-  <text x="${W / 2}" y="${990 + (titleLines.length - 1) * 52 + (subtitleLines.length * 40)}" font-family="${FONT_SANS}" font-size="22" font-weight="400" fill="${C.slate500}" text-anchor="middle">Issued on ${dateStr}</text>
-
-  <!-- ═══ ORG NAME ════════════════════════════════════════════════════════ -->
-  ${p.achievementData?.orgName ? `<text x="${W / 2}" y="${1040 + (titleLines.length - 1) * 52 + (subtitleLines.length * 40)}" font-family="${FONT_SANS}" font-size="20" font-weight="600" fill="${C.slate700}" text-anchor="middle">${escapeXml(truncate(p.achievementData.orgName, 50))}</text>` : ""}
-
-  <!-- ═══ FOOTER DIVIDER ═══════════════════════════════════════════════════ -->
-  <line x1="80" y1="${H - 300}" x2="${W - 80}" y2="${H - 300}" stroke="${C.slate200}" stroke-width="1" stroke-dasharray="6 6" />
-
-  <!-- ═══ FOOTER: SERIAL + QR ══════════════════════════════════════════════ -->
-  <!-- Serial number (left) -->
-  <text x="80" y="${H - 240}" font-family="${FONT_SANS}" font-size="12" font-weight="700" letter-spacing="3" fill="${C.slate400}">${theme.label} NO.</text>
-  <text x="80" y="${H - 200}" font-family="${FONT_MONO}" font-size="26" font-weight="700" fill="${C.slate900}">${escapeXml(serial)}</text>
-
-  <!-- Share URL (left, small) -->
-  ${p.shareUrl ? `<text x="80" y="${H - 155}" font-family="${FONT_MONO}" font-size="14" font-weight="400" fill="${C.slate400}">engagio.app/s/${escapeXml(serial.split("-").pop() || "")}</text>` : ""}
-
-  <!-- QR code (right) -->
-  ${qrTag ? `<rect x="${qrX - 12}" y="${qrY - 12}" width="${qrSize + 24}" height="${qrSize + 24}" rx="16" ry="16" fill="${C.slate50}" stroke="${C.slate200}" stroke-width="1" />` : ""}
-  ${qrTag}
-  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 35}" font-family="${FONT_SANS}" font-size="12" font-weight="600" letter-spacing="2" fill="${C.slate400}" text-anchor="middle">SCAN TO VERIFY</text>
-
-  <!-- Powered by Engagio (bottom center) -->
-  <text x="${W / 2}" y="${H - 70}" font-family="${FONT_SANS}" font-size="14" font-weight="500" fill="${C.slate400}" text-anchor="middle">Powered by Engagio</text>
-</svg>`
+  return card
 }
 
-/** Render only the SVG. */
+/** Render only the SVG (via Satori). */
 export async function renderCardSvg(p: CardRenderParams): Promise<string> {
-  return renderCardSvgInternal(p)
+  const tree = await buildCardTree(p)
+  const svg = await satori(tree, {
+    width: W,
+    height: H,
+    fonts,
+  })
+  return svg
 }
 
 /**
- * Render the card and convert SVG → PNG via sharp.
- * Falls back to returning the SVG buffer if sharp fails.
+ * Render the card and convert SVG → PNG via Resvg.
+ * Falls back to returning the SVG buffer if Resvg fails.
  */
 export async function renderCard(p: CardRenderParams): Promise<RenderedCard> {
-  const svg = await renderCardSvgInternal(p)
+  const svg = await renderCardSvg(p)
   try {
-    const png = await sharp(Buffer.from(svg), { density: 144 })
-      .resize(W, H, { fit: "cover" })
-      .png()
-      .toBuffer()
-
-    if (png.length > 4 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47) {
-      return { png, svg }
-    }
-    throw new Error("Invalid PNG output")
+    const resvg = new Resvg(svg, {
+      fitTo: { mode: "width", value: W },
+      dpi: 144,
+    })
+    const png = resvg.render().asPng()
+    const pngBuffer = Buffer.from(png)
+    return { png: pngBuffer, svg }
   } catch (e) {
-    console.error("[card-renderer] sharp SVG→PNG failed; using SVG fallback:", e)
+    console.error("[card-renderer] Resvg SVG→PNG failed; using SVG fallback:", e)
     return { png: Buffer.from(svg, "utf-8"), svg }
   }
 }
