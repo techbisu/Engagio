@@ -1,33 +1,31 @@
 /**
  * Server-side card renderer for shareable achievement cards.
  *
- * Strategy: build an SVG string (1200×1200 square) for one of 5 templates,
- * then convert to PNG via `sharp`.
+ * ─── Design: Ticket-style digital card ─────────────────────────────────────
+ * All templates now use a unified "ticket" aesthetic inspired by digital
+ * wallet passes and event tickets:
+ *   - Dark navy background (#0b1120) with a subtle radial glow
+ *   - Thin glowing teal border (rounded corners)
+ *   - Header: Engagio logo + "Verified" badge
+ *   - Hero: Big metric (score/rank) OR recipient name
+ *   - Body: Event/quiz title + date + type label
+ *   - Footer: Serial number (mono font) + QR code
+ *   - Portrait 1200×1500 (4:5) — optimized for mobile sharing
+ *
+ * Templates control the ACCENT COLOR and small decorative variations:
+ *   1. minimal       — teal accent, no decorations
+ *   2. modern        — teal→emerald gradient accent
+ *   3. professional  — amber accent (formal)
+ *   4. celebration   — gold accent + subtle confetti dots
+ *   5. conference    — slate→teal accent
  *
  * ─── Font availability note ────────────────────────────────────────────────
- * The SVG uses `font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif"`
- * because `Inter` is NOT installed on Vercel's serverless environment
- * (Amazon Linux). When sharp/librsvg encounters a missing font, it falls
- * back to a default font that often lacks glyphs — producing "tofu" boxes
- * (□□□□) instead of readable text.
- *
- * `DejaVu Sans` is pre-installed on virtually all Linux distributions
- * (including Vercel) and has full Latin/Unicode coverage. `Liberation Sans`
- * is a secondary fallback (metric-compatible with Arial). The generic
- * `sans-serif` is the last-resort fallback.
- *
- * Templates:
- *   1. minimal       — clean white, large score, thin emerald accent line.
- *   2. modern        — geometric shapes, SaaS-style, score in a rounded card.
- *   3. professional  — formal serif, certificate-style border, org logo.
- *   4. celebration   — energetic, confetti, trophy, rank medal.
- *   5. conference    — event-focused, event name prominent.
+ * Uses `DejaVu Sans` (pre-installed on Vercel/Amazon Linux) to avoid the
+ * "tofu" boxes (□□□□) caused by missing Inter font. Mono uses DejaVu Sans Mono.
  */
 
 import sharp from "sharp"
-import {
-  generateAchievementQr,
-} from "./achievement"
+import { generateAchievementQr } from "./achievement"
 import type {
   AchievementTemplateId,
   AchievementType,
@@ -47,7 +45,6 @@ export interface CardRenderParams {
   totalParticipants?: number | null
   achievementData: AchievementData
   orgLogoUrl?: string | null
-  /** Public share URL — when provided, a QR code is embedded in the card. */
   shareUrl?: string
 }
 
@@ -56,57 +53,107 @@ export interface RenderedCard {
   svg: string
 }
 
-// ─── Font stacks (Linux/Vercel-safe) ─────────────────────────────────────────
-// DejaVu Sans is pre-installed on virtually all Linux distros (including
-// Vercel's Amazon Linux serverless). Liberation Sans is the Arial-compatible
-// fallback. NEVER use "Inter" or "system-ui" — they're not available in
-// sharp/librsvg's font resolution and produce "tofu" boxes.
+// ─── Dimensions (portrait 4:5 ticket) ───────────────────────────────────────
+const W = 1200
+const H = 1500
+
+// ─── Font stacks (Linux/Vercel-safe) ────────────────────────────────────────
 const FONT_SANS = "DejaVu Sans, Liberation Sans, Arial, sans-serif"
-const FONT_SERIF = "DejaVu Serif, Liberation Serif, Georgia, serif"
 const FONT_MONO = "DejaVu Sans Mono, Liberation Mono, Courier New, monospace"
 
-// ─── Color palette (emerald/teal — matches Engagio brand) ────────────────────
-const COLORS = {
-  emerald: "#10b981",
-  emeraldDark: "#047857",
-  emeraldDarker: "#065f46",
-  teal: "#14b8a6",
-  tealDark: "#0f766e",
-  slate: "#0f172a",
-  slateLight: "#475569",
-  slateMuted: "#94a3b8",
-  slateFaint: "#e2e8f0",
+// ─── Colors ────────────────────────────────────────────────────────────────
+const C = {
+  bg: "#0b1120",
+  bgGlow: "#0f172a",
+  surface: "#1e293b",
+  surfaceLight: "#334155",
   white: "#ffffff",
+  slate100: "#f1f5f9",
+  slate300: "#cbd5e1",
+  slate400: "#94a3b8",
+  slate500: "#64748b",
+  slate600: "#475569",
+  emerald: "#10b981",
+  emeraldLight: "#34d399",
+  emeraldDark: "#059669",
+  teal: "#14b8a6",
+  tealLight: "#2dd4bf",
   amber: "#f59e0b",
+  amberLight: "#fbbf24",
   gold: "#fbbf24",
-  goldLight: "#fde68a",
   rose: "#f43f5e",
-  cream: "#fefce8",
+}
+
+// ─── Per-template accent colors ─────────────────────────────────────────────
+interface TemplateTheme {
+  accent: string
+  accentLight: string
+  accentDark: string
+  glow: string
+  label: string
+}
+
+const THEMES: Record<AchievementTemplateId, TemplateTheme> = {
+  minimal: {
+    accent: C.teal,
+    accentLight: C.tealLight,
+    accentDark: "#0f766e",
+    glow: "rgba(20,184,166,0.35)",
+    label: "ACHIEVEMENT",
+  },
+  modern: {
+    accent: C.emerald,
+    accentLight: C.emeraldLight,
+    accentDark: C.emeraldDark,
+    glow: "rgba(16,185,129,0.35)",
+    label: "ACHIEVEMENT",
+  },
+  professional: {
+    accent: C.amber,
+    accentLight: C.amberLight,
+    accentDark: "#d97706",
+    glow: "rgba(245,158,11,0.30)",
+    label: "CERTIFICATE",
+  },
+  celebration: {
+    accent: C.gold,
+    accentLight: "#fde68a",
+    accentDark: "#d97706",
+    glow: "rgba(251,191,36,0.35)",
+    label: "ACHIEVEMENT",
+  },
+  conference: {
+    accent: C.teal,
+    accentLight: C.tealLight,
+    accentDark: "#0f766e",
+    glow: "rgba(20,184,166,0.30)",
+    label: "ATTENDEE PASS",
+  },
 }
 
 // ─── Type label ────────────────────────────────────────────────────────────
-function typeLabel(type: AchievementType): { emoji: string; label: string } {
+function typeInfo(type: AchievementType): { emoji: string; label: string } {
   switch (type) {
     case "QUIZ_RESULT":
     case "KNOWLEDGE_CHECK_RESULT":
-      return { emoji: "🧠", label: "KNOWLEDGE CHECK" }
+      return { emoji: "🧠", label: "QUIZ RESULT" }
     case "LIVE_QUIZ_RESULT":
       return { emoji: "⚡", label: "LIVE QUIZ" }
     case "PRE_POST_RESULT":
       return { emoji: "📈", label: "LEARNING PROGRESS" }
     case "CERTIFICATE_EARNED":
-      return { emoji: "🎓", label: "CERTIFICATE" }
+      return { emoji: "🎓", label: "CERTIFICATE OF COMPLETION" }
     case "ACTIVITY_COMPLETED":
     case "EVENT_PARTICIPATION":
-      return { emoji: "💬", label: "PARTICIPATED" }
+      return { emoji: "💬", label: "PARTICIPATION" }
     case "LEADERBOARD_ACHIEVEMENT":
-      return { emoji: "🏆", label: "ACHIEVEMENT" }
+      return { emoji: "🏆", label: "LEADERBOARD" }
     default:
       return { emoji: "🏆", label: "ACHIEVEMENT" }
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 function escapeXml(s: string): string {
   return String(s)
@@ -151,9 +198,26 @@ function rankSuffix(rank: number): string {
   return "th"
 }
 
-// ─── QR code (async, only when shareUrl provided) ──────────────────────────
+/** Generate a ticket-style serial number from the achievement data. */
+function buildSerialNumber(p: CardRenderParams): string {
+  const orgCode = (p.achievementData?.orgName || "ENG")
+    .replace(/[^A-Z]/gi, "")
+    .toUpperCase()
+    .slice(0, 3) || "ENG"
+  const year = new Date().getFullYear()
+  const hash = (p.title + p.participantName)
+    .split("")
+    .reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffffff, 7)
+    .toString(36)
+    .toUpperCase()
+    .padStart(6, "0")
+    .slice(0, 6)
+  return `${orgCode}-${year}-${hash}`
+}
 
-async function buildQrImageTag(shareUrl: string, x: number, y: number, size = 160): Promise<string> {
+// ─── QR code ───────────────────────────────────────────────────────────────
+
+async function buildQrImageTag(shareUrl: string, x: number, y: number, size = 200): Promise<string> {
   try {
     const dataUrl = await generateAchievementQr(shareUrl)
     return `<image href="${dataUrl}" x="${x}" y="${y}" width="${size}" height="${size}" />`
@@ -162,480 +226,224 @@ async function buildQrImageTag(shareUrl: string, x: number, y: number, size = 16
   }
 }
 
-function orgLogoTag(url: string, x: number, y: number, height = 72): string {
-  const width = height * 2.2
-  return `<image href="${escapeXml(url)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMinYMid meet" />`
+function orgLogoTag(url: string, x: number, y: number, size = 56): string {
+  return `<image href="${escapeXml(url)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" />`
 }
 
-// ─── Common header / footer pieces ────────────────────────────────────────
+// ─── Main ticket renderer ──────────────────────────────────────────────────
 
-function engagioWordmark(y: number, size = 20, color = COLORS.slateMuted): string {
-  return `<text x="600" y="${y}" font-family="${FONT_SANS}" font-size="${size}" font-weight="700" letter-spacing="6" fill="${color}" text-anchor="middle">ENGAGIO</text>`
-}
+async function renderTicket(p: CardRenderParams): Promise<string> {
+  const theme = THEMES[p.templateId] || THEMES.modern
+  const info = typeInfo(p.type)
+  const { title, subtitle, participantName, percentage, rank, score, totalScore, totalParticipants } = p
 
-function poweredByFooter(y: number, color = COLORS.slateMuted): string {
-  return `<text x="600" y="${y}" font-family="${FONT_SANS}" font-size="16" font-weight="500" fill="${color}" text-anchor="middle">Powered by Engagio</text>`
-}
+  // ─── Determine the hero metric ───────────────────────────────────────────
+  // For quiz results: show the score/percentage as the hero.
+  // For certificates: show the participant name as the hero.
+  // For participation/leaderboard: show the rank or a checkmark.
+  let heroLine = ""
+  let heroSub = ""
+  let heroSuffix = ""
 
-// ─── Shared defs (gradients, filters used across templates) ─────────────────
-function sharedDefs(idPrefix: string): string {
-  return `
-    <linearGradient id="${idPrefix}-emerald-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${COLORS.emerald}" />
-      <stop offset="100%" stop-color="${COLORS.teal}" />
-    </linearGradient>
-    <linearGradient id="${idPrefix}-dark-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${COLORS.slate}" />
-      <stop offset="100%" stop-color="${COLORS.emeraldDarker}" />
-    </linearGradient>
-    <linearGradient id="${idPrefix}-gold-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="${COLORS.goldLight}" />
-      <stop offset="50%" stop-color="${COLORS.gold}" />
-      <stop offset="100%" stop-color="${COLORS.amber}" />
-    </linearGradient>
-    <filter id="${idPrefix}-card-shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="24" flood-color="${COLORS.slate}" flood-opacity="0.15" />
-    </filter>
-    <filter id="${idPrefix}-glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="12" result="blur" />
+  const hasPercent = typeof percentage === "number" && percentage >= 0
+  const hasRank = typeof rank === "number" && rank > 0
+  const hasScore = typeof score === "number" && typeof totalScore === "number"
+  const isCertificate = p.type === "CERTIFICATE_EARNED"
+
+  if (isCertificate) {
+    // Certificate: no metric hero — the name IS the hero.
+    heroLine = ""
+  } else if (hasPercent) {
+    heroLine = String(percentage)
+    heroSuffix = "%"
+    heroSub = "SCORE"
+  } else if (hasRank) {
+    heroLine = String(rank)
+    heroSuffix = rankSuffix(rank)
+    heroSub = totalParticipants ? `RANK OF ${totalParticipants}` : "RANK"
+  } else if (hasScore) {
+    heroLine = `${score}/${totalScore}`
+    heroSub = "POINTS"
+  } else {
+    heroLine = "✓"
+    heroSub = "COMPLETED"
+  }
+
+  // ─── Date ────────────────────────────────────────────────────────────────
+  const dateStr = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+
+  // ─── Serial number ───────────────────────────────────────────────────────
+  const serial = buildSerialNumber(p)
+
+  // ─── Title wrapping ──────────────────────────────────────────────────────
+  const titleLines = wrapText(title, 28, 2)
+  const titleBlock = titleLines
+    .map((line, i) => `<text x="${W / 2}" y="${870 + i * 52}" font-family="${FONT_SANS}" font-size="38" font-weight="700" fill="${C.white}" text-anchor="middle">${escapeXml(line)}</text>`)
+    .join("")
+
+  // ─── Subtitle (event/activity name) ──────────────────────────────────────
+  const subtitleText = subtitle || p.achievementData?.eventTitle || ""
+  const subtitleLines = subtitleText ? wrapText(subtitleText, 32, 2) : []
+  const subtitleBlock = subtitleLines
+    .map((line, i) => `<text x="${W / 2}" y="${870 + titleLines.length * 52 + 24 + i * 40}" font-family="${FONT_SANS}" font-size="26" font-weight="400" fill="${C.slate300}" text-anchor="middle">${escapeXml(line)}</text>`)
+    .join("")
+
+  // ─── Participant name wrapping ───────────────────────────────────────────
+  const nameLines = wrapText(participantName, 24, 2)
+  const nameBlock = nameLines
+    .map((line, i) => `<text x="${W / 2}" y="${isCertificate ? 680 : 620 + i * 60}" font-family="${FONT_SANS}" font-size="${isCertificate ? 52 : 44}" font-weight="800" fill="${C.white}" text-anchor="middle">${escapeXml(line)}</text>`)
+    .join("")
+
+  // ─── QR code ─────────────────────────────────────────────────────────────
+  const qrSize = 180
+  const qrX = W - 80 - qrSize
+  const qrY = H - 80 - qrSize
+  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, qrX, qrY, qrSize) : ""
+
+  // ─── Org logo (small, in header) ─────────────────────────────────────────
+  const logoBlock = p.orgLogoUrl ? orgLogoTag(p.orgLogoUrl, 80, 82, 48) : ""
+
+  // ─── Subtle confetti dots for celebration template ───────────────────────
+  let decorations = ""
+  if (p.templateId === "celebration") {
+    let s = 12345
+    const rand = () => {
+      s = (s * 9301 + 49297) % 233280
+      return s / 233280
+    }
+    const dotColors = [theme.accent, theme.accentLight, C.rose, C.emerald]
+    for (let i = 0; i < 30; i++) {
+      const x = Math.floor(rand() * W)
+      const y = Math.floor(rand() * 500)
+      const r = 3 + Math.floor(rand() * 6)
+      const c = dotColors[i % dotColors.length]
+      const op = 0.15 + rand() * 0.25
+      decorations += `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}" opacity="${op.toFixed(2)}" />`
+    }
+  }
+
+  // ─── Hero metric block (only for non-certificate types) ──────────────────
+  const heroBlock = isCertificate ? "" : `
+    <!-- Hero metric -->
+    <text x="${W / 2}" y="530" font-family="${FONT_SANS}" font-size="130" font-weight="900" fill="${C.white}" text-anchor="middle">${escapeXml(heroLine)}<tspan font-size="60" font-weight="700" fill="${theme.accentLight}" dx="4">${heroSuffix}</tspan></text>
+    <text x="${W / 2}" y="575" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${theme.accent}" text-anchor="middle" dy="20">${heroSub}</text>
+  `
+
+  // ─── "has successfully completed" text (for certificates) ────────────────
+  const completedText = isCertificate
+    ? `<text x="${W / 2}" y="560" font-family="${FONT_SANS}" font-size="24" font-style="italic" fill="${C.slate400}" text-anchor="middle">has successfully completed</text>`
+    : ""
+
+  // ─── Assemble the SVG ────────────────────────────────────────────────────
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <!-- Background gradient -->
+    <radialGradient id="bg-glow" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="${C.bgGlow}" />
+      <stop offset="100%" stop-color="${C.bg}" />
+    </radialGradient>
+    <!-- Accent glow for border -->
+    <filter id="border-glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
       <feMerge>
         <feMergeNode in="blur" />
         <feMergeNode in="SourceGraphic" />
       </feMerge>
     </filter>
-  `
-}
+    <!-- Verified badge gradient -->
+    <linearGradient id="verified-bg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="${theme.accentLight}" stop-opacity="0.15" />
+    </linearGradient>
+  </defs>
 
-// ─── Template 1: minimal — clean white, BIG score ──────────────────────────
-async function renderMinimal(p: CardRenderParams): Promise<string> {
-  const { type, title, subtitle, participantName, percentage, rank, score, totalScore } = p
-  const { emoji, label } = typeLabel(type)
+  <!-- Background -->
+  <rect width="${W}" height="${H}" fill="url(#bg-glow)" />
+  ${decorations}
 
-  let metricLine = ""
-  let metricSub = "FINAL SCORE"
-  if (percentage != null && percentage >= 0) {
-    metricLine = `${percentage}%`
-    metricSub = "FINAL PERCENTAGE"
-  } else if (rank != null && rank > 0) {
-    metricLine = `#${rank}`
-    metricSub = `RANK${p.totalParticipants ? ` OF ${p.totalParticipants}` : ""}`
-  } else if (score != null && totalScore != null) {
-    metricLine = `${score}/${totalScore}`
-    metricSub = "POINTS"
-  } else if (score != null) {
-    metricLine = `${score}`
-    metricSub = "POINTS"
-  } else {
-    metricLine = "✓"
-    metricSub = "COMPLETED"
-  }
+  <!-- Ticket card with glowing border -->
+  <rect x="40" y="40" width="${W - 80}" height="${H - 80}" rx="32" ry="32"
+        fill="${C.bgGlow}" stroke="${theme.accent}" stroke-width="2" opacity="0.98" />
+  <!-- Inner subtle border glow -->
+  <rect x="44" y="44" width="${W - 88}" height="${H - 88}" rx="28" ry="28"
+        fill="none" stroke="${theme.accent}" stroke-width="1" opacity="0.3" />
 
-  const titleLines = wrapText(title, 30, 2)
-  const titleBlock = titleLines
-    .map((line, i) => `<text x="600" y="${560 + i * 60}" font-family="${FONT_SANS}" font-size="44" font-weight="700" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const subtitleBlock = subtitle
-    ? `<text x="600" y="${560 + titleLines.length * 60 + 36}" font-family="${FONT_SANS}" font-size="24" font-weight="400" fill="${COLORS.slateLight}" text-anchor="middle">${escapeXml(truncate(subtitle, 64))}</text>`
-    : ""
-
-  const logoBlock = p.orgLogoUrl
-    ? orgLogoTag(p.orgLogoUrl, 1020, 80, 56)
-    : ""
-
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, 80, 960, 160) : ""
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>${sharedDefs("min")}</defs>
-  <rect width="1200" height="1200" fill="${COLORS.white}" />
-  <rect x="0" y="0" width="1200" height="8" fill="url(#min-emerald-grad)" />
-
-  ${engagioWordmark(130, 22, COLORS.slateMuted)}
+  <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
+  <!-- Engagio logo (teal rounded square with star) -->
+  <rect x="80" y="82" width="48" height="48" rx="12" ry="12" fill="${theme.accent}" />
+  <path d="M 104 94 L 109 107 L 122 108 L 112 117 L 116 130 L 104 122 L 92 130 L 96 117 L 86 108 L 99 107 Z" fill="${C.white}" />
+  <text x="140" y="116" font-family="${FONT_SANS}" font-size="24" font-weight="800" fill="${C.white}" letter-spacing="2">Engagio</text>
   ${logoBlock}
 
-  <!-- type label -->
-  <text x="600" y="320" font-family="${FONT_SANS}" font-size="22" font-weight="700" letter-spacing="4" fill="${COLORS.emeraldDark}" text-anchor="middle">${emoji}  ${label}</text>
+  <!-- Verified badge (top-right) -->
+  <rect x="${W - 250}" y="82" width="170" height="48" rx="24" ry="24" fill="url(#verified-bg)" stroke="${theme.accent}" stroke-width="1" opacity="0.9" />
+  <path d="M ${W - 225} 106 L ${W - 218} 113 L ${W - 205} 100" stroke="${theme.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="${W - 190}" y="113" font-family="${FONT_SANS}" font-size="16" font-weight="700" fill="${theme.accentLight}" letter-spacing="1">Verified</text>
 
-  <!-- BIG metric -->
-  <text x="600" y="470" font-family="${FONT_SANS}" font-size="220" font-weight="800" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(metricLine)}</text>
-  <text x="600" y="540" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${COLORS.slateMuted}" text-anchor="middle">${metricSub}</text>
+  <!-- Header divider -->
+  <line x1="80" y1="160" x2="${W - 80}" y2="160" stroke="${C.slate600}" stroke-width="1" opacity="0.5" />
 
+  <!-- ═══ TYPE LABEL ══════════════════════════════════════════════════════ -->
+  <text x="${W / 2}" y="230" font-family="${FONT_SANS}" font-size="18" font-weight="700" letter-spacing="8" fill="${theme.accent}" text-anchor="middle">${info.emoji}  ${info.label}</text>
+
+  <!-- ═══ HERO METRIC (non-certificate) ═══════════════════════════════════ -->
+  ${heroBlock}
+
+  <!-- ═══ PARTICIPANT NAME ═════════════════════════════════════════════════ -->
+  ${isCertificate ? `<text x="${W / 2}" y="530" font-family="${FONT_SANS}" font-size="22" font-weight="400" fill="${C.slate400}" text-anchor="middle">This certifies that</text>` : ""}
+  ${completedText}
+  ${nameBlock}
+
+  <!-- ═══ TITLE / EVENT NAME ═══════════════════════════════════════════════ -->
+  ${!isCertificate && !hasPercent && !hasRank && !hasScore ? "" : `<text x="${W / 2}" y="${isCertificate ? 780 : 810}" font-family="${FONT_SANS}" font-size="18" font-weight="400" fill="${C.slate400}" text-anchor="middle">${isCertificate ? "has successfully completed" : ""}</text>`}
   ${titleBlock}
   ${subtitleBlock}
 
-  <!-- participant name -->
-  <text x="600" y="${820 + (subtitleBlock ? 80 : 0)}" font-family="${FONT_SANS}" font-size="36" font-weight="700" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(truncate(participantName, 44))}</text>
-  <rect x="540" y="${860 + (subtitleBlock ? 80 : 0)}" width="120" height="4" rx="2" fill="${COLORS.emerald}" />
+  <!-- ═══ DATE ═════════════════════════════════════════════════════════════ -->
+  <text x="${W / 2}" y="${960 + (titleLines.length - 1) * 52 + (subtitleLines.length * 40)}" font-family="${FONT_SANS}" font-size="22" font-weight="400" fill="${C.slate400}" text-anchor="middle">Issued on ${dateStr}</text>
 
+  <!-- ═══ ORG NAME (centered, subtle) ══════════════════════════════════════ -->
+  ${p.achievementData?.orgName ? `<text x="${W / 2}" y="${1020 + (titleLines.length - 1) * 52 + (subtitleLines.length * 40)}" font-family="${FONT_SANS}" font-size="20" font-weight="600" fill="${C.slate300}" text-anchor="middle">${escapeXml(truncate(p.achievementData.orgName, 50))}</text>` : ""}
+
+  <!-- ═══ FOOTER DIVIDER ═══════════════════════════════════════════════════ -->
+  <line x1="80" y1="${H - 300}" x2="${W - 80}" y2="${H - 300}" stroke="${C.slate600}" stroke-width="1" opacity="0.5" stroke-dasharray="4 8" />
+
+  <!-- ═══ FOOTER: SERIAL + QR ══════════════════════════════════════════════ -->
+  <!-- Serial number (left) -->
+  <text x="80" y="${H - 240}" font-family="${FONT_SANS}" font-size="12" font-weight="700" letter-spacing="3" fill="${C.slate500}">${theme.label} NO.</text>
+  <text x="80" y="${H - 200}" font-family="${FONT_MONO}" font-size="28" font-weight="700" fill="${C.white}">${escapeXml(serial)}</text>
+
+  <!-- Share URL (left, small) -->
+  ${p.shareUrl ? `<text x="80" y="${H - 150}" font-family="${FONT_MONO}" font-size="14" font-weight="400" fill="${C.slate500}">engagio.app/s/${escapeXml(serial.split("-").pop() || "")}</text>` : ""}
+
+  <!-- QR code (right) -->
+  ${qrTag ? `<rect x="${qrX - 12}" y="${qrY - 12}" width="${qrSize + 24}" height="${qrSize + 24}" rx="16" ry="16" fill="${C.surface}" />` : ""}
   ${qrTag}
-  ${poweredByFooter(1140)}
+  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 35}" font-family="${FONT_SANS}" font-size="12" font-weight="600" letter-spacing="2" fill="${C.slate500}" text-anchor="middle">SCAN TO VERIFY</text>
+
+  <!-- Powered by Engagio (bottom center) -->
+  <text x="${W / 2}" y="${H - 70}" font-family="${FONT_SANS}" font-size="14" font-weight="500" fill="${C.slate500}" text-anchor="middle">Powered by Engagio · Engage. Learn. Connect.</text>
 </svg>`
-}
-
-// ─── Template 2: modern — geometric, premium token style ───────────────────
-async function renderModern(p: CardRenderParams): Promise<string> {
-  const { type, title, subtitle, participantName, percentage, rank, score, totalScore } = p
-  const { emoji, label } = typeLabel(type)
-
-  let metricLine = ""
-  let metricSub = "SCORE"
-  if (percentage != null && percentage >= 0) {
-    metricLine = `${percentage}%`
-    metricSub = "PERCENTAGE"
-  } else if (rank != null && rank > 0) {
-    metricLine = `#${rank}`
-    metricSub = `RANK${p.totalParticipants ? ` · OF ${p.totalParticipants}` : ""}`
-  } else if (score != null && totalScore != null) {
-    metricLine = `${score}/${totalScore}`
-    metricSub = "POINTS"
-  } else if (score != null) {
-    metricLine = `${score}`
-    metricSub = "POINTS"
-  } else {
-    metricLine = "✓"
-    metricSub = "COMPLETED"
-  }
-
-  const titleLines = wrapText(title, 26, 2)
-  const titleBlock = titleLines
-    .map((line, i) => `<text x="600" y="${720 + i * 56}" font-family="${FONT_SANS}" font-size="40" font-weight="700" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const subtitleBlock = subtitle
-    ? `<text x="600" y="${720 + titleLines.length * 56 + 34}" font-family="${FONT_SANS}" font-size="22" font-weight="400" fill="${COLORS.slateLight}" text-anchor="middle">${escapeXml(truncate(subtitle, 56))}</text>`
-    : ""
-
-  const logoBlock = p.orgLogoUrl
-    ? orgLogoTag(p.orgLogoUrl, 80, 80, 64)
-    : ""
-
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, 80, 960, 160) : ""
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>${sharedDefs("mod")}</defs>
-  <rect width="1200" height="1200" fill="#f8fafc" />
-
-  <!-- geometric shapes background -->
-  <circle cx="1000" cy="160" r="260" fill="${COLORS.emerald}" opacity="0.08" />
-  <circle cx="1110" cy="340" r="100" fill="${COLORS.teal}" opacity="0.12" />
-  <circle cx="160" cy="1040" r="200" fill="${COLORS.emerald}" opacity="0.06" />
-  <circle cx="70" cy="880" r="70" fill="${COLORS.teal}" opacity="0.1" />
-  <rect x="0" y="0" width="1200" height="8" fill="url(#mod-emerald-grad)" />
-
-  ${engagioWordmark(130, 22, COLORS.slateMuted)}
-  ${logoBlock}
-
-  <!-- type label -->
-  <text x="600" y="220" font-family="${FONT_SANS}" font-size="22" font-weight="700" letter-spacing="4" fill="${COLORS.emeraldDark}" text-anchor="middle">${emoji}  ${label}</text>
-
-  <!-- rounded score card (premium token look) -->
-  <rect x="280" y="280" width="640" height="360" rx="40" ry="40" fill="${COLORS.white}" filter="url(#mod-card-shadow)" />
-  <rect x="280" y="280" width="640" height="8" rx="4" fill="url(#mod-emerald-grad)" />
-
-  <!-- BIG metric inside the card -->
-  <text x="600" y="500" font-family="${FONT_SANS}" font-size="160" font-weight="800" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(metricLine)}</text>
-  <text x="600" y="580" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${COLORS.slateMuted}" text-anchor="middle">${metricSub}</text>
-
-  ${titleBlock}
-  ${subtitleBlock}
-
-  <!-- participant name pill -->
-  <rect x="320" y="${880 + (subtitleBlock ? 70 : 0)}" width="560" height="72" rx="36" ry="36" fill="url(#mod-emerald-grad)" />
-  <text x="600" y="${926 + (subtitleBlock ? 70 : 0)}" font-family="${FONT_SANS}" font-size="32" font-weight="800" fill="${COLORS.white}" text-anchor="middle">${escapeXml(truncate(participantName, 40))}</text>
-
-  ${qrTag}
-  ${poweredByFooter(1140)}
-</svg>`
-}
-
-// ─── Template 3: professional — certificate style ───────────────────────────
-async function renderProfessional(p: CardRenderParams): Promise<string> {
-  const { type, title, subtitle, participantName, percentage, rank, score, totalScore } = p
-  const { emoji, label } = typeLabel(type)
-
-  let metricLine = ""
-  let metricSub = "FINAL SCORE"
-  if (percentage != null && percentage >= 0) {
-    metricLine = `${percentage}%`
-    metricSub = "FINAL PERCENTAGE"
-  } else if (rank != null && rank > 0) {
-    metricLine = `${rank}${rankSuffix(rank)}`
-    metricSub = `RANK${p.totalParticipants ? ` OF ${p.totalParticipants}` : ""}`
-  } else if (score != null && totalScore != null) {
-    metricLine = `${score} / ${totalScore}`
-    metricSub = "FINAL SCORE"
-  } else if (score != null) {
-    metricLine = `${score}`
-    metricSub = "FINAL SCORE"
-  } else {
-    metricLine = "—"
-    metricSub = "COMPLETED"
-  }
-
-  const titleLines = wrapText(title, 32, 2)
-  const titleBlock = titleLines
-    .map((line, i) => `<text x="600" y="${740 + i * 58}" font-family="${FONT_SERIF}" font-size="44" font-weight="700" font-style="italic" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const subtitleBlock = subtitle
-    ? `<text x="600" y="${740 + titleLines.length * 58 + 34}" font-family="${FONT_SERIF}" font-size="22" font-weight="400" font-style="italic" fill="${COLORS.slateLight}" text-anchor="middle">${escapeXml(truncate(subtitle, 64))}</text>`
-    : ""
-
-  const logoBlock = p.orgLogoUrl
-    ? orgLogoTag(p.orgLogoUrl, 80, 100, 80)
-    : ""
-
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, 80, 960, 160) : ""
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>${sharedDefs("pro")}</defs>
-  <rect width="1200" height="1200" fill="${COLORS.white}" />
-
-  <!-- certificate-style border (double) -->
-  <rect x="40" y="40" width="1120" height="1120" fill="none" stroke="${COLORS.emeraldDark}" stroke-width="4" />
-  <rect x="56" y="56" width="1088" height="1088" fill="none" stroke="${COLORS.emerald}" stroke-width="2" />
-
-  <!-- corner flourishes -->
-  <rect x="40" y="40" width="140" height="8" fill="${COLORS.emeraldDark}" />
-  <rect x="40" y="40" width="8" height="140" fill="${COLORS.emeraldDark}" />
-  <rect x="1020" y="40" width="140" height="8" fill="${COLORS.emeraldDark}" />
-  <rect x="1152" y="40" width="8" height="140" fill="${COLORS.emeraldDark}" />
-  <rect x="40" y="1152" width="140" height="8" fill="${COLORS.emeraldDark}" />
-  <rect x="40" y="1020" width="8" height="140" fill="${COLORS.emeraldDark}" />
-  <rect x="1020" y="1152" width="140" height="8" fill="${COLORS.emeraldDark}" />
-  <rect x="1152" y="1020" width="8" height="140" fill="${COLORS.emeraldDark}" />
-
-  ${engagioWordmark(150, 18, COLORS.slateMuted)}
-  ${logoBlock}
-
-  <!-- "CERTIFICATE OF ACHIEVEMENT" header -->
-  <text x="600" y="280" font-family="${FONT_SERIF}" font-size="24" font-weight="400" letter-spacing="8" fill="${COLORS.slateMuted}" text-anchor="middle">${label}</text>
-  <text x="600" y="360" font-family="${FONT_SERIF}" font-size="60" font-weight="700" fill="${COLORS.slate}" text-anchor="middle">Certificate of Achievement</text>
-  <line x1="440" y1="400" x2="760" y2="400" stroke="${COLORS.emerald}" stroke-width="2" />
-  <circle cx="600" cy="400" r="6" fill="${COLORS.emerald}" />
-
-  <!-- "This is to certify that" -->
-  <text x="600" y="480" font-family="${FONT_SERIF}" font-size="24" font-style="italic" fill="${COLORS.slateLight}" text-anchor="middle">This is to certify that</text>
-  <text x="600" y="580" font-family="${FONT_SERIF}" font-size="56" font-weight="700" fill="${COLORS.emeraldDark}" text-anchor="middle">${escapeXml(truncate(participantName, 44))}</text>
-  <text x="600" y="640" font-family="${FONT_SERIF}" font-size="22" font-style="italic" fill="${COLORS.slateLight}" text-anchor="middle">has successfully completed</text>
-
-  ${titleBlock}
-  ${subtitleBlock}
-
-  <!-- metric -->
-  <text x="600" y="${880 + (subtitleBlock ? 80 : 20)}" font-family="${FONT_SERIF}" font-size="88" font-weight="700" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(metricLine)}</text>
-  <text x="600" y="${920 + (subtitleBlock ? 80 : 20)}" font-family="${FONT_SANS}" font-size="18" font-weight="700" letter-spacing="6" fill="${COLORS.slateMuted}" text-anchor="middle" dy="20">${metricSub}</text>
-
-  ${qrTag}
-  ${poweredByFooter(1140)}
-</svg>`
-}
-
-// ─── Template 4: celebration — energetic, trophy, BIG medal ────────────────
-async function renderCelebration(p: CardRenderParams): Promise<string> {
-  const { type, title, subtitle, participantName, percentage, rank, score, totalScore } = p
-  const { emoji, label } = typeLabel(type)
-
-  let metricLine = ""
-  let metricSub = ""
-  let medalEmoji = ""
-  if (rank != null && rank > 0) {
-    medalEmoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏆"
-    metricLine = `${rank}${rankSuffix(rank)}`
-    metricSub = `RANK${p.totalParticipants ? ` OF ${p.totalParticipants}` : ""}`
-  } else if (percentage != null && percentage >= 0) {
-    metricLine = `${percentage}%`
-    metricSub = "SCORE"
-    medalEmoji = "🎉"
-  } else if (score != null && totalScore != null) {
-    metricLine = `${score}/${totalScore}`
-    metricSub = "POINTS"
-    medalEmoji = "🎉"
-  } else {
-    metricLine = "✓"
-    metricSub = "COMPLETED"
-    medalEmoji = "🎉"
-  }
-
-  const titleLines = wrapText(title, 28, 2)
-  const titleBlock = titleLines
-    .map((line, i) => `<text x="600" y="${760 + i * 56}" font-family="${FONT_SANS}" font-size="42" font-weight="800" fill="${COLORS.white}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const subtitleBlock = subtitle
-    ? `<text x="600" y="${760 + titleLines.length * 56 + 36}" font-family="${FONT_SANS}" font-size="22" font-weight="500" fill="${COLORS.slateFaint}" text-anchor="middle">${escapeXml(truncate(subtitle, 56))}</text>`
-    : ""
-
-  const logoBlock = p.orgLogoUrl
-    ? `<g opacity="0.95">${orgLogoTag(p.orgLogoUrl, 80, 80, 64)}</g>`
-    : ""
-
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, 80, 960, 160) : ""
-
-  // Confetti dots (deterministic positions)
-  const confettiColors = [COLORS.emerald, COLORS.teal, COLORS.gold, COLORS.amber, COLORS.rose]
-  let confetti = ""
-  let s = 12345
-  const rand = () => {
-    s = (s * 9301 + 49297) % 233280
-    return s / 233280
-  }
-  for (let i = 0; i < 70; i++) {
-    const x = Math.floor(rand() * 1200)
-    const y = Math.floor(rand() * 500)
-    const r = 4 + Math.floor(rand() * 10)
-    const c = confettiColors[i % confettiColors.length]
-    const op = 0.4 + rand() * 0.5
-    confetti += `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}" opacity="${op.toFixed(2)}" />`
-  }
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>${sharedDefs("cel")}</defs>
-
-  <!-- dark emerald gradient background -->
-  <rect width="1200" height="1200" fill="url(#cel-dark-grad)" />
-  ${confetti}
-
-  ${engagioWordmark(130, 22, "#a7f3d0")}
-  ${logoBlock}
-
-  <!-- type label -->
-  <text x="600" y="220" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="4" fill="${COLORS.gold}" text-anchor="middle">${emoji}  ${label}</text>
-
-  <!-- BIG gold medal -->
-  <circle cx="600" cy="380" r="100" fill="url(#cel-gold-grad)" filter="url(#cel-glow)" />
-  <circle cx="600" cy="380" r="100" fill="none" stroke="${COLORS.white}" stroke-width="4" opacity="0.4" />
-  <text x="600" y="420" font-family="${FONT_SANS}" font-size="80" text-anchor="middle">${medalEmoji}</text>
-
-  <!-- ribbon -->
-  <path d="M 530 470 L 530 560 L 575 525 L 600 560 L 625 525 L 670 560 L 670 470 Z" fill="${COLORS.gold}" opacity="0.85" />
-
-  <!-- BIG metric -->
-  <text x="600" y="660" font-family="${FONT_SANS}" font-size="150" font-weight="900" fill="${COLORS.white}" text-anchor="middle">${escapeXml(metricLine)}</text>
-  <text x="600" y="710" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${COLORS.gold}" text-anchor="middle" dy="20">${metricSub}</text>
-
-  ${titleBlock}
-  ${subtitleBlock}
-
-  <!-- participant name pill -->
-  <rect x="300" y="${900 + (subtitleBlock ? 70 : 0)}" width="600" height="76" rx="38" ry="38" fill="${COLORS.white}" opacity="0.15" />
-  <text x="600" y="${950 + (subtitleBlock ? 70 : 0)}" font-family="${FONT_SANS}" font-size="34" font-weight="800" fill="${COLORS.white}" text-anchor="middle">${escapeXml(truncate(participantName, 44))}</text>
-
-  ${qrTag}
-  <text x="600" y="1140" font-family="${FONT_SANS}" font-size="16" font-weight="500" fill="#a7f3d0" text-anchor="middle">Powered by Engagio</text>
-</svg>`
-}
-
-// ─── Template 5: conference — event-focused badge style ─────────────────────
-async function renderConference(p: CardRenderParams): Promise<string> {
-  const { type, title, subtitle, participantName, percentage, rank, score, totalScore } = p
-  const { emoji, label } = typeLabel(type)
-
-  const eventName = subtitle || p.achievementData?.eventTitle || title
-  const activityTitle = p.achievementData?.activityTitle || title
-
-  let metricLine = ""
-  if (percentage != null && percentage >= 0) {
-    metricLine = `${percentage}% SCORE`
-  } else if (rank != null && rank > 0) {
-    metricLine = `RANK #${rank}${p.totalParticipants ? ` OF ${p.totalParticipants}` : ""}`
-  } else if (score != null && totalScore != null) {
-    metricLine = `${score}/${totalScore} POINTS`
-  } else if (score != null) {
-    metricLine = `${score} POINTS`
-  } else {
-    metricLine = "ATTENDED"
-  }
-
-  const activityLines = wrapText(activityTitle, 32, 2)
-  const activityBlock = activityLines
-    .map((line, i) => `<text x="600" y="${640 + i * 50}" font-family="${FONT_SANS}" font-size="30" font-weight="500" fill="${COLORS.slateLight}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const eventLines = wrapText(eventName, 24, 2)
-  const eventBlock = eventLines
-    .map((line, i) => `<text x="600" y="${520 + i * 56}" font-family="${FONT_SANS}" font-size="48" font-weight="800" fill="${COLORS.slate}" text-anchor="middle">${escapeXml(line)}</text>`)
-    .join("")
-
-  const logoBlock = p.orgLogoUrl
-    ? orgLogoTag(p.orgLogoUrl, 80, 80, 64)
-    : ""
-
-  const qrTag = p.shareUrl ? await buildQrImageTag(p.shareUrl, 80, 960, 160) : ""
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>${sharedDefs("cnf")}</defs>
-  <rect width="1200" height="1200" fill="${COLORS.white}" />
-
-  <!-- header band -->
-  <rect x="0" y="0" width="1200" height="320" fill="url(#cnf-dark-grad)" />
-  <circle cx="1100" cy="60" r="140" fill="${COLORS.white}" opacity="0.06" />
-  <circle cx="1180" cy="200" r="70" fill="${COLORS.white}" opacity="0.08" />
-
-  <!-- ENGAGIO wordmark -->
-  <text x="600" y="90" font-family="${FONT_SANS}" font-size="20" font-weight="700" letter-spacing="6" fill="${COLORS.white}" text-anchor="middle" opacity="0.95">ENGAGIO</text>
-
-  <!-- type label -->
-  <text x="600" y="160" font-family="${FONT_SANS}" font-size="20" font-weight="600" letter-spacing="4" fill="#a7f3d0" text-anchor="middle">${emoji}  ${label}</text>
-
-  <!-- BIG attendee name -->
-  <text x="600" y="240" font-family="${FONT_SANS}" font-size="44" font-weight="800" fill="${COLORS.white}" text-anchor="middle">ATTENDEE · ${escapeXml(truncate(participantName, 28))}</text>
-
-  ${logoBlock}
-
-  <!-- event name (hero) -->
-  ${eventBlock}
-  ${activityBlock}
-
-  <!-- metric pill -->
-  <rect x="380" y="${720 + activityLines.length * 50}" width="440" height="72" rx="36" ry="36" fill="#ecfdf5" />
-  <text x="600" y="${768 + activityLines.length * 50}" font-family="${FONT_SANS}" font-size="26" font-weight="800" fill="${COLORS.emeraldDark}" text-anchor="middle">${escapeXml(metricLine)}</text>
-
-  <!-- org name -->
-  <text x="600" y="920" font-family="${FONT_SANS}" font-size="22" font-weight="500" fill="${COLORS.slateMuted}" text-anchor="middle">${escapeXml(truncate(p.achievementData?.orgName || "Engagio", 64))}</text>
-
-  ${qrTag}
-  ${poweredByFooter(1140)}
-</svg>`
-}
-
-// ─── Main entry point: dispatch to the right template ──────────────────────
-
-async function renderTemplate(p: CardRenderParams): Promise<string> {
-  switch (p.templateId) {
-    case "minimal":
-      return renderMinimal(p)
-    case "modern":
-      return renderModern(p)
-    case "professional":
-      return renderProfessional(p)
-    case "celebration":
-      return renderCelebration(p)
-    case "conference":
-      return renderConference(p)
-    default:
-      return renderModern(p)
-  }
 }
 
 /** Render only the SVG. */
 export async function renderCardSvg(p: CardRenderParams): Promise<string> {
-  return renderTemplate(p)
+  return renderTicket(p)
 }
 
 /**
  * Render the card and convert SVG → PNG via sharp.
- *
- * Returns both the PNG buffer and the original SVG string. If sharp fails
- * for any reason, the PNG buffer will be a UTF-8 encoding of the SVG itself
- * — callers that need a guaranteed image should fall back to using the SVG
- * string directly (e.g., via a data URL in an <img>).
+ * Falls back to returning the SVG buffer if sharp fails.
  */
 export async function renderCard(p: CardRenderParams): Promise<RenderedCard> {
-  const svg = await renderTemplate(p)
+  const svg = await renderTicket(p)
   try {
     const png = await sharp(Buffer.from(svg), { density: 144 })
-      .resize(1200, 1200, { fit: "cover" })
+      .resize(W, H, { fit: "cover" })
       .png()
       .toBuffer()
 
