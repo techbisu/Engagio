@@ -85,6 +85,9 @@ export function ShareAchievementModal({
   )
   const [templateOpen, setTemplateOpen] = React.useState(false)
   const [privacyOpen, setPrivacyOpen] = React.useState(false)
+  // Track which achievement versions we've already auto-generated an image for,
+  // so we don't re-generate on every modal open/close (only on first view).
+  const lastSeenImageRef = React.useRef<Set<string>>(new Set())
 
   // Sync draft when the parent passes a new achievement.
   React.useEffect(() => {
@@ -96,11 +99,15 @@ export function ShareAchievementModal({
     }
   }, [achievement])
 
-  // Image generation — only if imageUrl is missing.
+  // Image generation — regenerate with force=true to ensure the latest
+  // renderer (font fix, design update, etc.) is always used. Old cached
+  // images on Cloudinary may have been generated with a previous version
+  // of the card renderer that had missing-font "tofu" boxes.
   const generateImageMutation = useMutation({
     mutationFn: async (id: string) =>
-      api<GenerateImageResponse>(`/api/achievements/${id}/generate-image`, {
+      api<GenerateImageResponse>(`/api/achievements/${id}/generate-image?force=true`, {
         method: "POST",
+        body: JSON.stringify({ force: true }),
       }),
     onSuccess: (data) => {
       setDraft((prev) =>
@@ -122,11 +129,16 @@ export function ShareAchievementModal({
     },
   })
 
-  // Auto-trigger image generation when opening with no image yet.
+  // Auto-trigger image generation when opening.
+  // We always regenerate (force=true) to ensure the card uses the latest
+  // renderer — old images may have been generated with a broken font.
   React.useEffect(() => {
     if (!open || !draft) return
-    if (!draft.imageUrl) {
+    // Only auto-generate if no image yet OR if the user hasn't seen this
+    // draft before (avoid re-generating on every modal open/close).
+    if (!draft.imageUrl || !lastSeenImageRef.current.has(draft.id + draft.dataVersion)) {
       generateImageMutation.mutate(draft.id)
+      lastSeenImageRef.current.add(draft.id + draft.dataVersion)
     }
   }, [open, draft])
 
@@ -399,15 +411,28 @@ export function ShareAchievementModal({
               </div>
             )}
 
-            {/* Download */}
-            <Button
-              className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-              onClick={handleDownload}
-              disabled={!draft.imageUrl}
-            >
-              <Download className="size-4" />
-              Download PNG
-            </Button>
+            {/* Download + Regenerate */}
+            <div className="mt-3 flex gap-2">
+              <Button
+                className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                onClick={handleDownload}
+                disabled={!draft.imageUrl}
+              >
+                <Download className="size-4" />
+                Download PNG
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => generateImageMutation.mutate(draft.id)}
+                disabled={generateImageMutation.isPending}
+                aria-label="Regenerate image"
+                title="Regenerate image"
+              >
+                <RefreshCw className={cn("size-4", generateImageMutation.isPending && "animate-spin")} />
+              </Button>
+            </div>
           </div>
 
           {/* Template selector (collapsible) */}

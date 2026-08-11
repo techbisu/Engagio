@@ -14,6 +14,7 @@
 
 import { db } from "../src/lib/db"
 import { generateQuizSlug } from "../src/lib/utils"
+import bcrypt from "bcryptjs"
 
 async function main() {
   console.log("🌱 Seeding demo data...")
@@ -46,12 +47,17 @@ async function main() {
   }
 
   // ─── 3. Super Admin ──────────────────────────────────────────────────
+  // Super Admin uses password-based auth + optional TOTP 2FA.
+  // Default password: Engagio@2026 (can be changed after first login).
+  // TOTP 2FA can be enabled via the super admin security settings.
+  const SUPERADMIN_PASSWORD = "Engagio@2026"
+  const superAdminHash = await bcrypt.hash(SUPERADMIN_PASSWORD, 10)
   const superAdmin = await db.user.upsert({
     where: { email: "superadmin@engagio.app" },
-    update: { role: "ADMIN", name: "Super Admin" },
-    create: { email: "superadmin@engagio.app", name: "Super Admin", role: "ADMIN" },
+    update: { role: "ADMIN", name: "Super Admin", passwordHash: superAdminHash },
+    create: { email: "superadmin@engagio.app", name: "Super Admin", role: "ADMIN", passwordHash: superAdminHash },
   })
-  console.log(`  ✓ Super Admin: ${superAdmin.email}`)
+  console.log(`  ✓ Super Admin: ${superAdmin.email} (password: ${SUPERADMIN_PASSWORD})`)
 
   await db.organizationMember.upsert({
     where: { organizationId_userId: { organizationId: defaultOrg.id, userId: superAdmin.id } },
@@ -220,10 +226,13 @@ async function main() {
   // ─── Done ───────────────────────────────────────────────────────────
   console.log("\n✅ Demo data seeded successfully!")
   console.log("\n📋 Demo Accounts:")
-  console.log("  ┌────────────────────────────────────────────────────────────┐")
+  console.log("  ┌────────────────────────────────────────────────────────────────────────┐")
+  console.log("  │ Super Admin  │ superadmin@engagio.app      │ Engagio@2026 │")
   console.log("  │ Org Admin    │ demo.admin@engagio.app       │ (any pw) │")
   console.log("  │ Participant  │ demo.participant@engagio.app │ (any pw) │")
-  console.log("  └────────────────────────────────────────────────────────────┘")
+  console.log("  └────────────────────────────────────────────────────────────────────────┘")
+  console.log("\n  Super Admin login: /?view=superadmin (email + password + TOTP 2FA)")
+  console.log("  Org Admin login:   /?view=login (Google or email)")
   console.log(`\n🔗 Public URLs:`)
   console.log(`   Org page:     /?org=demo-medical`)
   console.log(`   Event page:   /?event=medical-summit-2026`)
