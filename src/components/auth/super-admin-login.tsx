@@ -1,13 +1,22 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { signIn } from 'next-auth/react'
 import { toast } from 'sonner'
-import { ArrowRight, Loader2, Lock, ShieldCheck } from 'lucide-react'
+import {
+  ArrowRight,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  KeyRound,
+  Smartphone,
+  ArrowLeft,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Card,
   CardContent,
@@ -23,23 +32,18 @@ interface SuperAdminLoginProps {
   onBack: () => void
 }
 
-function GoogleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
-    </svg>
-  )
-}
+type Step = 'credentials' | 'totp'
 
 export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
+  const [step, setStep] = React.useState<Step>('credentials')
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
+  const [totpCode, setTotpCode] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
+  const [totpRequired, setTotpRequired] = React.useState(false)
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // ─── Step 1: Email + password ────────────────────────────────────────
+  const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
       toast.error('Email and password are required.')
@@ -47,6 +51,36 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
     }
     setSubmitting(true)
     try {
+      // Check if TOTP is required for this email
+      const totpStatusRes = await fetch('/api/auth/totp/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const totpStatus = await totpStatusRes.json()
+
+      if (totpStatus.totpRequired) {
+        // TOTP is enabled → try credentials first (skipTotp=true), then show TOTP step
+        const res = await signIn('credentials', {
+          email,
+          password,
+          asAdmin: 'true',
+          skipTotp: 'true',
+          redirect: false,
+          callbackUrl: '/',
+        })
+        if (!res || res.error) {
+          toast.error('Invalid email or password.')
+          return
+        }
+        // Credentials valid → proceed to TOTP step
+        setTotpRequired(true)
+        setStep('totp')
+        toast.info('Enter your 6-digit authenticator code to continue.')
+        return
+      }
+
+      // No TOTP → regular sign in
       const res = await signIn('credentials', {
         email,
         password,
@@ -58,7 +92,7 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
         toast.error('Invalid credentials.')
         return
       }
-      // Verify this is actually a super admin
+      // Verify super admin status
       const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
       const isSuper = sessionRes?.user?.isSuperAdmin === true
       if (!isSuper) {
@@ -69,6 +103,44 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
       onSuccess()
     } catch (err) {
       toast.error('Authentication failed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ─── Step 2: TOTP code verification ──────────────────────────────────
+  const handleTotpLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!totpCode || totpCode.length !== 6) {
+      toast.error('Please enter the 6-digit code from your authenticator app.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      // Complete the sign-in with the TOTP code
+      const res = await signIn('credentials', {
+        email,
+        password,
+        asAdmin: 'true',
+        totpCode,
+        redirect: false,
+        callbackUrl: '/',
+      })
+      if (!res || res.error) {
+        toast.error('Invalid TOTP code. Please try again.')
+        return
+      }
+      // Verify super admin status
+      const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
+      const isSuper = sessionRes?.user?.isSuperAdmin === true
+      if (!isSuper) {
+        toast.error('This account does not have Super Admin privileges.')
+        return
+      }
+      toast.success('Welcome, Super Admin.')
+      onSuccess()
+    } catch (err) {
+      toast.error('TOTP verification failed.')
     } finally {
       setSubmitting(false)
     }
@@ -93,69 +165,144 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
               Super Admin Login
             </CardTitle>
             <CardDescription className="text-center text-slate-400">
-              Platform-level administration. Authorized personnel only.
+              {step === 'credentials'
+                ? 'Platform-level administration. Authorized personnel only.'
+                : 'Enter the 6-digit code from your authenticator app.'}
             </CardDescription>
+            {step === 'credentials' && (
+              <div className="flex justify-center">
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 border-amber-500/40 bg-amber-500/10 text-amber-300"
+                >
+                  <Smartphone className="size-3" />
+                  Google Authenticator (TOTP) 2FA required
+                </Badge>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={handleLogin} className="space-y-3.5">
-              <div className="space-y-1.5">
-                <Label htmlFor="sa-email" className="text-slate-300">Email</Label>
-                <Input
-                  id="sa-email"
-                  type="email"
-                  placeholder="superadmin@engagio.app"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                  required
-                  disabled={submitting}
-                  className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="sa-pass" className="text-slate-300">Password</Label>
-                <Input
-                  id="sa-pass"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                  disabled={submitting}
-                  className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-amber-600 to-orange-500 text-white hover:from-amber-600/95 hover:to-orange-500/95"
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <><Loader2 className="size-4 animate-spin" /> Authenticating…</>
-                ) : (
-                  <><Lock className="size-4" /> Secure Login</>
-                )}
-              </Button>
-            </form>
-
-            {/* Google */}
-            <div className="relative my-3">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-700" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-slate-900 px-2 text-slate-500">or</span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
-              onClick={() => signIn('google', { callbackUrl: '/?view=superadmin' }).catch(() => toast.error('Google sign-in failed.'))}
-            >
-              <GoogleIcon className="size-4" /> Continue with Google
-            </Button>
+            <AnimatePresence mode="wait">
+              {step === 'credentials' ? (
+                <motion.form
+                  key="credentials"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  onSubmit={handleCredentialLogin}
+                  className="space-y-3.5"
+                >
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sa-email" className="text-slate-300">Email</Label>
+                    <Input
+                      id="sa-email"
+                      type="email"
+                      placeholder="superadmin@engagio.app"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      required
+                      disabled={submitting}
+                      className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sa-pass" className="text-slate-300">Password</Label>
+                    <Input
+                      id="sa-pass"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      required
+                      disabled={submitting}
+                      className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-amber-600 to-orange-500 text-white hover:from-amber-600/95 hover:to-orange-500/95"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <><Loader2 className="size-4 animate-spin" /> Authenticating…</>
+                    ) : (
+                      <><Lock className="size-4" /> Secure Login</>
+                    )}
+                  </Button>
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="totp"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  onSubmit={handleTotpLogin}
+                  className="space-y-3.5"
+                >
+                  <div className="flex flex-col items-center gap-2 pb-2">
+                    <div className="flex size-12 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                      <Smartphone className="size-6" />
+                    </div>
+                    <p className="text-center text-xs text-slate-400">
+                      Open your authenticator app (Google Authenticator, Authy,
+                      1Password, etc.) and enter the 6-digit code for Engagio.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="sa-totp" className="text-slate-300">
+                        6-digit code
+                      </Label>
+                      <Badge
+                        variant="outline"
+                        className="gap-1 border-amber-500/40 bg-amber-500/10 text-amber-300"
+                      >
+                        <Smartphone className="size-3" />
+                        Google Authenticator
+                      </Badge>
+                    </div>
+                    <Input
+                      id="sa-totp"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      placeholder="000000"
+                      value={totpCode}
+                      onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      autoComplete="one-time-code"
+                      required
+                      disabled={submitting}
+                      autoFocus
+                      className="border-slate-700 bg-slate-800 text-center text-2xl font-bold tracking-[0.5em] text-white placeholder:text-slate-600"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-amber-600 to-orange-500 text-white hover:from-amber-600/95 hover:to-orange-500/95"
+                    disabled={submitting || totpCode.length !== 6}
+                  >
+                    {submitting ? (
+                      <><Loader2 className="size-4 animate-spin" /> Verifying…</>
+                    ) : (
+                      <><KeyRound className="size-4" /> Verify & Sign In</>
+                    )}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep('credentials')
+                      setTotpCode('')
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 text-sm text-slate-400 hover:text-slate-200"
+                  >
+                    <ArrowLeft className="size-3.5" /> Back to credentials
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
             <button
@@ -165,7 +312,7 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
               ← Back to Engagio
             </button>
             <p className="text-center text-[11px] text-slate-500">
-              Super Admin access is granted via database role, not email matching.
+              Super Admin access is granted via database role + password + TOTP 2FA.
               Unauthorized access attempts are logged.
             </p>
           </CardFooter>

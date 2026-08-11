@@ -11,6 +11,8 @@ export type ViewName =
   | "activity"
   | "live-display"
   | "org-onboarding"
+  | "org-register"
+  | "no-org"
   | "org-dashboard"
   | "org-settings"
   | "accept-invitation"
@@ -22,6 +24,7 @@ export type ViewName =
   | "contact"
   | "platform"
   | "superadmin"
+  | "superadmin-security"
   | "org-landing"
   | "event-landing"
 

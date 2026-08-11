@@ -29,12 +29,9 @@ export interface AiProctorState {
 }
 
 interface SkinAnalysis {
-  /** Total skin-tone pixel count in the sampled region. */
   count: number
-  /** Centroid of skin-tone pixels (x, y) in sampled coords. */
   cx: number
   cy: number
-  /** Per-quadrant skin-tone counts (4 entries: TL, TR, BL, BR). */
   quadrants: [number, number, number, number]
 }
 
@@ -42,19 +39,24 @@ interface SkinAnalysis {
  * Lightweight canvas-based AI proctor. Uses a skin-tone pixel heuristic to
  * estimate face presence — NO TensorFlow / no external ML libraries.
  *
- * Algorithm:
- *   1. Capture a frame from the video stream to a hidden canvas every ~2s.
- *   2. Sample pixels in the center 100x100 region (downscaled from 200x200).
- *   3. Count pixels matching the skin-tone range:
- *        R > 95, G > 40, B > 20, R-G > 15, R-B > 15, max-min > 15
- *   4. If skin-tone count < 500 in the center region → "no face detected".
- *   5. For multi-face: count skin-tone in each of 4 quadrants of the frame.
- *      If >1 quadrant has significant skin-tone (>300 pixels), alert.
- *   6. For look-away: track skin-tone centroid between frames; if it moves
- *      > 30 sample-pixels between consecutive frames, count as look-away.
+ * Camera pipeline:
+ *   1. getUserMedia({ video }) → MediaStream
+ *   2. Attach to <video> via srcObject
+ *   3. Call video.play() (must be called explicitly — autoplay attribute is
+ *      unreliable in many browsers when srcObject is set programmatically)
+ *   4. Wait for `loadeddata` event (videoWidth/videoHeight become available)
+ *   5. Start the analysis interval
  *
- * Counters are debounced — at most one increment per violation type per 3s.
- * Cleanup: stops all video tracks + clears intervals on unmount.
+ * The black-screen bug was caused by:
+ *   - Not awaiting `video.play()` properly
+ *   - Not listening for the `loadedmetadata` / `loadeddata` events
+ *   - Setting srcObject BEFORE the video element was mounted (the ref was
+ *     null on the first render, so the stream was never attached)
+ *
+ * Fix: Use a state-driven `videoReady` flag + a `useEffect` that attaches
+ * the stream to the video element as soon as BOTH the stream AND the ref
+ * are available. This handles the race where the video element mounts
+ * AFTER the camera has already started.
  */
 export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   const { enabled, faceDetection, multiFace, lookAway, onViolation } = options
@@ -70,15 +72,12 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   const streamRef = useRef<MediaStream | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Live callback ref so the analysis loop sees the latest version.
   const onViolationRef = useRef(onViolation)
   useEffect(() => {
     onViolationRef.current = onViolation
   })
 
-  // Last-frame centroid for look-away tracking.
   const lastCentroidRef = useRef<{ x: number; y: number } | null>(null)
-  // Debounce timestamps per violation type.
   const lastFiredRef = useRef<Record<string, number>>({})
   const canFire = useCallback((key: string, windowMs = 3000, now = Date.now()) => {
     const last = lastFiredRef.current[key] ?? 0
@@ -87,7 +86,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     return true
   }, [])
 
-  // Toast debounce — at most 1 toast per violation type per 3s.
   const fireToast = useCallback(
     (
       type: "face" | "multiFace" | "lookAway",
@@ -100,7 +98,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     [canFire],
   )
 
-  // Skin-tone analysis on the captured canvas.
   const analyzeFrame = useCallback((): SkinAnalysis | null => {
     const video = videoRef.current
     const canvas = canvasRef.current
@@ -110,7 +107,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const VH = video.videoHeight || 240
     if (VW === 0 || VH === 0) return null
 
-    // Downscale to a small canvas for performance — 160x120 is enough.
     const CW = 160
     const CH = 120
     canvas.width = CW
@@ -118,11 +114,15 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const ctx = canvas.getContext("2d", { willReadFrequently: true })
     if (!ctx) return null
 
-    ctx.drawImage(video, 0, 0, VW, VH, 0, 0, CW, CH)
+    try {
+      ctx.drawImage(video, 0, 0, VW, VH, 0, 0, CW, CH)
+    } catch {
+      // Video not ready yet — drawImage can throw if the frame isn't decoded.
+      return null
+    }
     const imageData = ctx.getImageData(0, 0, CW, CH)
     const data = imageData.data
 
-    // Center region (40x40 around the middle) for face-detection sampling.
     const centerSize = 40
     const cx0 = Math.floor((CW - centerSize) / 2)
     const cy0 = Math.floor((CH - centerSize) / 2)
@@ -142,7 +142,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         const b = data[idx + 2]
         const max = Math.max(r, g, b)
         const min = Math.min(r, g, b)
-        // Skin-tone heuristic (Kovac et al. — standard RGB rule).
         const isSkin =
           r > 95 &&
           g > 40 &&
@@ -152,11 +151,9 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           max - min > 15
         if (!isSkin) continue
 
-        // Quadrant tally for multi-face detection.
         const qIdx = (x < halfW ? 0 : 1) + (y < halfH ? 0 : 2)
         quadrants[qIdx]++
 
-        // Center-region tally + centroid for face/look-away detection.
         if (x >= cx0 && x < cx0 + centerSize && y >= cy0 && y < cy0 + centerSize) {
           centerCount++
           sumX += x
@@ -170,12 +167,10 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     return { count: centerCount, cx, cy, quadrants }
   }, [])
 
-  // Main analysis tick — runs every 2s once isReady.
   const tick = useCallback(() => {
     const result = analyzeFrame()
     if (!result) return
 
-    // Face detection — based on center-region skin-tone pixel count.
     if (faceDetection) {
       const hasFace = result.count >= 500
       if (!hasFace && canFire("counter:face")) {
@@ -189,7 +184,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       }
     }
 
-    // Multi-face detection — count quadrants with significant skin-tone.
     if (multiFace) {
       const significantQuadrants = result.quadrants.filter((q) => q > 300).length
       if (significantQuadrants > 1 && canFire("counter:multiFace")) {
@@ -203,7 +197,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       }
     }
 
-    // Look-away detection — track centroid movement between frames.
     if (lookAway && result.cx >= 0 && result.cy >= 0) {
       const last = lastCentroidRef.current
       lastCentroidRef.current = { x: result.cx, y: result.cy }
@@ -211,7 +204,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         const dx = result.cx - last.x
         const dy = result.cy - last.y
         const delta = Math.sqrt(dx * dx + dy * dy)
-        // 30 sample-pixels in a 40x40 region ≈ noticeable head turn.
         if (delta > 15 && canFire("counter:lookAway")) {
           setLookAwayAlerts((n) => n + 1)
           onViolationRef.current?.("lookAway")
@@ -225,7 +217,44 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     }
   }, [analyzeFrame, faceDetection, multiFace, lookAway, canFire, fireToast])
 
-  // Camera access + interval setup.
+  // ─── Attach the stream to the video element ────────────────────────────
+  // This runs whenever a NEW stream is acquired OR the video element ref
+  // becomes available (handles the case where the <video> mounts AFTER the
+  // camera has already started). Without this, the video element would show
+  // a black screen because srcObject was never set.
+  const attachStreamToVideo = useCallback(() => {
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+    if (video.srcObject === stream) return // already attached
+    video.srcObject = stream
+    // Play must be called explicitly — the autoPlay attribute is unreliable
+    // when srcObject is set programmatically, especially after a page
+    // navigation or when the element was hidden when the stream started.
+    video.play().catch((err) => {
+      console.warn("[ai-proctor] video.play() failed:", err)
+    })
+  }, [])
+
+  // Re-attach whenever the video ref might have changed (e.g. when the sidebar
+  // collapses and re-expands, the <video> element is re-created). Using a
+  // MutationObserver-free approach: poll a few times after mount to catch
+  // the case where the <video> element appears slightly after the stream.
+  useEffect(() => {
+    if (!enabled || !streamRef.current) return
+    attachStreamToVideo()
+    // Retry attachment a few times — the video element may not be in the DOM
+    // yet on the first render (race between camera starting and React mounting
+    // the SecuritySidebar). This is the key fix for the black-screen bug.
+    const retryTimers = [50, 200, 500, 1000, 2000].map((ms) =>
+      setTimeout(() => attachStreamToVideo(), ms),
+    )
+    return () => {
+      retryTimers.forEach(clearTimeout)
+    }
+  }, [enabled, attachStreamToVideo, isReady])
+
+  // ─── Camera access + interval setup ────────────────────────────────────
   useEffect(() => {
     if (!enabled) {
       setIsReady(false)
@@ -241,7 +270,11 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           throw new Error("Camera API not supported in this browser")
         }
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 320, height: 240, facingMode: "user" },
+          video: {
+            width: { ideal: 320 },
+            height: { ideal: 240 },
+            facingMode: "user",
+          },
           audio: false,
         })
         if (cancelled) {
@@ -249,20 +282,42 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           return
         }
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          // Wait for the first frame to be ready before sampling.
-          await videoRef.current.play().catch(() => {})
-        }
-        // Create the offscreen analysis canvas.
+
+        // Attach the stream to the <video> element. The ref may be null if
+        // the component hasn't mounted yet — attachStreamToVideo handles this
+        // by re-running whenever the ref changes (see the effect above).
+        attachStreamToVideo()
+
         if (!canvasRef.current) {
           canvasRef.current = document.createElement("canvas")
         }
+
+        // Wait for the video element to be ready before starting analysis.
+        // This ensures videoWidth/videoHeight are populated so drawImage works.
+        const video = videoRef.current
+        if (video) {
+          await new Promise<void>((resolve) => {
+            if (video.readyState >= 2) {
+              resolve()
+              return
+            }
+            const onReady = () => {
+              video.removeEventListener("loadeddata", onReady)
+              resolve()
+            }
+            video.addEventListener("loadeddata", onReady)
+            // Safety timeout — don't hang forever if the event never fires.
+            setTimeout(resolve, 2000)
+          })
+          // Play again after loadeddata — some browsers pause the video
+          // when the metadata loads.
+          video.play().catch(() => {})
+        }
+
+        if (cancelled) return
         setIsReady(true)
         setError(null)
-        // Start the analysis loop — 2s cadence per spec.
         intervalRef.current = setInterval(tick, 2000)
-        // Run an initial tick after the stream warms up.
         setTimeout(tick, 1200)
       } catch (e) {
         if (cancelled) return
@@ -295,7 +350,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       lastCentroidRef.current = null
       lastFiredRef.current = {}
     }
-  }, [enabled, tick])
+  }, [enabled, tick, attachStreamToVideo])
 
   return {
     faceNotDetected,

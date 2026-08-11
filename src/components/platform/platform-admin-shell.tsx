@@ -56,6 +56,7 @@ interface PlatformAdminShellProps {
   onSignOut: () => void
   onNavigateHome: () => void
   onOpenAdmin: () => void
+  onOpenSecurity?: () => void
 }
 
 const TABS = [
@@ -72,6 +73,7 @@ export function PlatformAdminShell({
   onSignOut,
   onNavigateHome,
   onOpenAdmin,
+  onOpenSecurity,
 }: PlatformAdminShellProps) {
   const [tab, setTab] = React.useState<PlatformTab>("dashboard")
 
@@ -89,6 +91,12 @@ export function PlatformAdminShell({
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            {onOpenSecurity && (
+              <Button variant="ghost" size="sm" onClick={onOpenSecurity}>
+                <Shield className="mr-1.5 size-4" />
+                Security
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={onOpenAdmin}>
               <Building2 className="mr-1.5 size-4" />
               Org Admin

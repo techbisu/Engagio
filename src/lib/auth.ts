@@ -121,6 +121,8 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         name: { label: "Name", type: "text", placeholder: "Your name" },
         asAdmin: { label: "Sign in as Admin", type: "text" },
+        totpCode: { label: "TOTP Code", type: "text" },
+        skipTotp: { label: "Skip TOTP", type: "text" },
       },
       async authorize(credentials) {
         const email = credentials?.email?.trim().toLowerCase()
@@ -129,6 +131,8 @@ export const authOptions: NextAuthOptions = {
         const password = credentials?.password?.trim()
         const name = credentials?.name?.trim() || email.split("@")[0] || "Participant"
         const asAdmin = credentials?.asAdmin === "true"
+        const totpCode = credentials?.totpCode?.trim()
+        const skipTotp = credentials?.skipTotp === "true"
 
         // ─── Lookup existing user ────────────────────────────────────
         const existing = await db.user.findUnique({ where: { email } })
@@ -140,6 +144,32 @@ export const authOptions: NextAuthOptions = {
             const valid = await bcrypt.compare(password, existing.passwordHash)
             if (!valid) return null // wrong password
           }
+
+          // ─── TOTP (2FA) check for super admin accounts ──────────────
+          // If the user has TOTP enabled AND this is a super admin login
+          // (asAdmin=true OR the email matches SUPERADMIN_EMAIL), require
+          // a valid TOTP code. The client sends skipTotp=true on the first
+          // step to detect that TOTP is required (returns a special error).
+          const isSuperAdminEmail = isEmailSuperAdmin(existing.email)
+          const requiresTotp = existing.totpEnabled && existing.totpSecret && isSuperAdminEmail
+
+          if (requiresTotp && !skipTotp) {
+            if (!totpCode) {
+              // Signal to the client that a TOTP code is required.
+              // We return null (auth failure) but the client can detect
+              // this case by re-querying the user's totpEnabled status
+              // via /api/auth/totp/status after a failed login.
+              // For a cleaner UX, we throw a custom error that next-auth
+              // surfaces as the error message.
+              throw new Error("TOTP_REQUIRED")
+            }
+            // Verify the TOTP code
+            const { verifyTotpToken } = await import("./totp")
+            if (!verifyTotpToken(existing.totpSecret, totpCode)) {
+              throw new Error("INVALID_TOTP")
+            }
+          }
+
           // If no password hash → email-only auth (participant/demo), allow
           return {
             id: existing.id,

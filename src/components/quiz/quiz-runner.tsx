@@ -101,6 +101,9 @@ export function QuizRunner({
 }: QuizRunnerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const submittedRef = useRef(false)
+  // Mirror awaitingFullscreen in a ref so the fullscreen safety timeout can
+  // read the latest value without re-creating the timeout closure.
+  const awaitingFullscreenRef = useRef(false)
   const startedAtRef = useRef<number | null>(null)
   const deadlineRef = useRef<number | null>(null)
   const doSubmitRef = useRef<((isTimeout: boolean) => Promise<void>) | null>(null)
@@ -227,11 +230,17 @@ export function QuizRunner({
       setIsFullscreen(fs)
       if (fs && awaitingFullscreen) {
         setAwaitingFullscreen(false)
+        awaitingFullscreenRef.current = false
         setTimerStarted(true)
       }
     }
     document.addEventListener("fullscreenchange", handler)
     return () => document.removeEventListener("fullscreenchange", handler)
+  }, [awaitingFullscreen])
+
+  // Sync the awaitingFullscreenRef with the state value.
+  useEffect(() => {
+    awaitingFullscreenRef.current = awaitingFullscreen
   }, [awaitingFullscreen])
 
   // ----- Countdown timer -----
@@ -389,7 +398,13 @@ export function QuizRunner({
     try {
       // requestFullscreen must be called from a user gesture
       await el.requestFullscreen()
-      // fullscreenchange listener will update isFullscreen / awaitingFullscreen
+      // Set a safety timeout: if fullscreenchange doesn't fire within 3s,
+      // show the "Continue without fullscreen" option so the user isn't stuck.
+      setTimeout(() => {
+        if (awaitingFullscreenRef.current && !document.fullscreenElement) {
+          setFullscreenBlocked(true)
+        }
+      }, 3000)
     } catch {
       setFullscreenBlocked(true)
       toast.warning("Fullscreen unavailable", {
@@ -401,6 +416,7 @@ export function QuizRunner({
 
   const continueWithoutFullscreen = () => {
     setAwaitingFullscreen(false)
+    awaitingFullscreenRef.current = false
     setTimerStarted(true)
     setFullscreenBlocked(true)
   }
@@ -828,7 +844,7 @@ export function QuizRunner({
                 >
                   <Maximize className="size-4" /> Enter Fullscreen &amp; Begin
                 </Button>
-                {fullscreenBlocked && (
+                {fullscreenBlocked ? (
                   <Button
                     onClick={continueWithoutFullscreen}
                     variant="outline"
@@ -836,6 +852,13 @@ export function QuizRunner({
                   >
                     Continue without fullscreen
                   </Button>
+                ) : (
+                  <button
+                    onClick={continueWithoutFullscreen}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Having trouble? Continue without fullscreen →
+                  </button>
                 )}
               </div>
             </CardContent>
@@ -883,10 +906,14 @@ export function QuizRunner({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep working</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault()
+              type="button"
+              onClick={() => {
+                // Close the dialog FIRST, then submit. Using a microtask delay
+                // ensures the dialog unmounts cleanly before the async submit
+                // starts (prevents the AlertDialogAction's default close
+                // handler from interfering with the submit call).
                 setShowSubmitDialog(false)
-                void doSubmit(false)
+                setTimeout(() => void doSubmit(false), 0)
               }}
               className={cn("bg-emerald-600 text-white hover:bg-emerald-700")}
             >
@@ -1039,6 +1066,8 @@ function SecuritySidebarBodyInline({
               muted
               playsInline
               autoPlay
+              preload="auto"
+              controls={false}
             />
             <div className="absolute left-1.5 top-1.5">
               <Badge

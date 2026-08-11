@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { signIn } from 'next-auth/react'
 import { toast } from 'sonner'
 import {
@@ -9,8 +9,9 @@ import {
   Loader2,
   ShieldCheck,
   Building2,
-  GraduationCap,
   Sparkles,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,12 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BrandLogo } from '@/components/shared/brand-logo'
 
 interface LoginFormProps {
@@ -49,55 +45,72 @@ function GoogleIcon({ className }: { className?: string }) {
 
 export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   const [tab, setTab] = React.useState<'login' | 'demo'>('login')
-
-  // Email fallback (for dev/demo when Google OAuth isn't configured)
   const [email, setEmail] = React.useState('')
-  const [name, setName] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
+  const [orgCheckResult, setOrgCheckResult] = React.useState<{
+    hasOrg: boolean
+    organizations?: { id: string; name: string; slug: string }[]
+    message?: string
+  } | null>(null)
 
-  // ─── Google Login (primary) ───────────────────────────────────────────
-  // After Google OAuth completes, redirect back to /?view=login so the
-  // auto-route logic in page.tsx picks up the new session and routes the
-  // user to the right view (admin / org-onboarding / quiz / event / etc.).
+  // ─── Google Login (primary for org admins) ────────────────────────────
+  // After Google OAuth, the auto-route effect in page.tsx checks if the user
+  // has an org. If not → no-org intermediate page. If yes → admin panel.
   const handleGoogleLogin = () => {
     signIn('google', { callbackUrl: '/?view=login' }).catch(() => {
       toast.error('Google sign-in failed. Make sure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.')
     })
   }
 
-  // ─── Email fallback login ────────────────────────────────────────────
+  // ─── Email pre-check (for org login) ──────────────────────────────────
+  // Before attempting to sign in, check if the email belongs to an existing
+  // org. If not → show a message and redirect to registration.
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast.error('Please enter a valid email address.')
       return
     }
+
     setSubmitting(true)
+    setOrgCheckResult(null)
+
     try {
-      const res = await signIn('credentials', {
-        email,
-        name: name || undefined,
-        asAdmin: 'true',
-        redirect: false,
-        callbackUrl: '/',
+      // Step 1: Check if the email belongs to an existing org
+      const checkRes = await fetch('/api/auth/check-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
-      if (!res || res.error) {
-        toast.error('Sign-in failed.')
+      const checkData = await checkRes.json()
+
+      if (!checkData.hasOrg) {
+        // No org found → show message + redirect to registration
+        setOrgCheckResult({
+          hasOrg: false,
+          message: checkData.message || 'No organization found for this email.',
+        })
+        toast.error('No organization found', {
+          description: 'Please register your organization first.',
+        })
         return
       }
-      toast.success('Welcome to Engagio!')
-      const sessionRes = await fetch('/api/auth/session').then((r) => r.json())
-      const role = sessionRes?.user?.role || 'ADMIN'
-      onSuccess(role)
+
+      // Step 2: Org exists → proceed with Google login
+      setOrgCheckResult({
+        hasOrg: true,
+        organizations: checkData.organizations,
+      })
+      toast.success(`Found ${checkData.organizations.length} organization(s). Continue with Google to sign in.`)
     } catch (err) {
-      toast.error('Something went wrong.')
+      toast.error('Failed to check organization. Please try again.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // ─── Demo logins (2 only — NO super admin) ──────────────────────────
+  // ─── Demo logins ────────────────────────────────────────────────────
   const handleDemo = async (type: 'orgadmin' | 'participant') => {
     setDemoLoading(type)
     const demoConfig = {
@@ -135,9 +148,9 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
           <div className="flex justify-center">
             <BrandLogo size="md" />
           </div>
-          <CardTitle className="text-center text-2xl">Welcome to Engagio</CardTitle>
+          <CardTitle className="text-center text-2xl">Organization Login</CardTitle>
           <CardDescription className="text-center">
-            Sign in to manage your events, activities, and assessments.
+            Sign in to your organization dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -149,7 +162,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
 
             {/* ─── Sign In Tab ──────────────────────────────────────── */}
             <TabsContent value="login" className="mt-5 space-y-4">
-              {/* Google — primary login method */}
+              {/* Google — primary login method for org admins */}
               <Button
                 type="button"
                 variant="outline"
@@ -162,25 +175,111 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
 
               <div className="relative my-3">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or email (demo)</span></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or check a demo email</span></div>
               </div>
 
+              {/* Email pre-check (demo / fallback only) */}
               <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="you@organization.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required disabled={submitting} />
+                  <Label htmlFor="email">
+                    Email <span className="font-normal text-muted-foreground">(demo only)</span>
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@organization.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      setOrgCheckResult(null)
+                    }}
+                    autoComplete="email"
+                    required
+                    disabled={submitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Demo accounts only. Production sign-in uses Google above.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                  <Input id="name" type="text" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} />
-                </div>
-                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95" disabled={submitting}>
-                  {submitting ? (<><Loader2 className="size-4 animate-spin" /> Signing in…</>) : (<>Continue <ArrowRight className="size-4" /></>)}
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:from-emerald-600/95 hover:to-teal-500/95"
+                  disabled={submitting || !email}
+                >
+                  {submitting ? (
+                    <><Loader2 className="size-4 animate-spin" /> Checking…</>
+                  ) : (
+                    <>Check & Continue <ArrowRight className="size-4" /></>
+                  )}
                 </Button>
               </form>
 
+              {/* Org check result */}
+              <AnimatePresence>
+                {orgCheckResult && !orgCheckResult.hasOrg && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+                      <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                          {orgCheckResult.message}
+                        </p>
+                        {onRegisterOrg && (
+                          <button
+                            onClick={onRegisterOrg}
+                            className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+                          >
+                            Register your organization →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {orgCheckResult && orgCheckResult.hasOrg && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
+                            Organization found!
+                          </p>
+                          <div className="mt-2 space-y-1">
+                            {orgCheckResult.organizations?.map((org) => (
+                              <div key={org.id} className="flex items-center gap-2 text-sm text-emerald-800 dark:text-emerald-300">
+                                <Building2 className="size-3.5" />
+                                <span className="font-medium">{org.name}</span>
+                                <span className="text-xs text-emerald-600/70">/{org.slug}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
+                            Click "Continue with Google" above to sign in.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {onRegisterOrg && (
-                <button onClick={onRegisterOrg} className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+                <button
+                  onClick={onRegisterOrg}
+                  className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400"
+                >
                   Don&apos;t have an organization? Register one →
                 </button>
               )}
@@ -193,10 +292,25 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
               </div>
             </TabsContent>
 
-            {/* ─── Quick Demo Tab (2 only — NO super admin) ──────────── */}
+            {/* ─── Quick Demo Tab ──────────────────────────────────── */}
             <TabsContent value="demo" className="mt-5 space-y-3">
-              <DemoButton onClick={() => handleDemo('orgadmin')} loading={demoLoading === 'orgadmin'} icon={Building2} title="Organization Admin" description="Demo Medical Association — manage events & certificates." accent="from-emerald-600 to-teal-500" />
-              <DemoButton onClick={() => handleDemo('participant')} loading={demoLoading === 'participant'} icon={GraduationCap} title="Participant" description="Take a quiz with anti-cheat, view results & certificates." accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300" textOnDark />
+              <DemoButton
+                onClick={() => handleDemo('orgadmin')}
+                loading={demoLoading === 'orgadmin'}
+                icon={Building2}
+                title="Organization Admin"
+                description="Demo Medical Association — manage events & certificates."
+                accent="from-emerald-600 to-teal-500"
+              />
+              <DemoButton
+                onClick={() => handleDemo('participant')}
+                loading={demoLoading === 'participant'}
+                icon={ShieldCheck}
+                title="Participant"
+                description="Take a quiz with anti-cheat, view results & certificates."
+                accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300"
+                textOnDark
+              />
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900 dark:bg-amber-950/20">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
                   🔒 Super Admin has a separate secure login at <code className="font-mono">/?view=superadmin</code>

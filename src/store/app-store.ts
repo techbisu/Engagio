@@ -301,6 +301,8 @@ export function parseInitialRoute(): {
     view === "login" ||
     view === "student" ||
     view === "org-onboarding" ||
+    view === "org-register" ||
+    view === "no-org" ||
     view === "org-dashboard" ||
     view === "org-settings" ||
     view === "pricing" ||
@@ -308,7 +310,7 @@ export function parseInitialRoute(): {
     view === "privacy" ||
     view === "terms" ||
     view === "contact" ||
-    view === "platform" || view === "superadmin"
+    view === "platform" || view === "superadmin" || view === "superadmin-security"
   ) {
     return {
       view,
@@ -371,6 +373,8 @@ export function syncUrl(
     view === "login" ||
     view === "student" ||
     view === "org-onboarding" ||
+    view === "org-register" ||
+    view === "no-org" ||
     view === "org-dashboard" ||
     view === "org-settings" ||
     view === "pricing" ||
@@ -378,7 +382,7 @@ export function syncUrl(
     view === "privacy" ||
     view === "terms" ||
     view === "contact" ||
-    view === "platform" || view === "superadmin"
+    view === "platform" || view === "superadmin" || view === "superadmin-security"
   ) {
     url.searchParams.set("view", view)
   }

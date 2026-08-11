@@ -18,6 +18,7 @@ import { SiteFooter } from "@/components/shared/site-footer"
 import { LoginForm } from "@/components/auth/login-form"
 import { ParticipantLogin } from "@/components/auth/participant-login"
 import { SuperAdminLogin } from "@/components/auth/super-admin-login"
+import { SuperAdminSecurity } from "@/components/auth/super-admin-security"
 import { OrgLandingPage } from "@/components/public/org-landing-page"
 import { EventLandingPage } from "@/components/public/event-landing-page"
 
@@ -57,6 +58,7 @@ import { LiveDisplay } from "@/components/activities/live-display"
 import { PublicSharePage } from "@/components/achievements/public-share-page"
 
 import { OrgOnboarding } from "@/components/organization/org-onboarding"
+import { NoOrgRedirect } from "@/components/organization/no-org-redirect"
 import { OrgDashboard } from "@/components/organization/org-dashboard"
 import { OrgSettings } from "@/components/organization/org-settings"
 import { AcceptInvitation } from "@/components/organization/accept-invitation"
@@ -281,7 +283,8 @@ export default function Home() {
 
       // 5. Check if the user has an organization membership.
       //    If they have an org → admin panel.
-      //    If they don't have an org → org onboarding (create one).
+      //    If they don't have an org → show the intermediate "no org" page
+      //    (which explains the situation and routes them to registration).
       //    NEVER send org-login users to the participant dashboard.
       try {
         const orgRes = await fetch("/api/organizations")
@@ -289,8 +292,11 @@ export default function Home() {
         if (orgData.organizations && orgData.organizations.length > 0) {
           setView("admin")
         } else {
-          // No org → create organization (Google OAuth users land here directly)
-          setView("org-onboarding")
+          // No org → show toast + intermediate redirect page.
+          toast.error("No organization found for this email.", {
+            description: "Please register your organization first.",
+          })
+          setView("no-org")
         }
       } catch {
         // Org check failed → go to admin panel
@@ -576,15 +582,28 @@ export default function Home() {
     )
   }
 
-  // ORG ONBOARDING VIEW — full-screen, for new users without an org.
-  // This view is FORCED: the user must complete Step 1 (Google login) and
-  // Step 2 (org details) before they can proceed. No cancel option.
-  if (view === "org-onboarding") {
+  // ORG REGISTER VIEW — public registration page. Aliases "org-onboarding"
+  // for backwards compatibility. Renders the OrgOnboarding component directly
+  // (Step 1: Google login, Step 2: org details).
+  if (view === "org-register" || view === "org-onboarding") {
     return (
       <OrgOnboarding
         onCreated={handleOrgCreated}
         onCancel={user ? () => setView("admin") : undefined}
         forced={!user}
+      />
+    )
+  }
+
+  // NO-ORG INTERMEDIATE VIEW — shown when a user signs in via Google OAuth
+  // but has no organization membership. Explains the situation and routes
+  // them to registration (or sign-out so they can try a different account).
+  if (view === "no-org") {
+    return (
+      <NoOrgRedirect
+        email={user?.email}
+        onRegister={() => setView("org-register")}
+        onHome={() => setView("landing")}
       />
     )
   }
@@ -708,6 +727,7 @@ export default function Home() {
             onSignOut={handleSignOut}
             onNavigateHome={() => setView("landing")}
             onOpenAdmin={() => setView("admin")}
+            onOpenSecurity={() => setView("superadmin-security")}
           />
         )
       }
@@ -734,6 +754,27 @@ export default function Home() {
     )
   }
 
+  // SUPER ADMIN SECURITY VIEW — TOTP 2FA setup (must be authed as super admin)
+  if (view === "superadmin-security") {
+    if (sessionStatus === "loading" || meQuery.isLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-900">
+          <div className="size-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+        </div>
+      )
+    }
+    if (!user || user.role !== "ADMIN" || !(session as any)?.user?.isSuperAdmin) {
+      // Not a super admin → redirect to superadmin login
+      setView("superadmin")
+      return null
+    }
+    return (
+      <SuperAdminSecurity
+        onBack={() => setView("platform")}
+      />
+    )
+  }
+
   // PLATFORM ADMIN VIEW — super admin panel (reached after super admin login)
   if (view === "platform" && user && user.role === "ADMIN") {
     return (
@@ -742,6 +783,7 @@ export default function Home() {
         onSignOut={handleSignOut}
         onNavigateHome={() => setView("landing")}
         onOpenAdmin={() => setView("admin")}
+        onOpenSecurity={() => setView("superadmin-security")}
       />
     )
   }
@@ -978,7 +1020,7 @@ export default function Home() {
           <div className="w-full max-w-md">
             <LoginForm
               onSuccess={handleLoginSuccess}
-              onRegisterOrg={() => setView("org-onboarding")}
+              onRegisterOrg={() => setView("org-register")}
             />
           </div>
         </main>

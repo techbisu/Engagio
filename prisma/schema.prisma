@@ -21,6 +21,9 @@ model User {
   role          String   @default("STUDENT") // ADMIN | STUDENT
   // Password hash (bcrypt) — null for Google-only users + participants
   passwordHash  String?
+  // TOTP (Google Authenticator) secret + enabled flag — for super admin 2FA
+  totpSecret    String?
+  totpEnabled   Boolean  @default(false)
   // i18n: user's preferred locale (falls back to org locale, then 'en')
   locale        String?
   createdAt     DateTime @default(now())

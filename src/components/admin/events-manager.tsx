@@ -16,6 +16,8 @@ import {
   ClipboardList,
   Users,
   PanelsTopLeft,
+  ExternalLink,
+  Copy,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
@@ -415,6 +417,38 @@ export function EventsManager({
                     )}
                   </div>
                 )}
+
+                {/* Prominent event landing page link — always visible */}
+                {ev.slug && (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                    <ExternalLink className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <code className="flex-1 truncate text-xs text-emerald-800 dark:text-emerald-300">
+                      {typeof window !== "undefined" ? window.location.origin : ""}/?event={ev.slug}
+                    </code>
+                    <button
+                      onClick={async () => {
+                        const url = `${window.location.origin}/?event=${ev.slug}`
+                        try {
+                          await navigator.clipboard.writeText(url)
+                          toast.success("Landing page link copied!", {
+                            description: url,
+                          })
+                        } catch {
+                          toast.error("Failed to copy link")
+                        }
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-medium text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition hover:bg-emerald-50 dark:bg-emerald-900/40 dark:text-emerald-300 dark:ring-emerald-500/40 dark:hover:bg-emerald-900/60"
+                    >
+                      <Copy className="size-3" /> Copy
+                    </button>
+                    <button
+                      onClick={() => window.open(`/?event=${ev.slug}`, "_blank")}
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                      <ExternalLink className="size-3" /> Open
+                    </button>
+                  </div>
+                )}
               </CardContent>
               <div className="flex items-center justify-between border-t px-4 py-2.5 bg-muted/20">
                 <span className="text-xs text-muted-foreground">
@@ -446,6 +480,32 @@ export function EventsManager({
                     >
                       <PanelsTopLeft className="size-4" /> Build Landing Page
                     </DropdownMenuItem>
+                    {ev.slug && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            const url = `${window.location.origin}/?event=${ev.slug}`
+                            try {
+                              await navigator.clipboard.writeText(url)
+                              toast.success("Landing page link copied!", {
+                                description: url,
+                              })
+                            } catch {
+                              toast.error("Failed to copy link")
+                            }
+                          }}
+                        >
+                          <Copy className="size-4" /> Copy Landing Page Link
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            window.open(`/?event=${ev.slug}`, "_blank")
+                          }}
+                        >
+                          <ExternalLink className="size-4" /> Open Landing Page
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuItem
                       onClick={() => onManageRegistration?.(ev.id, ev.title)}
                     >

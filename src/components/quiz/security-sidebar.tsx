@@ -135,6 +135,20 @@ function SidebarBody({
                 muted
                 playsInline
                 autoPlay
+                // Safari requires these attributes for reliable autoplay.
+                // The hook also calls video.play() explicitly after srcObject is set.
+                preload="auto"
+                controls={false}
+                // Force-play when metadata loads — some browsers pause the video
+                // when srcObject is first attached. This catches that case.
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget
+                  v.play().catch(() => {})
+                }}
+                onCanPlay={(e) => {
+                  const v = e.currentTarget
+                  if (v.paused) v.play().catch(() => {})
+                }}
               />
               <div className="absolute left-1.5 top-1.5">
                 <Badge
