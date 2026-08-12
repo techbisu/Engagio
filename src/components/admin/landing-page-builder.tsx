@@ -46,6 +46,8 @@ import {
   ArrowLeft,
   ExternalLink,
   Save,
+  ClipboardList,
+  PlayCircle,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -105,6 +107,8 @@ import type {
   CtaSectionData,
   StatsSectionData,
   StatItem,
+  ActivitiesSectionData,
+  RegistrationSectionData,
   CustomSectionData,
 } from "@/types"
 
@@ -129,6 +133,8 @@ const SECTION_TYPES: SectionTypeMeta[] = [
   { type: "GALLERY", label: "Gallery", description: "Responsive image grid with captions.", icon: ImagePlus },
   { type: "CTA", label: "Call To Action", description: "Centered card with gradient background + button.", icon: Megaphone },
   { type: "STATS", label: "Stats", description: "4-column stat row (label + value + icon).", icon: BarChart3 },
+  { type: "ACTIVITIES", label: "Activities", description: "Auto-loads event activities (exams, polls, quizzes) as clickable carousel cards.", icon: PlayCircle },
+  { type: "REGISTRATION", label: "Registration", description: "2-grid design with event registration form + benefits. Participants register with Google.", icon: ClipboardList },
   { type: "CUSTOM", label: "Custom", description: "Free-form markdown body.", icon: LayoutIcon },
 ]
 
@@ -151,6 +157,8 @@ function defaultTitle(type: LandingSectionType): string {
     case "GALLERY": return "Gallery"
     case "CTA": return "Register now"
     case "STATS": return "By the numbers"
+    case "ACTIVITIES": return "Activities"
+    case "REGISTRATION": return "Register for this event"
     case "CUSTOM": return "Custom section"
   }
 }
@@ -179,6 +187,10 @@ function defaultDataFor(type: LandingSectionType): Record<string, unknown> {
       return { buttonText: "Register now", buttonUrl: "" } as CtaSectionData
     case "STATS":
       return { items: [] as StatItem[] }
+    case "ACTIVITIES":
+      return { heading: "Activities", subheading: "Click any activity to participate", showStatus: "all" } as ActivitiesSectionData
+    case "REGISTRATION":
+      return { heading: "Register for this event", description: "Join us for this exciting event. Register now to secure your spot.", benefits: ["Access to all sessions", "Digital certificate of participation", "Networking opportunities"], buttonText: "Register Now", inlineForm: true } as RegistrationSectionData
     case "CUSTOM":
       return { body: "" } as CustomSectionData
   }
@@ -773,6 +785,10 @@ function SectionTypeEditor({ type, data, onChange }: SectionTypeEditorProps) {
       return <CtaEditor data={data as CtaSectionData} onChange={onChange} />
     case "STATS":
       return <StatsEditor data={data as StatsSectionData} onChange={onChange} />
+    case "ACTIVITIES":
+      return <ActivitiesEditor data={data as ActivitiesSectionData} onChange={onChange} />
+    case "REGISTRATION":
+      return <RegistrationEditor data={data as RegistrationSectionData} onChange={onChange} />
     case "CUSTOM":
       return <CustomEditor data={data as CustomSectionData} onChange={onChange} />
   }
@@ -1521,5 +1537,79 @@ export function LandingPageBuilderFooterHint() {
       <Save className="size-3" />
       Changes are saved automatically.
     </p>
+  )
+}
+
+// ── ACTIVITIES ────────────────────────────────────────────────────────────
+function ActivitiesEditor({ data, onChange }: { data: ActivitiesSectionData; onChange: (next: Record<string, unknown>) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
+        <PlayCircle className="mb-1 size-4" />
+        This section automatically loads the event's activities (exams, polls, quizzes) as clickable carousel cards. Only LIVE and SCHEDULED activities are shown to participants.
+      </div>
+      <div className="space-y-1.5">
+        <Label>Heading</Label>
+        <Input
+          value={data.heading ?? ""}
+          onChange={(e) => onChange({ ...data, heading: e.target.value })}
+          placeholder="Activities"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Subheading</Label>
+        <Input
+          value={data.subheading ?? ""}
+          onChange={(e) => onChange({ ...data, subheading: e.target.value })}
+          placeholder="Click any activity to participate"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── REGISTRATION ──────────────────────────────────────────────────────────
+function RegistrationEditor({ data, onChange }: { data: RegistrationSectionData; onChange: (next: Record<string, unknown>) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
+        <ClipboardList className="mb-1 size-4" />
+        Shows the event registration form in a 2-grid layout (benefits on left, form on right). Participants register with Google auth, then get access to the dashboard.
+      </div>
+      <div className="space-y-1.5">
+        <Label>Heading</Label>
+        <Input
+          value={data.heading ?? ""}
+          onChange={(e) => onChange({ ...data, heading: e.target.value })}
+          placeholder="Register for this event"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Description</Label>
+        <Textarea
+          value={data.description ?? ""}
+          onChange={(e) => onChange({ ...data, description: e.target.value })}
+          placeholder="Join us for this exciting event..."
+          rows={2}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Benefits (one per line)</Label>
+        <Textarea
+          value={(data.benefits ?? []).join("\n")}
+          onChange={(e) => onChange({ ...data, benefits: e.target.value.split("\n").filter(Boolean) })}
+          placeholder={"Access to all sessions\nDigital certificate\nNetworking opportunities"}
+          rows={3}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Button text</Label>
+        <Input
+          value={data.buttonText ?? ""}
+          onChange={(e) => onChange({ ...data, buttonText: e.target.value })}
+          placeholder="Register Now"
+        />
+      </div>
+    </div>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import {
@@ -19,6 +20,14 @@ import {
   CalendarClock,
   PanelsTopLeft,
   FileText,
+  FileQuestion,
+  Zap,
+  ClipboardList,
+  MessageSquare,
+  Vote,
+  CheckCircle,
+  ArrowRight,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
@@ -43,6 +52,8 @@ import type {
   CtaSectionData,
   StatsSectionData,
   StatItem,
+  ActivitiesSectionData,
+  RegistrationSectionData,
   CustomSectionData,
 } from "@/types"
 
@@ -98,6 +109,10 @@ function SectionHost({ section }: { section: LandingSectionDto }) {
       return <CtaSectionView section={section} />
     case "STATS":
       return <StatsSectionView section={section} />
+    case "ACTIVITIES":
+      return <ActivitiesSectionView section={section} />
+    case "REGISTRATION":
+      return <RegistrationSectionView section={section} />
     case "CUSTOM":
       return <CustomSectionView section={section} />
     default:
@@ -734,3 +749,227 @@ export const SECTION_TYPE_ICONS = {
   STATS: BarChart3,
   CUSTOM: BarChart3,
 } as const
+
+// ── ACTIVITIES section: auto-loads event activities as carousel cards ─────
+function ActivitiesSectionView({ section }: { section: LandingSectionDto }) {
+  const data = section.data as ActivitiesSectionData
+  const heading = data.heading || section.title || "Activities"
+  const subheading = data.subheading || section.subtitle || ""
+
+  // Fetch activities for this event (public endpoint)
+  const { data: activitiesData, isLoading } = useQuery({
+    queryKey: ["public-activities", section.eventId],
+    queryFn: () =>
+      fetch(`/api/public/activities?eventId=${section.eventId}`).then((r) => {
+        if (!r.ok) throw new Error("Failed to load activities")
+        return r.json() as Promise<{ activities: ActivityCardItem[] }>
+      }),
+    staleTime: 30_000,
+  })
+
+  const activities = activitiesData?.activities ?? []
+
+  if (!isLoading && activities.length === 0) return null
+
+  return (
+    <section className="bg-slate-950 py-16 text-white">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <motion.div {...fadeUp} className="mb-8 text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{heading}</h2>
+          {subheading && (
+            <p className="mt-2 text-base text-white/60">{subheading}</p>
+          )}
+        </motion.div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-8 animate-spin text-emerald-500" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activities.map((act, i) => (
+              <ActivityCard key={act.id} activity={act} index={i} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+interface ActivityCardItem {
+  id: string
+  type: string
+  title: string
+  description: string | null
+  status: string
+  slug: string | null
+  scheduledAt: string | null
+  endsAt: string | null
+  isAcceptingResponses: boolean
+  questionCount: number
+  participantCount: number
+  quizLink: { slug: string; timeLimit: number; passThreshold: number } | null
+}
+
+const ACTIVITY_TYPE_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  QUIZ: { label: "Quiz", icon: FileQuestion, color: "text-emerald-400" },
+  LIVE_QUIZ: { label: "Live Quiz", icon: Zap, color: "text-amber-400" },
+  POLL: { label: "Poll", icon: BarChart3, color: "text-teal-400" },
+  SURVEY: { label: "Survey", icon: ClipboardList, color: "text-blue-400" },
+  FEEDBACK: { label: "Feedback", icon: MessageSquare, color: "text-purple-400" },
+  Q_AND_A: { label: "Q&A", icon: HelpCircle, color: "text-rose-400" },
+  VOTING: { label: "Voting", icon: Vote, color: "text-orange-400" },
+  KNOWLEDGE_CHECK: { label: "Knowledge Check", icon: CheckCircle, color: "text-emerald-400" },
+  PRE_POST_ASSESSMENT: { label: "Assessment", icon: FileQuestion, color: "text-teal-400" },
+}
+
+function ActivityCard({ activity, index }: { activity: ActivityCardItem; index: number }) {
+  const meta = ACTIVITY_TYPE_META[activity.type] ?? { label: activity.type, icon: FileQuestion, color: "text-emerald-400" }
+  const Icon = meta.icon
+  const isLive = activity.status === "LIVE"
+  const href = activity.quizLink?.slug ? `/?quiz=${activity.quizLink.slug}` : activity.slug ? `/?activity=${activity.slug}` : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.3, delay: index * 0.05 }}
+    >
+      <a
+        href={href || "#"}
+        className="group flex h-full flex-col rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:border-emerald-500/40 hover:bg-white/10"
+      >
+        {/* Header: icon + status badge */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`size-5 ${meta.color}`} />
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
+              {meta.label}
+            </span>
+          </div>
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+              <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+              LIVE
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+              <Clock className="size-3" />
+              UPCOMING
+            </span>
+          )}
+        </div>
+
+        {/* Title */}
+        <h3 className="mb-1 line-clamp-2 text-lg font-bold text-white">
+          {activity.title}
+        </h3>
+
+        {/* Description */}
+        {activity.description && (
+          <p className="mb-3 line-clamp-2 text-sm text-white/50">
+            {activity.description}
+          </p>
+        )}
+
+        {/* Stats */}
+        <div className="mt-auto flex items-center gap-3 text-xs text-white/40">
+          {activity.questionCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <FileQuestion className="size-3" />
+              {activity.questionCount} Qs
+            </span>
+          )}
+          {activity.quizLink?.timeLimit && activity.quizLink.timeLimit > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-3" />
+              {activity.quizLink.timeLimit} min
+            </span>
+          )}
+          {activity.participantCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Users className="size-3" />
+              {activity.participantCount}
+            </span>
+          )}
+        </div>
+
+        {/* CTA */}
+        <div className="mt-3 flex items-center gap-1 text-sm font-semibold text-emerald-400 transition group-hover:gap-2">
+          {isLive ? "Start now" : "View details"}
+          <ArrowRight className="size-4" />
+        </div>
+      </a>
+    </motion.div>
+  )
+}
+
+// ── REGISTRATION section: 2-grid design with registration form ─────────────
+function RegistrationSectionView({ section }: { section: LandingSectionDto }) {
+  const data = section.data as RegistrationSectionData
+  const heading = data.heading || section.title || "Register for this event"
+  const description = data.description || ""
+  const benefits = data.benefits || []
+  const buttonText = data.buttonText || "Register Now"
+
+  return (
+    <section className="bg-slate-950 py-16 text-white">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          {/* Left: Benefits */}
+          <motion.div {...fadeUp} className="flex flex-col justify-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
+              {heading}
+            </h2>
+            {description && (
+              <p className="mb-6 text-base text-white/60">{description}</p>
+            )}
+            {benefits.length > 0 && (
+              <ul className="space-y-3">
+                {benefits.map((benefit, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <div className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-emerald-500/20">
+                      <CheckCircle className="size-3.5 text-emerald-400" />
+                    </div>
+                    <span className="text-sm text-white/80">{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </motion.div>
+
+          {/* Right: Registration CTA card */}
+          <motion.div {...fadeUp}>
+            <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-transparent p-8">
+              <div className="mb-6 text-center">
+                <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-emerald-500/20">
+                  <ClipboardList className="size-8 text-emerald-400" />
+                </div>
+                <h3 className="text-xl font-bold">Ready to join?</h3>
+                <p className="mt-1 text-sm text-white/60">
+                  Sign in with Google to register for this event.
+                </p>
+              </div>
+              <a
+                href={`#join`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById("join")?.scrollIntoView({ behavior: "smooth" })
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+              >
+                <ClipboardList className="size-5" />
+                {buttonText}
+              </a>
+              <p className="mt-4 text-center text-xs text-white/40">
+                You'll be redirected to the registration form. Google sign-in required.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  )
+}

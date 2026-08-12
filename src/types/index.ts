@@ -577,6 +577,8 @@ export type LandingSectionType =
   | "GALLERY"
   | "CTA"
   | "STATS"
+  | "ACTIVITIES"
+  | "REGISTRATION"
   | "CUSTOM"
 
 export interface LandingSectionBaseData {
@@ -706,4 +708,28 @@ export interface StatsSectionData {
 
 export interface CustomSectionData {
   body?: string
+}
+
+// ── ACTIVITIES section: auto-loads event activities as carousel cards ──────
+export interface ActivitiesSectionData {
+  /** Optional heading override (defaults to "Activities") */
+  heading?: string
+  /** Optional subheading */
+  subheading?: string
+  /** Filter by status — if omitted, shows LIVE + SCHEDULED activities */
+  showStatus?: "all" | "live" | "upcoming"
+}
+
+// ── REGISTRATION section: 2-grid design with event registration form ───────
+export interface RegistrationSectionData {
+  /** Left column: heading */
+  heading?: string
+  /** Left column: description text */
+  description?: string
+  /** Left column: bullet points (benefits/what's included) */
+  benefits?: string[]
+  /** Button text for the CTA */
+  buttonText?: string
+  /** Whether to show the form inline (true) or as a button to a separate view (false) */
+  inlineForm?: boolean
 }

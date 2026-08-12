@@ -14,6 +14,15 @@ import {
   Sparkles,
   Trophy,
   Users,
+  FileQuestion,
+  Zap,
+  MessageSquare,
+  Vote,
+  CheckCircle,
+  HelpCircle,
+  ArrowRight,
+  Calendar,
+  Building2,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -45,6 +54,54 @@ interface StudentDashboardProps {
   onViewLeaderboard: (slug: string) => void
 }
 
+// ─── Types for registered events with activities ───────────────────────────
+interface RegisteredActivity {
+  id: string
+  type: string
+  title: string
+  description: string | null
+  status: string
+  slug: string | null
+  scheduledAt: string | null
+  endsAt: string | null
+  isAcceptingResponses: boolean
+  questionCount: number
+  participantCount: number
+  quizLink: { slug: string; timeLimit: number; passThreshold: number } | null
+}
+
+interface RegisteredEvent {
+  registration: { id: string; createdAt: string }
+  event: {
+    id: string
+    title: string
+    slug: string
+    image: string | null
+    startDate: string
+    endDate: string
+    isActive: boolean
+    organization: {
+      id: string
+      name: string
+      slug: string
+      logoUrl: string | null
+    }
+  }
+  activities: RegisteredActivity[]
+}
+
+const ACTIVITY_TYPE_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  QUIZ: { label: "Quiz", icon: FileQuestion, color: "text-emerald-600" },
+  LIVE_QUIZ: { label: "Live Quiz", icon: Zap, color: "text-amber-600" },
+  POLL: { label: "Poll", icon: BarChart3, color: "text-teal-600" },
+  SURVEY: { label: "Survey", icon: ClipboardList, color: "text-blue-600" },
+  FEEDBACK: { label: "Feedback", icon: MessageSquare, color: "text-purple-600" },
+  Q_AND_A: { label: "Q&A", icon: HelpCircle, color: "text-rose-600" },
+  VOTING: { label: "Voting", icon: Vote, color: "text-orange-600" },
+  KNOWLEDGE_CHECK: { label: "Knowledge Check", icon: CheckCircle, color: "text-emerald-600" },
+  PRE_POST_ASSESSMENT: { label: "Assessment", icon: FileQuestion, color: "text-teal-600" },
+}
+
 export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: StudentDashboardProps) {
   const [slugInput, setSlugInput] = React.useState("")
   const [leaderboardInput, setLeaderboardInput] = React.useState("")
@@ -55,6 +112,14 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
     queryKey: ["attempts", "list", user.id],
     queryFn: () => api<AttemptListResponse>("/api/attempts/list"),
   })
+
+  // Fetch registered events with their current/upcoming activities
+  const { data: registeredData } = useQuery<{ events: RegisteredEvent[] }>({
+    queryKey: ["me", "activities", user.id],
+    queryFn: () => api<{ events: RegisteredEvent[] }>("/api/me/activities"),
+    staleTime: 60_000,
+  })
+  const registeredEvents = registeredData?.events ?? []
 
   const attempts = data?.attempts ?? []
   const completed = attempts.filter(
@@ -106,6 +171,100 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
           tone="amber"
         />
       </div>
+
+      {/* Current & Upcoming Activities (for registered events only) */}
+      {registeredEvents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-teal-100 text-teal-600 dark:bg-teal-950/60 dark:text-teal-300">
+                <Calendar className="size-4" />
+              </span>
+              <div>
+                <CardTitle>Current & Upcoming Activities</CardTitle>
+                <CardDescription>
+                  Live and upcoming activities from events you&apos;ve registered for.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {registeredEvents.map(({ event, activities }) => (
+                <div key={event.id} className="rounded-lg border p-4">
+                  {/* Event header */}
+                  <div className="mb-3 flex items-center gap-2">
+                    {event.organization?.logoUrl ? (
+                      <img src={event.organization.logoUrl} alt="" className="size-5 rounded" />
+                    ) : (
+                      <div className="grid size-5 place-items-center rounded bg-muted">
+                        <Building2 className="size-3 text-muted-foreground" />
+                      </div>
+                    )}
+                    <span className="text-sm font-semibold">{event.title}</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="text-xs text-muted-foreground">{event.organization?.name}</span>
+                  </div>
+                  {/* Activity cards */}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {activities.map((act) => {
+                      const meta = ACTIVITY_TYPE_META[act.type] ?? { label: act.type, icon: FileQuestion, color: "text-emerald-600" }
+                      const Icon = meta.icon
+                      const isLive = act.status === "LIVE"
+                      const href = act.quizLink?.slug
+                        ? `/?quiz=${act.quizLink.slug}`
+                        : act.slug
+                          ? `/?activity=${act.slug}`
+                          : null
+                      return (
+                        <button
+                          key={act.id}
+                          onClick={() => {
+                            if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
+                            else if (act.slug) window.location.href = `/?activity=${act.slug}`
+                          }}
+                          className="group flex flex-col rounded-lg border p-3 text-left transition hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Icon className={`size-4 ${meta.color}`} />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {meta.label}
+                              </span>
+                            </div>
+                            {isLive ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                                <span className="size-1 animate-pulse rounded-full bg-emerald-500" />
+                                LIVE
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                                <Clock className="size-2.5" />
+                                UPCOMING
+                              </span>
+                            )}
+                          </div>
+                          <p className="mb-1 line-clamp-1 text-sm font-medium">{act.title}</p>
+                          <div className="mt-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+                            {act.questionCount > 0 && <span>{act.questionCount} Qs</span>}
+                            {act.quizLink?.timeLimit && act.quizLink.timeLimit > 0 && (
+                              <span>{act.quizLink.timeLimit} min</span>
+                            )}
+                            <span className="ml-auto flex items-center gap-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                              {isLive ? "Start" : "View"}
+                              <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Take a quiz */}
       <Card>
