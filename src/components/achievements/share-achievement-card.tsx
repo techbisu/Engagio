@@ -30,15 +30,15 @@ export interface ShareAchievementCardProps {
 }
 
 /**
- * Scroll-stopping social media card — minimal data, MASSIVE hero number.
- * Inspired by Spotify Wrapped, Duolingo, and gaming achievement unlocks.
+ * Reference-matched achievement card — light gradient, trophy watermark,
+ * confetti, clean professional layout.
  */
 export function ShareAchievementCard({
   achievement,
   className,
 }: ShareAchievementCardProps) {
   const template = achievement.templateId ?? "modern"
-  const theme = THEMES[template] || THEMES.modern
+  const theme = THEMES[template] || THEMES.minimal
 
   const hasPercent =
     typeof achievement.percentage === "number" && achievement.percentage >= 0
@@ -48,6 +48,13 @@ export function ShareAchievementCard({
     typeof achievement.totalScore === "number"
   const isCertificate = achievement.type === "CERTIFICATE_EARNED"
 
+  const serial = buildSerial(achievement.publicToken || "", achievement.achievementData?.orgName)
+  const dateStr = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+
   const eventName =
     achievement.subtitle ||
     achievement.achievementData?.eventTitle ||
@@ -55,22 +62,32 @@ export function ShareAchievementCard({
 
   return (
     <div
-      className={cn("relative flex w-full flex-col items-center justify-center overflow-hidden rounded-2xl shadow-2xl", className)}
+      className={cn("relative flex w-full flex-col overflow-hidden rounded-2xl shadow-xl", className)}
       style={{
         aspectRatio: "4 / 5",
         background: `linear-gradient(160deg, ${theme.bgFrom} 0%, ${theme.bgTo} 100%)`,
       }}
     >
-      {/* Glow behind hero number */}
+      {/* Decorative blob (top-right) */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[15%] size-[500px] -translate-x-1/2 rounded-full"
-        style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 60%)` }}
+        className="pointer-events-none absolute -right-24 -top-24 size-64 rounded-full opacity-30"
+        style={{ background: theme.blobColor }}
       />
 
-      {/* Confetti explosion */}
+      {/* Trophy watermark (behind text) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[35%] size-64 -translate-x-1/2 opacity-[0.08]"
+      >
+        <svg viewBox="0 0 100 100" className="size-full" fill="currentColor" style={{ color: theme.text }}>
+          <path d="M30 15 L70 15 L68 45 Q68 55 60 58 L58 70 L72 70 L72 78 L28 78 L28 70 L42 70 L40 58 Q32 55 32 45 Z M20 20 L30 20 L30 30 Q30 38 24 38 Q18 38 18 30 Z M70 20 L80 20 L82 30 Q82 38 76 38 Q70 38 70 30 Z" />
+        </svg>
+      </div>
+
+      {/* Confetti */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        {generateConfetti(theme, 40).map((c, i) => (
+        {generateConfetti(theme, 35).map((c, i) => (
           <div
             key={i}
             className="absolute"
@@ -80,101 +97,145 @@ export function ShareAchievementCard({
               width: `${c.size}px`,
               height: `${c.size}px`,
               backgroundColor: c.color,
-              borderRadius: c.isCircle ? "50%" : "3px",
+              borderRadius: c.isCircle ? "50%" : c.isDiamond ? "2px" : "50%",
               opacity: c.opacity,
-              transform: `rotate(${c.rotation}deg)`,
+              transform: c.isDiamond ? "rotate(45deg)" : "none",
             }}
           />
         ))}
       </div>
 
-      {/* ═══ CENTER CONTENT ═══ */}
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-10 py-12">
-        {/* Hero number — MASSIVE */}
-        {isCertificate ? (
-          <div
-            className="grid size-28 place-items-center rounded-full shadow-2xl sm:size-32"
-            style={{ background: theme.accent }}
-          >
-            <svg viewBox="0 0 24 24" className="size-14 text-white sm:size-16" fill="currentColor">
-              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
-            </svg>
-          </div>
-        ) : hasPercent ? (
-          <div className="flex items-baseline gap-0.5">
-            <span className="text-[180px] font-black leading-[0.85] tabular-nums sm:text-[200px]">
-              {achievement.percentage}
-            </span>
-            <span className="text-[80px] font-bold leading-none" style={{ color: theme.accent }}>
-              %
-            </span>
-          </div>
-        ) : hasRank ? (
-          <div className="flex flex-col items-center">
-            <div className="mb-2 text-6xl sm:text-7xl">
-              {achievement.rank === 1 ? "🥇" : achievement.rank === 2 ? "🥈" : achievement.rank === 3 ? "🥉" : "🏆"}
+      {/* ═══ CONTENT ═══ */}
+      <div className="relative z-10 flex flex-1 flex-col items-center px-8 py-10">
+        {/* Badge (pill) */}
+        <div
+          className="inline-flex items-center rounded-full px-6 py-2 text-xs font-bold tracking-[0.3em] sm:text-sm"
+          style={{ background: theme.badgeBg, color: theme.badgeText }}
+        >
+          {isCertificate ? "CERTIFICATE OF COMPLETION" : achievement.type.replace(/_/g, " ")}
+        </div>
+
+        {/* Hero metric */}
+        <div className="mt-8 flex flex-col items-center">
+          {isCertificate ? (
+            <div
+              className="grid size-20 place-items-center rounded-full shadow-lg"
+              style={{ background: theme.accent }}
+            >
+              <svg viewBox="0 0 24 24" className="size-10 text-white" fill="currentColor">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
+              </svg>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[140px] font-black leading-[0.85] tabular-nums sm:text-[160px]">
-                {achievement.rank}
+          ) : hasPercent ? (
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-7xl font-black leading-none tabular-nums sm:text-8xl" style={{ color: theme.text }}>
+                {achievement.percentage}
               </span>
-              <span className="text-[60px] font-bold leading-none" style={{ color: theme.accent }}>
-                {ordinalSuffix(achievement.rank as number)}
+              <span className="text-4xl font-bold leading-none sm:text-5xl" style={{ color: theme.accent }}>
+                %
               </span>
             </div>
-          </div>
-        ) : hasScore ? (
-          <div className="flex items-baseline gap-2">
-            <span className="text-[140px] font-black leading-[0.85] tabular-nums sm:text-[160px]">
-              {achievement.score}
-            </span>
-            <span className="text-[50px] font-bold leading-none" style={{ color: theme.accent }}>
-              / {achievement.totalScore}
-            </span>
-          </div>
-        ) : (
-          <div
-            className="grid size-28 place-items-center rounded-full shadow-2xl sm:size-32"
-            style={{ background: theme.accent }}
-          >
-            <svg viewBox="0 0 24 24" className="size-14 text-white sm:size-16" fill="currentColor">
-              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
-            </svg>
-          </div>
+          ) : hasRank ? (
+            <div className="flex flex-col items-center">
+              <div className="mb-1 text-4xl sm:text-5xl">
+                {achievement.rank === 1 ? "🥇" : achievement.rank === 2 ? "🥈" : achievement.rank === 3 ? "🥉" : "🏆"}
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-6xl font-black leading-none tabular-nums sm:text-7xl" style={{ color: theme.text }}>
+                  {achievement.rank}
+                </span>
+                <span className="text-3xl font-bold leading-none sm:text-4xl" style={{ color: theme.accent }}>
+                  {ordinalSuffix(achievement.rank as number)}
+                </span>
+              </div>
+            </div>
+          ) : hasScore ? (
+            <div className="flex items-baseline gap-2">
+              <span className="text-6xl font-black leading-none tabular-nums sm:text-7xl" style={{ color: theme.text }}>
+                {achievement.score}
+              </span>
+              <span className="text-3xl font-bold leading-none sm:text-4xl" style={{ color: theme.accent }}>
+                / {achievement.totalScore}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="grid size-20 place-items-center rounded-full shadow-lg"
+              style={{ background: theme.accent }}
+            >
+              <svg viewBox="0 0 24 24" className="size-10 text-white" fill="currentColor">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Score label */}
+        {!isCertificate && (hasPercent || hasRank || hasScore) && (
+          <p className="mt-3 text-sm font-bold tracking-[0.4em] sm:text-base" style={{ color: theme.textSecondary }}>
+            {hasRank
+              ? achievement.totalParticipants
+                ? `RANK OF ${achievement.totalParticipants}`
+                : "RANK"
+              : hasScore
+                ? "POINTS"
+                : "SCORE"}
+          </p>
         )}
 
-        {/* Participant name (medium, below hero) */}
-        <p className="mt-10 max-w-full text-center text-3xl font-extrabold leading-tight sm:text-4xl">
+        {/* AWARDED TO */}
+        <p className="mt-8 text-xs tracking-wider sm:text-sm" style={{ color: theme.textMuted }}>
+          AWARDED TO
+        </p>
+
+        {/* Participant name */}
+        <p className="mt-1 text-center text-2xl font-extrabold leading-tight sm:text-3xl" style={{ color: theme.text }}>
           {achievement.participantName}
         </p>
 
-        {/* Event name (accent color) */}
-        <p
-          className="mt-2 max-w-full text-center text-xl font-semibold sm:text-2xl"
-          style={{ color: theme.accentLight }}
-        >
+        {/* Event name */}
+        <p className="mt-2 text-center text-base font-semibold sm:text-lg" style={{ color: theme.textSecondary }}>
           {eventName}
+        </p>
+
+        {/* Date */}
+        <p className="mt-1 text-sm sm:text-base" style={{ color: theme.textMuted }}>
+          {dateStr}
         </p>
       </div>
 
-      {/* ═══ FOOTER (minimal: QR + Powered by) ═══ */}
-      <div className="relative z-10 flex items-center justify-center gap-3 pb-6">
-        {/* QR placeholder */}
-        <div
-          className="grid size-12 place-items-center rounded-lg p-1.5 sm:size-14"
-          style={{ background: "rgba(255,255,255,0.1)" }}
-        >
-          <svg viewBox="0 0 24 24" className="size-7 text-white/60 sm:size-8" fill="currentColor">
-            <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h8v8h-8v-8zm2 2v4h4v-4h-4z" />
-          </svg>
+      {/* ═══ FOOTER (curved) ═══ */}
+      <div
+        className="relative flex items-end justify-between px-8 pb-6 pt-8"
+        style={{
+          background: theme.footerColor,
+          borderTopLeftRadius: "32px",
+          borderTopRightRadius: "32px",
+        }}
+      >
+        {/* Serial + Powered by */}
+        <div className="flex flex-col">
+          <p className="text-[9px] tracking-wider sm:text-[10px]" style={{ color: theme.textMuted }}>VERIFY AT</p>
+          <p className="mt-1 font-mono text-xs font-bold sm:text-sm" style={{ color: theme.text }}>{serial}</p>
+          <p className="mt-2 text-[10px] sm:text-xs" style={{ color: theme.textMuted }}>Powered by Engagio</p>
         </div>
-        <span className="text-xs text-white/40 sm:text-sm">Powered by Engagio</span>
+        {/* QR placeholder */}
+        <div className="flex shrink-0 flex-col items-center gap-1">
+          <div className="grid size-14 place-items-center rounded-xl bg-white p-2 shadow-sm sm:size-16">
+            <svg viewBox="0 0 24 24" className="size-8 sm:size-10" style={{ color: theme.text }} fill="currentColor">
+              <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h8v8h-8v-8zm2 2v4h4v-4h-4z" />
+            </svg>
+          </div>
+          <p className="text-[8px] font-semibold tracking-wider sm:text-[9px]" style={{ color: theme.textMuted }}>
+            SCAN TO VERIFY
+          </p>
+        </div>
       </div>
     </div>
   )
 }
 
-// ─── Confetti generator (concentrated around center) ───────────────────────
+// ─── Confetti generator ────────────────────────────────────────────────────
 
 interface ConfettiPiece {
   x: number
@@ -182,8 +243,8 @@ interface ConfettiPiece {
   size: number
   color: string
   opacity: number
-  rotation: number
   isCircle: boolean
+  isDiamond: boolean
 }
 
 function generateConfetti(theme: CardTheme, count: number): ConfettiPiece[] {
@@ -194,69 +255,87 @@ function generateConfetti(theme: CardTheme, count: number): ConfettiPiece[] {
     return seed / 233280
   }
   for (let i = 0; i < count; i++) {
-    const angle = rand() * Math.PI * 2
-    const distance = rand() * 45
-    const centerX = 50
-    const centerY = 42
+    const shape = rand()
     pieces.push({
-      x: centerX + Math.cos(angle) * distance,
-      y: centerY + Math.sin(angle) * distance * 0.8,
-      size: 4 + Math.floor(rand() * 12),
+      x: Math.floor(rand() * 100),
+      y: Math.floor(rand() * 70),
+      size: 4 + Math.floor(rand() * 8),
       color: theme.confetti[i % theme.confetti.length],
-      opacity: 0.4 + rand() * 0.5,
-      rotation: Math.floor(rand() * 360),
-      isCircle: rand() > 0.4,
+      opacity: 0.3 + rand() * 0.5,
+      isCircle: shape > 0.66,
+      isDiamond: shape > 0.33 && shape <= 0.66,
     })
   }
   return pieces
 }
 
-// ─── 5 vibrant gradient themes ─────────────────────────────────────────────
+// ─── 5 light color palettes ────────────────────────────────────────────────
 
 interface CardTheme {
   bgFrom: string
   bgTo: string
+  blobColor: string
+  footerColor: string
+  text: string
+  textSecondary: string
+  textMuted: string
   accent: string
-  accentLight: string
-  glow: string
+  accentDark: string
+  badgeBg: string
+  badgeText: string
   confetti: string[]
 }
 
 const THEMES: Record<AchievementTemplateId, CardTheme> = {
-  // 1. Emerald fire
+  // 1. Mint/aqua (reference match)
   minimal: {
-    bgFrom: "#022c22", bgTo: "#000000",
-    accent: "#34d399", accentLight: "#a7f3d0",
-    glow: "rgba(16,185,129,0.6)",
-    confetti: ["#34d399", "#a7f3d0", "#6ee7b7", "#ffffff"],
+    bgFrom: "#e0f7f4", bgTo: "#a8d5da",
+    blobColor: "#7bc4c9",
+    footerColor: "#f5f9f8",
+    text: "#1a3a3a", textSecondary: "#2c5f5f", textMuted: "#5a8585",
+    accent: "#0d9488", accentDark: "#0f766e",
+    badgeBg: "#8fb8b8", badgeText: "#1a4a4a",
+    confetti: ["#f4d03f", "#00ced1", "#48d1cc", "#7bc4c9", "#ffffff"],
   },
-  // 2. Ocean deep
+  // 2. Emerald/mint
   modern: {
-    bgFrom: "#042f2e", bgTo: "#020617",
-    accent: "#22d3ee", accentLight: "#67e8f9",
-    glow: "rgba(34,211,238,0.6)",
-    confetti: ["#22d3ee", "#67e8f9", "#a5f3fc", "#ffffff"],
+    bgFrom: "#d1fae5", bgTo: "#6ee7b7",
+    blobColor: "#34d399",
+    footerColor: "#f0fdf4",
+    text: "#064e3b", textSecondary: "#047857", textMuted: "#059669",
+    accent: "#059669", accentDark: "#047857",
+    badgeBg: "#a7f3d0", badgeText: "#064e3b",
+    confetti: ["#fbbf24", "#10b981", "#34d399", "#6ee7b7", "#ffffff"],
   },
-  // 3. Golden hour
+  // 3. Amber/cream
   professional: {
-    bgFrom: "#451a03", bgTo: "#000000",
-    accent: "#fbbf24", accentLight: "#fde68a",
-    glow: "rgba(251,191,36,0.6)",
-    confetti: ["#fbbf24", "#fde68a", "#f59e0b", "#ffffff"],
+    bgFrom: "#fef3c7", bgTo: "#fcd34d",
+    blobColor: "#fbbf24",
+    footerColor: "#fffbeb",
+    text: "#78350f", textSecondary: "#92400e", textMuted: "#b45309",
+    accent: "#d97706", accentDark: "#92400e",
+    badgeBg: "#fde68a", badgeText: "#78350f",
+    confetti: ["#f59e0b", "#fbbf24", "#fde68a", "#ffffff", "#d97706"],
   },
-  // 4. Royal purple
+  // 4. Pink/rose
   celebration: {
-    bgFrom: "#2e1065", bgTo: "#000000",
-    accent: "#f472b6", accentLight: "#fbcfe8",
-    glow: "rgba(244,114,182,0.6)",
-    confetti: ["#f472b6", "#fbcfe8", "#a78bfa", "#ffffff", "#fbbf24"],
+    bgFrom: "#fce7f3", bgTo: "#f9a8d4",
+    blobColor: "#f472b6",
+    footerColor: "#fdf2f8",
+    text: "#831843", textSecondary: "#9d174d", textMuted: "#be185d",
+    accent: "#db2777", accentDark: "#9d174d",
+    badgeBg: "#fbcfe8", badgeText: "#831843",
+    confetti: ["#ec4899", "#f472b6", "#f9a8d4", "#ffffff", "#fbbf24"],
   },
-  // 5. Sunset
+  // 5. Teal/sky
   conference: {
-    bgFrom: "#7f1d1d", bgTo: "#000000",
-    accent: "#fb923c", accentLight: "#fed7aa",
-    glow: "rgba(251,146,60,0.6)",
-    confetti: ["#fb923c", "#fed7aa", "#f87171", "#ffffff", "#fbbf24"],
+    bgFrom: "#ccfbf1", bgTo: "#5eead4",
+    blobColor: "#2dd4bf",
+    footerColor: "#f0fdfa",
+    text: "#134e4a", textSecondary: "#0f766e", textMuted: "#0d9488",
+    accent: "#0d9488", accentDark: "#0f766e",
+    badgeBg: "#99f6e4", badgeText: "#134e4a",
+    confetti: ["#14b8a6", "#2dd4bf", "#5eead4", "#ffffff", "#0d9488"],
   },
 }
 
@@ -275,4 +354,20 @@ function ordinalSuffix(n: number): string {
     default:
       return "th"
   }
+}
+
+function buildSerial(publicToken: string, orgName?: string): string {
+  const orgCode = (orgName || "ENG")
+    .replace(/[^A-Z]/gi, "")
+    .toUpperCase()
+    .slice(0, 3) || "ENG"
+  const year = new Date().getFullYear()
+  const hash = (publicToken || "default")
+    .split("")
+    .reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffffff, 7)
+    .toString(36)
+    .toUpperCase()
+    .padStart(6, "0")
+    .slice(0, 6)
+  return `${orgCode}-${year}-${hash}`
 }
