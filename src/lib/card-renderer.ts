@@ -1,12 +1,16 @@
 /**
  * Server-side card renderer using Satori + Resvg.
  *
- * ─── Design: Eye-catching social media shareable card ──────────────────────
- * Beautiful gradient backgrounds, BIG typography, decorative elements.
- * Optimized for social media sharing (LinkedIn, WhatsApp, Twitter, etc.).
+ * ─── 5 Eye-catching social media shareable card styles ────────────────────
+ * Mix of light and dark themes with confetti/paper blast effects.
+ * Bigger typography, better vertical distribution, no blank space.
  *
- * NOTE: Satori requires ALL container divs to have explicit display:flex
- * when they have multiple children. This is enforced throughout.
+ * Styles:
+ *   1. minimal       — DARK: slate gradient, teal accents, minimal confetti
+ *   2. modern        — DARK: emerald→navy gradient, green accents, confetti
+ *   3. professional  — LIGHT: white bg, amber accents, elegant border
+ *   4. celebration   — DARK: dark bg, gold accents, LOTS of confetti
+ *   5. conference    — LIGHT: white bg, teal accents, clean corporate
  */
 
 import satori from "satori"
@@ -53,36 +57,99 @@ const fonts = [
   { name: "DejaVu Sans Mono", data: base64ToBuffer(DEJAVU_SANS_MONO), weight: 400 as const, style: "normal" as const },
 ]
 
-interface TemplateTheme {
+// ─── 5 Style themes ────────────────────────────────────────────────────────
+interface CardTheme {
+  isDark: boolean
+  bg: string // CSS background value (gradient or solid)
   bgFrom: string
   bgTo: string
-  accent: string
+  surface: string // card surface color (for light themes)
+  text: string // primary text
+  textSecondary: string // secondary text
+  textMuted: string // muted text
+  accent: string // accent color
   accentLight: string
-  accentGlow: string
+  accentDark: string
+  accentGlow: string // rgba glow for decorative circles
   badgeBg: string
   badgeText: string
+  badgeBorder: string
+  divider: string
+  confettiColors: string[]
+  confettiCount: number
+  typeLabel: string
 }
 
-const THEMES: Record<AchievementTemplateId, TemplateTheme> = {
+const THEMES: Record<AchievementTemplateId, CardTheme> = {
+  // 1. DARK — minimal slate
   minimal: {
-    bgFrom: "#0f172a", bgTo: "#1e293b", accent: "#14b8a6", accentLight: "#2dd4bf",
-    accentGlow: "rgba(20,184,166,0.4)", badgeBg: "rgba(20,184,166,0.2)", badgeText: "#5eead4",
+    isDark: true,
+    bg: "linear-gradient(160deg, #1e293b 0%, #0f172a 100%)",
+    bgFrom: "#1e293b", bgTo: "#0f172a",
+    surface: "#1e293b",
+    text: "#ffffff", textSecondary: "#cbd5e1", textMuted: "#64748b",
+    accent: "#14b8a6", accentLight: "#2dd4bf", accentDark: "#0f766e",
+    accentGlow: "rgba(20,184,166,0.35)",
+    badgeBg: "rgba(20,184,166,0.15)", badgeText: "#5eead4", badgeBorder: "rgba(20,184,166,0.4)",
+    divider: "rgba(255,255,255,0.1)",
+    confettiColors: ["#14b8a6", "#2dd4bf", "#64748b"], confettiCount: 20,
+    typeLabel: "ACHIEVEMENT",
   },
+  // 2. DARK — modern emerald
   modern: {
-    bgFrom: "#064e3b", bgTo: "#0f172a", accent: "#10b981", accentLight: "#34d399",
-    accentGlow: "rgba(16,185,129,0.4)", badgeBg: "rgba(16,185,129,0.2)", badgeText: "#6ee7b7",
+    isDark: true,
+    bg: "linear-gradient(160deg, #064e3b 0%, #0f172a 70%)",
+    bgFrom: "#064e3b", bgTo: "#0f172a",
+    surface: "#0f172a",
+    text: "#ffffff", textSecondary: "#d1fae5", textMuted: "#6b7280",
+    accent: "#10b981", accentLight: "#34d399", accentDark: "#059669",
+    accentGlow: "rgba(16,185,129,0.4)",
+    badgeBg: "rgba(16,185,129,0.15)", badgeText: "#6ee7b7", badgeBorder: "rgba(16,185,129,0.4)",
+    divider: "rgba(255,255,255,0.1)",
+    confettiColors: ["#10b981", "#34d399", "#fbbf24", "#ffffff"], confettiCount: 35,
+    typeLabel: "ACHIEVEMENT",
   },
+  // 3. LIGHT — professional amber
   professional: {
-    bgFrom: "#78350f", bgTo: "#0f172a", accent: "#f59e0b", accentLight: "#fbbf24",
-    accentGlow: "rgba(245,158,11,0.4)", badgeBg: "rgba(245,158,11,0.2)", badgeText: "#fcd34d",
+    isDark: false,
+    bg: "linear-gradient(160deg, #fffbeb 0%, #ffffff 50%)",
+    bgFrom: "#fffbeb", bgTo: "#ffffff",
+    surface: "#ffffff",
+    text: "#1f2937", textSecondary: "#4b5563", textMuted: "#9ca3af",
+    accent: "#f59e0b", accentLight: "#fbbf24", accentDark: "#d97706",
+    accentGlow: "rgba(245,158,11,0.2)",
+    badgeBg: "rgba(245,158,11,0.1)", badgeText: "#92400e", badgeBorder: "rgba(245,158,11,0.3)",
+    divider: "#e5e7eb",
+    confettiColors: ["#f59e0b", "#fbbf24", "#fde68a", "#d97706"], confettiCount: 25,
+    typeLabel: "CERTIFICATE",
   },
+  // 4. DARK — celebration gold (lots of confetti)
   celebration: {
-    bgFrom: "#7c2d12", bgTo: "#0f172a", accent: "#fbbf24", accentLight: "#fde68a",
-    accentGlow: "rgba(251,191,36,0.5)", badgeBg: "rgba(251,191,36,0.2)", badgeText: "#fef3c7",
+    isDark: true,
+    bg: "linear-gradient(160deg, #7c2d12 0%, #0f172a 60%)",
+    bgFrom: "#7c2d12", bgTo: "#0f172a",
+    surface: "#0f172a",
+    text: "#ffffff", textSecondary: "#fef3c7", textMuted: "#92856a",
+    accent: "#fbbf24", accentLight: "#fde68a", accentDark: "#d97706",
+    accentGlow: "rgba(251,191,36,0.45)",
+    badgeBg: "rgba(251,191,36,0.15)", badgeText: "#fef3c7", badgeBorder: "rgba(251,191,36,0.4)",
+    divider: "rgba(255,255,255,0.1)",
+    confettiColors: ["#fbbf24", "#fde68a", "#f43f5e", "#10b981", "#ffffff", "#f59e0b"], confettiCount: 50,
+    typeLabel: "ACHIEVEMENT",
   },
+  // 5. LIGHT — conference teal
   conference: {
-    bgFrom: "#134e4a", bgTo: "#0f172a", accent: "#14b8a6", accentLight: "#2dd4bf",
-    accentGlow: "rgba(20,184,166,0.4)", badgeBg: "rgba(20,184,166,0.2)", badgeText: "#5eead4",
+    isDark: false,
+    bg: "linear-gradient(160deg, #f0fdfa 0%, #ffffff 50%)",
+    bgFrom: "#f0fdfa", bgTo: "#ffffff",
+    surface: "#ffffff",
+    text: "#0f172a", textSecondary: "#334155", textMuted: "#94a3b8",
+    accent: "#14b8a6", accentLight: "#2dd4bf", accentDark: "#0f766e",
+    accentGlow: "rgba(20,184,166,0.2)",
+    badgeBg: "rgba(20,184,166,0.1)", badgeText: "#0f766e", badgeBorder: "rgba(20,184,166,0.3)",
+    divider: "#e2e8f0",
+    confettiColors: ["#14b8a6", "#2dd4bf", "#0f766e"], confettiCount: 15,
+    typeLabel: "ATTENDEE PASS",
   },
 }
 
@@ -144,6 +211,41 @@ function el(
   return { type, props: { style, children, ...extra } }
 }
 
+// ─── Generate confetti elements (deterministic positions) ──────────────────
+function buildConfetti(theme: CardTheme): SatoriNode[] {
+  const confetti: SatoriNode[] = []
+  let seed = 42
+  const rand = () => {
+    seed = (seed * 9301 + 49297) % 233280
+    return seed / 233280
+  }
+  for (let i = 0; i < theme.confettiCount; i++) {
+    const x = Math.floor(rand() * 100)
+    const y = Math.floor(rand() * 100)
+    const size = 6 + Math.floor(rand() * 14)
+    const color = theme.confettiColors[i % theme.confettiColors.length]
+    const opacity = 0.3 + rand() * 0.5
+    const rotation = Math.floor(rand() * 360)
+    const isCircle = rand() > 0.5
+
+    confetti.push(
+      el("div", {
+        display: "flex",
+        position: "absolute",
+        left: `${x}%`,
+        top: `${y}%`,
+        width: `${size}px`,
+        height: `${size}px`,
+        backgroundColor: color,
+        borderRadius: isCircle ? "50%" : "2px",
+        opacity: String(opacity),
+        transform: `rotate(${rotation}deg)`,
+      }),
+    )
+  }
+  return confetti
+}
+
 async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   const theme = THEMES[p.templateId] || THEMES.modern
   const { title, subtitle, participantName, percentage, rank, score, totalScore, totalParticipants } = p
@@ -153,22 +255,22 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   const hasScore = typeof score === "number" && typeof totalScore === "number"
   const isCertificate = p.type === "CERTIFICATE_EARNED"
 
-  // ─── Build hero metric ──
+  // ─── Build hero metric (BIGGER fonts) ──
   let heroNode: SatoriNode
   let scoreLabel = ""
 
   if (isCertificate) {
     heroNode = el("div", {
       display: "flex", alignItems: "center", justifyContent: "center",
-      width: "100px", height: "100px", borderRadius: "50%",
-      backgroundColor: theme.accent, fontSize: "48px",
+      width: "120px", height: "120px", borderRadius: "50%",
+      backgroundColor: theme.accent, fontSize: "60px",
     }, "★")
   } else if (hasPercent) {
     heroNode = el("div", {
       display: "flex", alignItems: "baseline", justifyContent: "center",
     }, [
-      el("span", { fontSize: "160px", fontWeight: "800", color: "#ffffff", lineHeight: "1" }, String(percentage)),
-      el("span", { fontSize: "70px", fontWeight: "700", color: theme.accentLight, marginLeft: "4px" }, "%"),
+      el("span", { fontSize: "200px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(percentage)),
+      el("span", { fontSize: "90px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, "%"),
     ])
     scoreLabel = "SCORE"
   } else if (hasRank) {
@@ -176,10 +278,10 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     heroNode = el("div", {
       display: "flex", flexDirection: "column", alignItems: "center",
     }, [
-      el("div", { fontSize: "64px", marginBottom: "8px" }, medal),
+      el("div", { fontSize: "80px", marginBottom: "8px" }, medal),
       el("div", { display: "flex", alignItems: "baseline" }, [
-        el("span", { fontSize: "140px", fontWeight: "800", color: "#ffffff", lineHeight: "1" }, String(rank)),
-        el("span", { fontSize: "60px", fontWeight: "700", color: theme.accentLight, marginLeft: "4px" }, rankSuffix(rank)),
+        el("span", { fontSize: "170px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(rank)),
+        el("span", { fontSize: "70px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, rankSuffix(rank)),
       ]),
     ])
     scoreLabel = totalParticipants ? `RANK OF ${totalParticipants}` : "RANK"
@@ -187,15 +289,15 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     heroNode = el("div", {
       display: "flex", alignItems: "baseline", justifyContent: "center",
     }, [
-      el("span", { fontSize: "130px", fontWeight: "800", color: "#ffffff", lineHeight: "1" }, String(score)),
-      el("span", { fontSize: "50px", fontWeight: "700", color: theme.accentLight, marginLeft: "8px" }, `/ ${totalScore}`),
+      el("span", { fontSize: "160px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(score)),
+      el("span", { fontSize: "60px", fontWeight: "700", color: theme.accent, marginLeft: "8px" }, `/ ${totalScore}`),
     ])
     scoreLabel = "POINTS"
   } else {
     heroNode = el("div", {
       display: "flex", alignItems: "center", justifyContent: "center",
-      width: "100px", height: "100px", borderRadius: "50%",
-      backgroundColor: theme.accent, fontSize: "48px",
+      width: "120px", height: "120px", borderRadius: "50%",
+      backgroundColor: theme.accent, fontSize: "60px",
     }, "✓")
   }
 
@@ -213,9 +315,9 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   // ─── Build footer children ──
   const footerChildren: SatoriNode[] = [
     el("div", { display: "flex", flexDirection: "column" }, [
-      el("div", { fontSize: "12px", color: "rgba(255,255,255,0.4)", letterSpacing: "3px", marginBottom: "6px" }, "VERIFY AT"),
-      el("div", { fontSize: "16px", fontWeight: "700", color: "rgba(255,255,255,0.8)", fontFamily: "DejaVu Sans Mono", marginBottom: "16px" }, serial),
-      el("div", { fontSize: "14px", color: "rgba(255,255,255,0.4)" }, "Powered by Engagio"),
+      el("div", { fontSize: "14px", color: theme.textMuted, letterSpacing: "3px", marginBottom: "8px" }, "VERIFY AT"),
+      el("div", { fontSize: "20px", fontWeight: "700", color: theme.textSecondary, fontFamily: "DejaVu Sans Mono", marginBottom: "20px" }, serial),
+      el("div", { fontSize: "16px", color: theme.textMuted }, "Powered by Engagio"),
     ]),
   ]
 
@@ -223,92 +325,90 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     footerChildren.push(
       el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
         el("div", {
-          display: "flex", padding: "12px", borderRadius: "16px",
-          backgroundColor: "rgba(255,255,255,0.1)", border: `1px solid ${theme.accent}40`,
+          display: "flex", padding: "14px", borderRadius: "20px",
+          backgroundColor: theme.isDark ? "rgba(255,255,255,0.08)" : theme.surface,
+          border: `1px solid ${theme.badgeBorder}`,
         }, [
-          el("img", { width: "120px", height: "120px" }, undefined, { src: qrDataUrl }),
+          el("img", { width: "140px", height: "140px" }, undefined, { src: qrDataUrl }),
         ]),
-        el("div", { fontSize: "11px", fontWeight: "600", color: "rgba(255,255,255,0.5)", letterSpacing: "2px", marginTop: "8px" }, "SCAN TO VERIFY"),
+        el("div", { fontSize: "13px", fontWeight: "600", color: theme.textMuted, letterSpacing: "2px", marginTop: "10px" }, "SCAN TO VERIFY"),
       ]),
     )
   }
 
-  // ─── Build content children ──
+  // ─── Build content children (vertically distributed) ──
   const contentChildren: SatoriNode[] = []
 
-  // Badge
+  // 1. Badge (top)
   contentChildren.push(
-    el("div", { display: "flex", justifyContent: "center", marginBottom: "40px" }, [
+    el("div", { display: "flex", justifyContent: "center", marginTop: "20px" }, [
       el("div", {
         display: "flex", alignItems: "center", justifyContent: "center",
-        paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px", paddingBottom: "10px",
-        borderRadius: "30px", backgroundColor: theme.badgeBg, border: `1px solid ${theme.accent}60`,
+        paddingLeft: "24px", paddingRight: "24px", paddingTop: "12px", paddingBottom: "12px",
+        borderRadius: "40px", backgroundColor: theme.badgeBg, border: `1px solid ${theme.badgeBorder}`,
       }, [
-        el("span", { fontSize: "16px", fontWeight: "700", color: theme.badgeText, letterSpacing: "4px" }, badgeLabel),
+        el("span", { fontSize: "18px", fontWeight: "700", color: theme.badgeText, letterSpacing: "5px" }, badgeLabel),
       ]),
     ]),
   )
 
-  // Hero metric
+  // 2. Hero metric (BIG, centered) — takes up significant vertical space
   contentChildren.push(
-    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "16px" }, [heroNode]),
+    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginTop: "50px" }, [heroNode]),
   )
 
-  // Score label
+  // 3. Score label
   if (scoreLabel) {
     contentChildren.push(
       el("div", {
-        display: "flex", justifyContent: "center", marginBottom: "40px",
+        display: "flex", justifyContent: "center", marginTop: "16px",
       }, [
-        el("span", { fontSize: "24px", fontWeight: "700", color: theme.accent, letterSpacing: "8px" }, scoreLabel),
+        el("span", { fontSize: "28px", fontWeight: "700", color: theme.accent, letterSpacing: "10px" }, scoreLabel),
       ]),
     )
   }
 
-  // Participant name
+  // 4. Participant name (BIG) — takes up vertical space
   contentChildren.push(
-    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "32px" }, [
-      el("div", { fontSize: "18px", color: "rgba(255,255,255,0.5)", marginBottom: "8px", letterSpacing: "2px" }, isCertificate ? "THIS CERTIFIES THAT" : "AWARDED TO"),
-      el("div", { fontSize: "48px", fontWeight: "800", color: "#ffffff", textAlign: "center", maxWidth: "900px", lineHeight: "1.1" }, participantName),
+    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginTop: "50px" }, [
+      el("div", { fontSize: "20px", color: theme.textMuted, marginBottom: "12px", letterSpacing: "3px" }, isCertificate ? "THIS CERTIFIES THAT" : "AWARDED TO"),
+      el("div", { fontSize: "64px", fontWeight: "800", color: theme.text, textAlign: "center", maxWidth: "900px", lineHeight: "1.05" }, participantName),
     ]),
   )
 
-  // Event name (BIG, beautiful)
+  // 5. Event name (BIG, beautiful) — with decorative lines above and below
   contentChildren.push(
-    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "16px" }, [
-      el("div", { display: "flex", width: "80px", height: "3px", backgroundColor: theme.accent, borderRadius: "2px", marginBottom: "20px" }),
-      el("div", { fontSize: "42px", fontWeight: "800", color: "#ffffff", textAlign: "center", maxWidth: "900px", lineHeight: "1.15" }, truncate(eventName, 50)),
+    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginTop: "40px" }, [
+      el("div", { display: "flex", width: "100px", height: "4px", backgroundColor: theme.accent, borderRadius: "2px", marginBottom: "24px" }),
+      el("div", { fontSize: "52px", fontWeight: "800", color: theme.text, textAlign: "center", maxWidth: "950px", lineHeight: "1.1" }, truncate(eventName, 45)),
     ]),
   )
 
-  // Achievement title (quiz/test name)
+  // 6. Achievement title (quiz/test name)
   if (title && title !== eventName) {
     contentChildren.push(
-      el("div", { display: "flex", justifyContent: "center", marginBottom: "24px" }, [
-        el("div", { fontSize: "24px", color: "rgba(255,255,255,0.7)", textAlign: "center", maxWidth: "900px" }, truncate(title, 60)),
+      el("div", { display: "flex", justifyContent: "center", marginTop: "16px" }, [
+        el("div", { fontSize: "28px", color: theme.textSecondary, textAlign: "center", maxWidth: "950px" }, truncate(title, 60)),
       ]),
     )
   }
 
-  // Date
+  // 7. Date + Org (with divider)
   contentChildren.push(
-    el("div", { display: "flex", justifyContent: "center", marginBottom: "8px" }, [
-      el("div", { fontSize: "20px", color: "rgba(255,255,255,0.5)" }, dateStr),
+    el("div", { display: "flex", flexDirection: "column", alignItems: "center", marginTop: "30px" }, [
+      el("div", { display: "flex", width: "60px", height: "2px", backgroundColor: theme.divider, borderRadius: "1px", marginBottom: "20px" }),
+      el("div", { fontSize: "24px", color: theme.textMuted, marginBottom: "8px" }, dateStr),
+      ...(p.achievementData?.orgName ? [
+        el("div", { fontSize: "26px", fontWeight: "600", color: theme.textSecondary }, truncate(p.achievementData.orgName, 50)),
+      ] : []),
     ]),
   )
 
-  // Org name
-  if (p.achievementData?.orgName) {
-    contentChildren.push(
-      el("div", { display: "flex", justifyContent: "center" }, [
-        el("div", { fontSize: "22px", fontWeight: "600", color: "rgba(255,255,255,0.8)" }, truncate(p.achievementData.orgName, 50)),
-      ]),
-    )
-  }
-
-  // Footer
+  // 8. Footer (bottom, with spacer pushing it down)
   contentChildren.push(
-    el("div", { display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: "40px" }, footerChildren),
+    el("div", { display: "flex", flexDirection: "column", flex: "1", justifyContent: "flex-end" }, [
+      el("div", { display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingTop: "40px" }, footerChildren),
+    ]),
   )
 
   // ─── Build the full card ──
@@ -317,37 +417,39 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     flexDirection: "column",
     width: `${W}px`,
     height: `${H}px`,
-    background: `linear-gradient(135deg, ${theme.bgFrom} 0%, ${theme.bgTo} 100%)`,
+    background: theme.bg,
     fontFamily: "DejaVu Sans",
   }, [
-    // Decorative: large glowing circle top-right
+    // Decorative: glowing circle top-right
     el("div", {
       display: "flex",
       position: "absolute",
-      top: "-200px",
-      right: "-200px",
+      top: "-250px",
+      right: "-250px",
+      width: "700px",
+      height: "700px",
+      borderRadius: "50%",
+      background: theme.accentGlow,
+    }),
+    // Decorative: glowing circle bottom-left
+    el("div", {
+      display: "flex",
+      position: "absolute",
+      bottom: "-200px",
+      left: "-200px",
       width: "600px",
       height: "600px",
       borderRadius: "50%",
       background: theme.accentGlow,
     }),
-    // Decorative: large glowing circle bottom-left
-    el("div", {
-      display: "flex",
-      position: "absolute",
-      bottom: "-150px",
-      left: "-150px",
-      width: "500px",
-      height: "500px",
-      borderRadius: "50%",
-      background: theme.accentGlow,
-    }),
+    // Confetti / paper blast
+    ...buildConfetti(theme),
     // Content
     el("div", {
       display: "flex",
       flexDirection: "column",
       flex: "1",
-      padding: "60px",
+      padding: "70px",
     }, contentChildren),
   ])
 
