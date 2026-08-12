@@ -31,10 +31,10 @@ export interface ShareAchievementCardProps {
 }
 
 /**
- * Clean white certificate-style shareable achievement card — in-app preview.
+ * Eye-catching social media shareable achievement card — in-app preview.
  *
- * Design: White background, emerald accents, clean typography.
- * Matches the generated PNG card style.
+ * Design: Gradient background, BIG typography, decorative glowing circles.
+ * Optimized for social media sharing (LinkedIn, WhatsApp, Twitter).
  */
 export function ShareAchievementCard({
   achievement,
@@ -56,88 +56,70 @@ export function ShareAchievementCard({
   const isCertificate = achievement.type === "CERTIFICATE_EARNED"
 
   const serial = buildSerial(achievement.publicToken || "", achievement.achievementData?.orgName)
-
   const dateStr = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   })
 
+  const eventName = achievement.subtitle || achievement.achievementData?.eventTitle || achievement.title
+
   return (
     <div
-      className={cn(
-        "relative w-full overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl ring-1 ring-slate-200",
-        className,
-      )}
-      style={{ aspectRatio: "4 / 5" }}
+      className={cn("relative w-full overflow-hidden rounded-2xl text-white shadow-2xl", className)}
+      style={{
+        aspectRatio: "4 / 5",
+        background: `linear-gradient(135deg, ${theme.bgFrom} 0%, ${theme.bgTo} 100%)`,
+      }}
     >
-      {/* Top accent bar */}
+      {/* Decorative glowing circles */}
       <div
-        className="absolute inset-x-0 top-0 h-1.5"
-        style={{ background: theme.accent }}
+        aria-hidden
+        className="pointer-events-none absolute -right-32 -top-32 size-64 rounded-full opacity-40 blur-3xl"
+        style={{ background: theme.accentGlow }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-24 size-56 rounded-full opacity-30 blur-3xl"
+        style={{ background: theme.accentGlow }}
+      />
+      {/* Dot pattern overlay */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-20"
+        style={{
+          backgroundImage: `radial-gradient(circle, ${theme.accent}40 1px, transparent 1px)`,
+          backgroundSize: "20px 20px",
+        }}
       />
 
       {/* Content */}
-      <div className="relative flex h-full flex-col p-6 sm:p-8">
-        {/* ═══ HEADER ═══ */}
-        <div className="flex items-center justify-between gap-3 pb-4">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <div
-              className="grid size-9 place-items-center rounded-xl shadow-sm sm:size-10"
-              style={{ background: theme.accent }}
-            >
-              <svg viewBox="0 0 24 24" className="size-5 sm:size-6 text-white" fill="currentColor">
-                <path d="M13 2L3 14h7l-1 8 10-12h-7z" />
-              </svg>
-            </div>
-            <span className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
-              Engagio
-            </span>
-          </div>
-          {/* Verified badge */}
+      <div className="relative z-10 flex h-full flex-col p-6 sm:p-8">
+        {/* ═══ TYPE LABEL BADGE ═══ */}
+        <div className="mb-6 flex justify-center">
           <div
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold sm:text-sm"
+            className="inline-flex items-center rounded-full px-5 py-2 text-xs font-bold tracking-wider sm:text-sm"
             style={{
-              background: theme.accentBg,
-              border: `1.5px solid ${theme.accent}`,
-              color: theme.accentDark,
+              background: theme.badgeBg,
+              border: `1px solid ${theme.accent}60`,
+              color: theme.badgeText,
             }}
           >
-            <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Verified
+            {isCertificate ? "CERTIFICATE OF COMPLETION" : meta.label}
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-slate-200" />
-
-        {/* ═══ TYPE LABEL ═══ */}
-        <div className="flex flex-1 flex-col items-center justify-center py-4 text-center">
-          <p
-            className="text-xs font-bold uppercase tracking-[0.3em] sm:text-sm"
-            style={{ color: theme.accent }}
-          >
-            {meta.label}
-          </p>
-          <div
-            className="mt-2 h-0.5 w-10 rounded-full"
-            style={{ background: theme.accent }}
-          />
-
-          {/* ═══ HERO ═══ */}
+        {/* ═══ HERO METRIC ═══ */}
+        <div className="flex flex-col items-center justify-center">
           {isCertificate ? (
-            <>
-              <p className="mt-4 text-sm font-normal text-slate-400">This certifies that</p>
-              <h2 className="mt-2 text-2xl font-extrabold leading-tight text-slate-900 sm:text-3xl">
-                {achievement.participantName}
-              </h2>
-              <p className="mt-2 text-sm font-normal italic text-slate-500">
-                has successfully completed
-              </p>
-            </>
+            <div
+              className="grid size-16 place-items-center rounded-full shadow-lg sm:size-20"
+              style={{ background: theme.accent }}
+            >
+              <svg viewBox="0 0 24 24" className="size-8 text-white sm:size-10" fill="currentColor">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
+              </svg>
+            </div>
           ) : hasPercent ? (
             <MetricPercent value={achievement.percentage as number} theme={theme} />
           ) : hasRank ? (
@@ -155,69 +137,80 @@ export function ShareAchievementCard({
           ) : (
             <MetricDefault theme={theme} />
           )}
-
-          {/* ═══ PARTICIPANT NAME (for non-certificate types) ═══ */}
-          {!isCertificate && (
-            <>
-              <p className="mt-3 text-xs font-normal text-slate-400">Awarded to</p>
-              <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">
-                {achievement.participantName}
-              </p>
-            </>
-          )}
-
-          {/* ═══ TITLE ═══ */}
-          <h3 className="mt-4 line-clamp-2 text-base font-bold leading-tight text-slate-900 sm:text-lg">
-            {achievement.title}
-          </h3>
-          {achievement.subtitle && (
-            <p className="mt-1 line-clamp-2 text-sm font-normal text-slate-500">
-              {achievement.subtitle}
-            </p>
-          )}
-
-          {/* ═══ DATE + ORG ═══ */}
-          <p className="mt-3 text-xs font-normal text-slate-500">
-            Issued on {dateStr}
-          </p>
-          {achievement.achievementData?.orgName && (
-            <p className="mt-1 text-sm font-semibold text-slate-700">
-              {achievement.achievementData.orgName}
-            </p>
-          )}
         </div>
 
-        {/* ═══ FOOTER ═══ */}
-        <div className="border-t border-dashed border-slate-200 pt-4">
-          <div className="flex items-end justify-between gap-3">
-            {/* Serial number */}
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {theme.label} No.
-              </p>
-              <p className="mt-0.5 font-mono text-sm font-bold text-slate-900 sm:text-base">
-                {serial}
-              </p>
-              <p className="mt-1 truncate font-mono text-[10px] text-slate-400">
-                engagio.app/s/{serial.split("-").pop()}
-              </p>
-            </div>
-            {/* QR placeholder */}
-            <div className="flex shrink-0 flex-col items-center gap-1">
-              <div className="grid size-14 place-items-center rounded-lg bg-slate-50 ring-1 ring-slate-200 sm:size-16">
-                <svg viewBox="0 0 24 24" className="size-7 text-slate-400 sm:size-8" fill="currentColor">
-                  <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h8v8h-8v-8zm2 2v4h4v-4h-4z" />
-                </svg>
-              </div>
-              <p className="text-[9px] font-semibold tracking-wider text-slate-400">
-                SCAN TO VERIFY
-              </p>
-            </div>
-          </div>
-          {/* Powered by */}
-          <p className="mt-3 text-center text-[10px] font-medium text-slate-400">
-            Powered by Engagio
+        {/* ═══ SCORE LABEL ═══ */}
+        {!isCertificate && (hasPercent || hasRank || hasScore) && (
+          <p
+            className="mt-3 text-center text-sm font-bold tracking-[0.3em] sm:text-base"
+            style={{ color: theme.accent }}
+          >
+            {hasRank ? (achievement.totalParticipants ? `RANK OF ${achievement.totalParticipants}` : "RANK") : "SCORE"}
           </p>
+        )}
+
+        {/* ═══ PARTICIPANT NAME ═══ */}
+        <div className="mt-6 flex flex-col items-center">
+          <p className="mb-2 text-xs tracking-wider text-white/50 sm:text-sm">
+            {isCertificate ? "THIS CERTIFIES THAT" : "AWARDED TO"}
+          </p>
+          <p className="text-center text-2xl font-extrabold leading-tight sm:text-3xl">
+            {achievement.participantName}
+          </p>
+        </div>
+
+        {/* ═══ EVENT NAME (BIG, beautiful) ═══ */}
+        <div className="mt-6 flex flex-col items-center">
+          {/* Decorative line */}
+          <div
+            className="mb-4 h-0.5 w-12 rounded-full sm:w-16"
+            style={{ background: theme.accent }}
+          />
+          <h3 className="text-center text-xl font-extrabold leading-tight sm:text-2xl">
+            {eventName}
+          </h3>
+        </div>
+
+        {/* ═══ ACHIEVEMENT TITLE (quiz/test name) ═══ */}
+        {achievement.title && achievement.title !== eventName && (
+          <p className="mt-2 text-center text-sm font-normal text-white/70 sm:text-base">
+            {achievement.title}
+          </p>
+        )}
+
+        {/* ═══ DATE + ORG ═══ */}
+        <p className="mt-3 text-center text-sm text-white/50">{dateStr}</p>
+        {achievement.achievementData?.orgName && (
+          <p className="mt-1 text-center text-base font-semibold text-white/80">
+            {achievement.achievementData.orgName}
+          </p>
+        )}
+
+        {/* ═══ FOOTER ═══ */}
+        <div className="mt-auto flex items-end justify-between gap-3 pt-6">
+          {/* Serial + Powered by */}
+          <div className="flex flex-col">
+            <p className="text-[9px] tracking-wider text-white/40 sm:text-[10px]">VERIFY AT</p>
+            <p className="mt-1 font-mono text-sm font-bold text-white/80 sm:text-base">{serial}</p>
+            <p className="mt-3 text-xs text-white/40 sm:text-sm">Powered by Engagio</p>
+          </div>
+          {/* QR placeholder */}
+          <div className="flex shrink-0 flex-col items-center gap-1">
+            <div
+              className="grid size-14 place-items-center rounded-xl p-2 sm:size-16"
+              style={{
+                background: "rgba(255,255,255,0.1)",
+                border: `1px solid ${theme.accent}40`,
+              }}
+            >
+              <svg viewBox="0 0 24 24" className="size-7 text-white/70 sm:size-8" fill="currentColor">
+                <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h8v8h-8v-8zm2 2v4h4v-4h-4z" />
+              </svg>
+            </div>
+            <p className="text-[8px] font-semibold tracking-wider text-white/50 sm:text-[9px]">
+              SCAN TO VERIFY
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -228,18 +221,13 @@ export function ShareAchievementCard({
 
 function MetricPercent({ value, theme }: { value: number; theme: ThemePalette }) {
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex items-baseline gap-0.5">
-        <span className="text-5xl font-black tabular-nums leading-none text-slate-900 sm:text-6xl">
-          {value}
-        </span>
-        <span className="text-3xl font-bold leading-none sm:text-4xl" style={{ color: theme.accent }}>
-          %
-        </span>
-      </div>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] sm:text-sm" style={{ color: theme.accent }}>
-        Score
-      </p>
+    <div className="flex items-baseline gap-0.5">
+      <span className="text-7xl font-black tabular-nums leading-none sm:text-8xl">
+        {value}
+      </span>
+      <span className="text-4xl font-bold leading-none sm:text-5xl" style={{ color: theme.accentLight }}>
+        %
+      </span>
     </div>
   )
 }
@@ -254,19 +242,18 @@ function MetricRank({
   theme: ThemePalette
 }) {
   const suffix = ordinalSuffix(value)
+  const medal = value === 1 ? "🥇" : value === 2 ? "🥈" : value === 3 ? "🥉" : "🏆"
   return (
     <div className="flex flex-col items-center">
+      <div className="mb-1 text-4xl sm:text-5xl">{medal}</div>
       <div className="flex items-baseline gap-1">
-        <span className="text-5xl font-black tabular-nums leading-none text-slate-900 sm:text-6xl">
+        <span className="text-6xl font-black tabular-nums leading-none sm:text-7xl">
           {value}
         </span>
-        <span className="text-2xl font-bold leading-none sm:text-3xl" style={{ color: theme.accent }}>
+        <span className="text-3xl font-bold leading-none sm:text-4xl" style={{ color: theme.accentLight }}>
           {suffix}
         </span>
       </div>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] sm:text-sm" style={{ color: theme.accent }}>
-        {total ? `Rank of ${total}` : "Rank"}
-      </p>
     </div>
   )
 }
@@ -281,36 +268,26 @@ function MetricScore({
   theme: ThemePalette
 }) {
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex items-baseline gap-2">
-        <span className="text-5xl font-black tabular-nums leading-none text-slate-900 sm:text-6xl">
-          {score}
-        </span>
-        <span className="text-2xl font-bold leading-none sm:text-3xl" style={{ color: theme.accent }}>
-          / {total}
-        </span>
-      </div>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] sm:text-sm" style={{ color: theme.accent }}>
-        Points
-      </p>
+    <div className="flex items-baseline gap-2">
+      <span className="text-6xl font-black tabular-nums leading-none sm:text-7xl">
+        {score}
+      </span>
+      <span className="text-3xl font-bold leading-none sm:text-4xl" style={{ color: theme.accentLight }}>
+        / {total}
+      </span>
     </div>
   )
 }
 
 function MetricDefault({ theme }: { theme: ThemePalette }) {
   return (
-    <div className="flex flex-col items-center">
-      <div
-        className="grid size-14 place-items-center rounded-full shadow-lg sm:size-16"
-        style={{ background: theme.accent }}
-      >
-        <svg viewBox="0 0 24 24" className="size-7 text-white sm:size-8" fill="currentColor">
-          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
-        </svg>
-      </div>
-      <p className="mt-2 text-xs font-bold uppercase tracking-[0.2em] sm:text-sm" style={{ color: theme.accent }}>
-        Completed
-      </p>
+    <div
+      className="grid size-16 place-items-center rounded-full shadow-lg sm:size-20"
+      style={{ background: theme.accent }}
+    >
+      <svg viewBox="0 0 24 24" className="size-8 text-white sm:size-10" fill="currentColor">
+        <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z" />
+      </svg>
     </div>
   )
 }
@@ -318,48 +295,60 @@ function MetricDefault({ theme }: { theme: ThemePalette }) {
 // ─── Theme palettes ────────────────────────────────────────────────────────
 
 interface ThemePalette {
+  bgFrom: string
+  bgTo: string
   accent: string
-  accentDark: string
   accentLight: string
-  accentBg: string
-  label: string
+  accentGlow: string
+  badgeBg: string
+  badgeText: string
 }
 
 const THEMES: Record<AchievementTemplateId, ThemePalette> = {
   minimal: {
+    bgFrom: "#0f172a",
+    bgTo: "#1e293b",
     accent: "#14b8a6",
-    accentDark: "#0f766e",
-    accentLight: "#14b8a6",
-    accentBg: "#f0fdfa",
-    label: "ACHIEVEMENT",
+    accentLight: "#2dd4bf",
+    accentGlow: "rgba(20,184,166,0.4)",
+    badgeBg: "rgba(20,184,166,0.2)",
+    badgeText: "#5eead4",
   },
   modern: {
+    bgFrom: "#064e3b",
+    bgTo: "#0f172a",
     accent: "#10b981",
-    accentDark: "#059669",
     accentLight: "#34d399",
-    accentBg: "#ecfdf5",
-    label: "ACHIEVEMENT",
+    accentGlow: "rgba(16,185,129,0.4)",
+    badgeBg: "rgba(16,185,129,0.2)",
+    badgeText: "#6ee7b7",
   },
   professional: {
+    bgFrom: "#78350f",
+    bgTo: "#0f172a",
     accent: "#f59e0b",
-    accentDark: "#d97706",
     accentLight: "#fbbf24",
-    accentBg: "#fffbeb",
-    label: "CERTIFICATE",
+    accentGlow: "rgba(245,158,11,0.4)",
+    badgeBg: "rgba(245,158,11,0.2)",
+    badgeText: "#fcd34d",
   },
   celebration: {
-    accent: "#f59e0b",
-    accentDark: "#d97706",
-    accentLight: "#fbbf24",
-    accentBg: "#fffbeb",
-    label: "ACHIEVEMENT",
+    bgFrom: "#7c2d12",
+    bgTo: "#0f172a",
+    accent: "#fbbf24",
+    accentLight: "#fde68a",
+    accentGlow: "rgba(251,191,36,0.5)",
+    badgeBg: "rgba(251,191,36,0.2)",
+    badgeText: "#fef3c7",
   },
   conference: {
+    bgFrom: "#134e4a",
+    bgTo: "#0f172a",
     accent: "#14b8a6",
-    accentDark: "#0f766e",
-    accentLight: "#14b8a6",
-    accentBg: "#f0fdfa",
-    label: "ATTENDEE PASS",
+    accentLight: "#2dd4bf",
+    accentGlow: "rgba(20,184,166,0.4)",
+    badgeBg: "rgba(20,184,166,0.2)",
+    badgeText: "#5eead4",
   },
 }
 
