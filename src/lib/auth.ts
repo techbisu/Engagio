@@ -70,17 +70,16 @@ export async function getServerSession(options: NextAuthOptions, incomingReq?: N
 }
 
 // ─── Super Admin ────────────────────────────────────────────────────────────
-// Super Admin is NOT auto-detected from email. It's a separate login at
-// /superadmin/login. The SUPERADMIN_EMAIL env var is used ONLY to identify
-// which email CAN access the super admin login page — it does NOT grant
-// super admin privileges automatically.
-//
-// For production: create a super admin user in the DB with role=ADMIN,
-// then sign in via /superadmin/login with that email + password.
+// Super Admin is determined by User.platformRole = "SUPERADMIN" in the DB.
+// The SUPERADMIN_EMAIL env var is used ONLY during initial seed/migration
+// to identify which account should get platformRole=SUPERADMIN.
+// After migration, the DB field is the source of truth — not the env var.
 const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app")
   .toLowerCase()
   .trim()
 
+// Check by email — used ONLY for TOTP enforcement and initial migration.
+// For authorization, always check User.platformRole from the DB.
 export const isEmailSuperAdmin = (email?: string | null): boolean => {
   if (!email) return false
   return email.toLowerCase().trim() === SUPERADMIN_EMAIL
@@ -233,14 +232,17 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = (user as any).id
         token.role = (user as any).role
-        token.isSuperAdmin = isEmailSuperAdmin((user as any).email || token.email)
+        token.platformRole = (user as any).platformRole || "USER"
+        // isSuperAdmin now comes from the DB field, not env-var check
+        token.isSuperAdmin = (user as any).platformRole === "SUPERADMIN"
       }
       if (!token.role && token.email) {
         const dbUser = await db.user.findUnique({ where: { email: token.email } })
         if (dbUser) {
           token.id = dbUser.id
           token.role = dbUser.role
-          token.isSuperAdmin = isEmailSuperAdmin(dbUser.email)
+          token.platformRole = dbUser.platformRole || "USER"
+          token.isSuperAdmin = dbUser.platformRole === "SUPERADMIN"
         }
       }
       return token
@@ -249,6 +251,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         ;(session.user as any).id = token.id
         ;(session.user as any).role = token.role
+        ;(session.user as any).platformRole = token.platformRole || "USER"
         ;(session.user as any).isSuperAdmin = token.isSuperAdmin || false
       }
       return session
@@ -268,11 +271,13 @@ declare module "next-auth" {
       email?: string | null
       image?: string | null
       role: string
+      platformRole?: string
       isSuperAdmin?: boolean
     }
   }
   interface User {
     role?: string
+    platformRole?: string
     isSuperAdmin?: boolean
   }
 }
@@ -281,6 +286,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string
     role?: string
+    platformRole?: string
     isSuperAdmin?: boolean
   }
 }

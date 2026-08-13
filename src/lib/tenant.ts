@@ -102,7 +102,8 @@ export async function getTenantContext(
   const session = await getServerSession(authOptions)
   if (!session?.user?.id || !session.user.email) return null
 
-  const isPlatformAdmin = (session.user as any).role === "ADMIN"
+  const isPlatformAdmin = (session.user as any).platformRole === "SUPERADMIN" ||
+    (session.user as any).isSuperAdmin === true
 
   // Determine the target org slug from header or query
   let targetSlug: string | null = null

@@ -18,7 +18,10 @@ model User {
   email         String   @unique
   name          String?
   image         String?
-  role          String   @default("STUDENT") // ADMIN | STUDENT
+  role          String   @default("STUDENT") // ADMIN | STUDENT (legacy org-level)
+  // Platform-level role: SUPERADMIN (platform admin) | USER (default)
+  // Replaces the SUPERADMIN_EMAIL env-var check with a DB field.
+  platformRole  String   @default("USER") // SUPERADMIN | USER
   // Password hash (bcrypt) — null for Google-only users + participants
   passwordHash  String?
   // TOTP (Google Authenticator) secret + enabled flag — for super admin 2FA

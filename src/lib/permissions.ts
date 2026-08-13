@@ -12,6 +12,46 @@
 
 import { hasRole, type OrgRole, type TenantContext } from "./tenant"
 
+// ─── Role tier helpers ─────────────────────────────────────────────────────
+// Groups the 7 org roles into 3 tiers for simplified permission checks.
+// Use roleTier(role) instead of hardcoding role name lists in every route.
+
+export type RoleTier = "admin" | "manager" | "participant"
+
+export function roleTier(role: OrgRole): RoleTier {
+  switch (role) {
+    case "OWNER":
+    case "ADMIN":
+      return "admin"
+    case "EVENT_MANAGER":
+    case "MODERATOR":
+    case "EVALUATOR":
+    case "CHECKIN_STAFF":
+      return "manager"
+    case "PARTICIPANT":
+    default:
+      return "participant"
+  }
+}
+
+/**
+ * Check if the context's org role is in the "admin tier" (OWNER or ADMIN).
+ */
+export function isOrgAdmin(ctx: TenantContext): boolean {
+  if (ctx.isPlatformAdmin) return true
+  return roleTier(ctx.orgRole) === "admin"
+}
+
+/**
+ * Check if the context's org role is in the "manager tier" or above
+ * (EVENT_MANAGER, MODERATOR, EVALUATOR, CHECKIN_STAFF, ADMIN, OWNER).
+ */
+export function isOrgManager(ctx: TenantContext): boolean {
+  if (ctx.isPlatformAdmin) return true
+  const tier = roleTier(ctx.orgRole)
+  return tier === "admin" || tier === "manager"
+}
+
 // ─── Permission definitions ────────────────────────────────────────────────
 
 export type Permission =
