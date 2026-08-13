@@ -51,7 +51,7 @@ interface ActivityResultsProps {
 function buildShareUrl(slug?: string | null): string {
   if (typeof window === "undefined") return ""
   if (!slug) return ""
-  return `${window.location.origin}/?activity=${slug}`
+  return `${window.location.origin}/dashboard?sub=activity&activity=${slug}`
 }
 
 function buildExportUrl(id: string): string {

@@ -1796,7 +1796,7 @@ function ParticipantDetailSheet(props: ParticipantDetailSheetProps) {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        window.open(`/?verify=${cert.verificationToken}`, "_blank")
+                        window.open(`/verify/${cert.verificationToken}`, "_blank")
                       }
                     >
                       <ExternalLink className="size-3.5" />
@@ -2059,8 +2059,8 @@ function CertificatePreview({ cert }: { cert: CertificateDto }) {
           issuedAt={cert.issuedAt}
           verificationUrl={
             typeof window !== "undefined"
-              ? `${window.location.origin}/?verify=${cert.verificationToken}`
-              : `/?verify=${cert.verificationToken}`
+              ? `${window.location.origin}/verify/${cert.verificationToken}`
+              : `/verify/${cert.verificationToken}`
           }
           onRendered={handleRendered}
           className="h-auto w-full"

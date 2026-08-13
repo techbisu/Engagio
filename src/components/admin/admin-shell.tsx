@@ -388,7 +388,7 @@ export function AdminShell({
                 </DropdownMenuItem>
               )}
               {/* Platform Admin link removed — super admin has a separate
-                  login at /?view=superadmin. Org admins cannot access it. */}
+                  login at /superadmin/login. Org admins cannot access it. */}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-rose-600 focus:text-rose-700"

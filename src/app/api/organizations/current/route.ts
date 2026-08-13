@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
  * GET /api/organizations/current
  *
  * Returns the current organization context — resolved from the `x-org-slug`
- * header (or `?org=slug` query) falling back to the user's first membership.
+ * header (or `?org=slug` query, kept for backward compat with non-browser
+ * API clients) falling back to the user's first membership.
  * If the user has no memberships, the Default Org is returned with
  * role=PARTICIPANT (read-only).
  *

@@ -423,11 +423,11 @@ export function EventsManager({
                   <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
                     <ExternalLink className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     <code className="flex-1 truncate text-xs text-emerald-800 dark:text-emerald-300">
-                      {typeof window !== "undefined" ? window.location.origin : ""}/?event={ev.slug}
+                      {typeof window !== "undefined" ? window.location.origin : ""}/event/{ev.slug}
                     </code>
                     <button
                       onClick={async () => {
-                        const url = `${window.location.origin}/?event=${ev.slug}`
+                        const url = `${window.location.origin}/event/${ev.slug}`
                         try {
                           await navigator.clipboard.writeText(url)
                           toast.success("Landing page link copied!", {
@@ -442,7 +442,7 @@ export function EventsManager({
                       <Copy className="size-3" /> Copy
                     </button>
                     <button
-                      onClick={() => window.open(`/?event=${ev.slug}`, "_blank")}
+                      onClick={() => window.open(`/event/${ev.slug}`, "_blank")}
                       className="flex shrink-0 items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-700"
                     >
                       <ExternalLink className="size-3" /> Open
@@ -484,7 +484,7 @@ export function EventsManager({
                       <>
                         <DropdownMenuItem
                           onClick={async () => {
-                            const url = `${window.location.origin}/?event=${ev.slug}`
+                            const url = `${window.location.origin}/event/${ev.slug}`
                             try {
                               await navigator.clipboard.writeText(url)
                               toast.success("Landing page link copied!", {
@@ -499,7 +499,7 @@ export function EventsManager({
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
-                            window.open(`/?event=${ev.slug}`, "_blank")
+                            window.open(`/event/${ev.slug}`, "_blank")
                           }}
                         >
                           <ExternalLink className="size-4" /> Open Landing Page

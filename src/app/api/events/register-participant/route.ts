@@ -6,7 +6,7 @@ import { db } from "@/lib/db"
 /**
  * POST /api/events/register-participant
  *
- * Called when a participant signs in from an event page (?quiz=SLUG).
+ * Called when a participant signs in from a quiz deep-link (/quiz/SLUG).
  * Automatically adds them as a PARTICIPANT member in the event's organization
  * so the org admin can see them in their participant list.
  *

@@ -1,7 +1,41 @@
 "use client"
 
+/**
+ * Engagio client-side UI state.
+ *
+ * After the Phase 1 routing migration, the Zustand store is for genuinely
+ * client-only / cross-page state ONLY. View routing is handled by the
+ * Next.js App Router (file-based routes in src/app/).
+ *
+ * What lives here:
+ *   - `user`             : the signed-in user (mirrored from useCurrentUser
+ *                          so legacy components like leaderboard.tsx can
+ *                          read it without prop-drilling)
+ *   - `currentOrgSlug`   : the active organization slug (persisted to
+ *                          localStorage via the org API helper)
+ *   - `inviteToken`      : the invite token from a /invite/[token] deep-link
+ *                          (stashed here so /login can route the user back
+ *                          to the invite page after sign-in)
+ *   - `adminTab`         : the active admin sub-tab (preserved across
+ *                          navigations within /admin)
+ *   - `quizMeta`         : the in-progress quiz attempt metadata (set when
+ *                          the user clicks "Begin" on QuizStart, consumed
+ *                          by QuizRunner)
+ *   - `liveActivityId`   : the live-display projector activity id (set when
+ *                          the user opens /live/[activityId])
+ *   - `view`             : INTERNAL — used only by /superadmin/login to
+ *                          toggle between "platform" and "superadmin-security"
+ *                          sub-views. Do NOT use for top-level routing.
+ *
+ * What no longer lives here (moved to URL routes):
+ *   - quizSlug, eventSlug, orgSlug, activitySlug, verifyToken, shareToken
+ *   - studentSubView
+ *   - parseInitialRoute(), syncUrl() — removed; the App Router handles
+ *     URL→route resolution now.
+ */
+
 import { create } from "zustand"
-import type { SafeUser, ViewName, AdminTab, ActivityType } from "@/types"
+import type { SafeUser, ViewName, ActivityType } from "@/types"
 
 export type StudentSubView =
   | "dashboard"
@@ -26,7 +60,9 @@ interface AppState {
   user: SafeUser | null
   setUser: (user: SafeUser | null) => void
 
-  // Top-level view
+  // Internal sub-view state used by /superadmin/login to toggle between
+  // "platform" (PlatformAdminShell) and "superadmin-security" (TOTP setup).
+  // Kept in the store because the toggle is purely client-side UI state.
   view: ViewName
   setView: (view: ViewName) => void
 
@@ -34,52 +70,30 @@ interface AppState {
   currentOrgSlug: string | null
   setCurrentOrgSlug: (slug: string | null) => void
 
-  // Invitation token (deep-link ?invite=TOKEN)
+  // Invitation token (deep-link /invite/[token]). Stashed here so /login
+  // can route the user back to the invite page after sign-in.
   inviteToken: string | null
   setInviteToken: (token: string | null) => void
 
-  // Admin tab
-  adminTab: AdminTab
-  setAdminTab: (tab: AdminTab) => void
+  // Admin tab (preserved across navigations within /admin).
+  adminTab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results"
+  setAdminTab: (tab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results") => void
 
-  // Student quiz flow
-  studentSubView: StudentSubView
-  setStudentSubView: (v: StudentSubView) => void
-
-  quizSlug: string | null
-  setQuizSlug: (slug: string | null) => void
-
-  // Public event/org pages
-  eventSlug: string | null
-  setEventSlug: (slug: string | null) => void
-  orgSlug: string | null
-  setOrgSlug: (slug: string | null) => void
-
+  // In-progress quiz attempt metadata. Set when the user clicks "Begin" on
+  // QuizStart; consumed by QuizRunner (which takes over the screen).
   quizMeta: QuizMeta | null
   setQuizMeta: (m: QuizMeta | null) => void
 
-  // Last attempt id (for results view if needed)
+  // Last attempt id (kept for legacy code that may reference it).
   lastAttemptId: string | null
   setLastAttemptId: (id: string | null) => void
 
-  // Public verify-token (when visiting /?verify=TOKEN)
-  verifyToken: string | null
-  setVerifyToken: (t: string | null) => void
-
-  // Public share-token (when visiting /?share=TOKEN)
-  shareToken: string | null
-  setShareToken: (t: string | null) => void
-
-  // Activity deep-link (?activity=SLUG) — renders the participant activity join
-  activitySlug: string | null
-  setActivitySlug: (slug: string | null) => void
-
-  // Live-display deep-link (?live=ID) — renders the projector view full-screen
+  // Live-display projector activity (set when the user opens /live/[id]).
   liveActivityId: string | null
   liveActivityType: ActivityType | null
   setLiveActivity: (id: string | null, type?: ActivityType | null) => void
 
-  // Reset to landing
+  // Reset to defaults (used on sign-out).
   reset: () => void
 }
 
@@ -99,31 +113,11 @@ export const useAppStore = create<AppState>((set) => ({
   adminTab: "dashboard",
   setAdminTab: (adminTab) => set({ adminTab }),
 
-  studentSubView: "dashboard",
-  setStudentSubView: (studentSubView) => set({ studentSubView }),
-
-  quizSlug: null,
-  setQuizSlug: (quizSlug) => set({ quizSlug }),
-
-  eventSlug: null,
-  setEventSlug: (eventSlug) => set({ eventSlug }),
-  orgSlug: null,
-  setOrgSlug: (orgSlug) => set({ orgSlug }),
-
   quizMeta: null,
   setQuizMeta: (quizMeta) => set({ quizMeta }),
 
   lastAttemptId: null,
   setLastAttemptId: (lastAttemptId) => set({ lastAttemptId }),
-
-  verifyToken: null,
-  setVerifyToken: (verifyToken) => set({ verifyToken }),
-
-  shareToken: null,
-  setShareToken: (shareToken) => set({ shareToken }),
-
-  activitySlug: null,
-  setActivitySlug: (activitySlug) => set({ activitySlug }),
 
   liveActivityId: null,
   liveActivityType: null,
@@ -134,257 +128,11 @@ export const useAppStore = create<AppState>((set) => ({
     set({
       view: "landing",
       adminTab: "dashboard",
-      studentSubView: "dashboard",
-      quizSlug: null,
       quizMeta: null,
       lastAttemptId: null,
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
       liveActivityId: null,
       liveActivityType: null,
       currentOrgSlug: null,
       inviteToken: null,
     }),
 }))
-
-/**
- * Read URL params on first load to support deep links:
- *   ?quiz=SLUG        → start at student quiz-start view (will require login)
- *   ?view=admin      → admin panel (will require login)
- *   ?view=login      → login page
- *   ?view=student    → student dashboard (will require login)
- *   ?verify=TOKEN    → public verification page (no login needed)
- *   ?share=TOKEN     → public shareable-achievement page (no login needed)
- *   ?activity=SLUG   → participant activity join view (will require login)
- *   ?live=ID         → projector live-display view (no auth — public audience view)
- *   ?invite=TOKEN    → accept an org invitation (requires login)
- */
-export function parseInitialRoute(): {
-  view: ViewName
-  quizSlug: string | null
-  adminTab: AdminTab
-  verifyToken: string | null
-  shareToken: string | null
-  activitySlug: string | null
-  liveActivityId: string | null
-  inviteToken: string | null
-} {
-  if (typeof window === "undefined") {
-    return {
-      view: "landing",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  const params = new URLSearchParams(window.location.search)
-  const quiz = params.get("quiz")
-  const view = params.get("view") as ViewName | null
-  const tab = params.get("tab") as AdminTab | null
-  const verify = params.get("verify")
-  const share = params.get("share")
-  const activity = params.get("activity")
-  const live = params.get("live")
-  const invite = params.get("invite")
-  const orgParam = params.get("org")
-  const eventParam = params.get("event")
-
-  // Public verify deep-link takes priority — no auth required.
-  if (verify) {
-    return {
-      view: "verify",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: verify,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  // Public share deep-link — no auth required.
-  if (share) {
-    return {
-      view: "share",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: share,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  // Public live-display deep-link — no auth required (projector view).
-  if (live) {
-    return {
-      view: "live-display",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: live,
-      inviteToken: null,
-    }
-  }
-  // Org invitation deep-link — requires login (handled by page.tsx guard).
-  if (invite) {
-    return {
-      view: "accept-invitation",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: invite,
-    }
-  }
-  if (activity) {
-    return {
-      view: "activity",
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: activity,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  // Public org landing page (?org=SLUG)
-  if (orgParam) {
-    return {
-      view: "org-landing" as ViewName,
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  // Public event landing page (?event=SLUG)
-  if (eventParam) {
-    return {
-      view: "event-landing" as ViewName,
-      quizSlug: null,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  if (quiz) {
-    return {
-      view: "quiz",
-      quizSlug: quiz,
-      adminTab: "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  if (
-    view === "admin" ||
-    view === "login" ||
-    view === "student" ||
-    view === "org-onboarding" ||
-    view === "org-register" ||
-    view === "no-org" ||
-    view === "org-dashboard" ||
-    view === "org-settings" ||
-    view === "pricing" ||
-    view === "about" ||
-    view === "privacy" ||
-    view === "terms" ||
-    view === "contact" ||
-    view === "platform" || view === "superadmin" || view === "superadmin-security"
-  ) {
-    return {
-      view,
-      quizSlug: null,
-      adminTab: tab || "dashboard",
-      verifyToken: null,
-      shareToken: null,
-      activitySlug: null,
-      liveActivityId: null,
-      inviteToken: null,
-    }
-  }
-  return {
-    view: "landing",
-    quizSlug: null,
-    adminTab: "dashboard",
-    verifyToken: null,
-    shareToken: null,
-    activitySlug: null,
-    liveActivityId: null,
-    inviteToken: null,
-  }
-}
-
-/** Update URL without scrolling, so deep links stay shareable. */
-export function syncUrl(
-  view: ViewName,
-  opts?: {
-    quizSlug?: string | null
-    verifyToken?: string | null
-    shareToken?: string | null
-    activitySlug?: string | null
-    liveActivityId?: string | null
-    inviteToken?: string | null
-  },
-) {
-  if (typeof window === "undefined") return
-  const url = new URL(window.location.href)
-  url.searchParams.delete("quiz")
-  url.searchParams.delete("view")
-  url.searchParams.delete("verify")
-  url.searchParams.delete("share")
-  url.searchParams.delete("activity")
-  url.searchParams.delete("live")
-  url.searchParams.delete("invite")
-  if (view === "verify" && opts?.verifyToken) {
-    url.searchParams.set("verify", opts.verifyToken)
-  } else if (view === "share" && opts?.shareToken) {
-    url.searchParams.set("share", opts.shareToken)
-  } else if (view === "quiz" && opts?.quizSlug) {
-    url.searchParams.set("quiz", opts.quizSlug)
-  } else if (view === "activity" && opts?.activitySlug) {
-    url.searchParams.set("activity", opts.activitySlug)
-  } else if (view === "live-display" && opts?.liveActivityId) {
-    url.searchParams.set("live", opts.liveActivityId)
-  } else if (view === "accept-invitation" && opts?.inviteToken) {
-    url.searchParams.set("invite", opts.inviteToken)
-  } else if (
-    view === "admin" ||
-    view === "login" ||
-    view === "student" ||
-    view === "org-onboarding" ||
-    view === "org-register" ||
-    view === "no-org" ||
-    view === "org-dashboard" ||
-    view === "org-settings" ||
-    view === "pricing" ||
-    view === "about" ||
-    view === "privacy" ||
-    view === "terms" ||
-    view === "contact" ||
-    view === "platform" || view === "superadmin" || view === "superadmin-security"
-  ) {
-    url.searchParams.set("view", view)
-  }
-  window.history.replaceState({}, "", url.toString())
-}

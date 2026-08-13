@@ -111,7 +111,7 @@ export function PublicSharePage({ token, onExit }: PublicSharePageProps) {
             <span className="sm:hidden">Back</span>
           </button>
           <Link
-            href="/?view=login"
+            href="/login"
             className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-300"
           >
             <Sparkles className="size-3.5" />
@@ -142,7 +142,7 @@ export function PublicSharePage({ token, onExit }: PublicSharePageProps) {
         <div className="mx-auto max-w-3xl text-center text-[11px] text-muted-foreground">
           <span>© {new Date().getFullYear()} Engagio · </span>
           <Link
-            href="/?view=login"
+            href="/login"
             className="font-medium text-emerald-700 hover:underline dark:text-emerald-300"
           >
             Create your own event
@@ -276,7 +276,7 @@ function AchievementView({
             View Event
           </Button>
         )}
-        <Link href="/?view=login" className="sm:inline-flex">
+        <Link href="/login" className="sm:inline-flex">
           <Button
             className={cn(
               "w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto",

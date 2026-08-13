@@ -153,6 +153,9 @@ export async function generateAchievementQr(
 
 /**
  * Build the public share URL for an achievement token.
+ *
+ * NOTE: This is the SERVER-side URL builder. It uses the new
+ * file-based route `/share/[token]` (Phase 1 routing migration).
  */
 export function buildShareUrl(
   req: Request | { headers: { get: (k: string) => string | null } },
@@ -166,5 +169,5 @@ export function buildShareUrl(
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
     "localhost:3000"
-  return `${proto}://${host}/?share=${token}`
+  return `${proto}://${host}/share/${token}`
 }

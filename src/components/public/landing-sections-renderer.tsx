@@ -828,7 +828,7 @@ function ActivityCard({ activity, index }: { activity: ActivityCardItem; index: 
   const meta = ACTIVITY_TYPE_META[activity.type] ?? { label: activity.type, icon: FileQuestion, color: "text-emerald-400" }
   const Icon = meta.icon
   const isLive = activity.status === "LIVE"
-  const href = activity.quizLink?.slug ? `/?quiz=${activity.quizLink.slug}` : activity.slug ? `/?activity=${activity.slug}` : null
+  const href = activity.quizLink?.slug ? `/quiz/${activity.quizLink.slug}` : activity.slug ? `/dashboard?sub=activity&activity=${activity.slug}` : null
 
   return (
     <motion.div

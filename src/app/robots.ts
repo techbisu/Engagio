@@ -6,17 +6,22 @@ import { publicOrigin } from "@/lib/seo";
  *
  * Reference: https://nextjs.org/docs/app/api-reference/file-conventions/metadata/robots
  *
- * Engagio's only truly public surface is the landing page (`/`). Every
- * other URL is either:
+ * Engagio's only truly public surface is the landing page (`/`) and the
+ * marketing pages (/about, /pricing, etc.). Every other URL is either:
  *
  *   - An API route (/api/...) — never index.
- *   - A query-string "view" route (?view=admin|student|login|verify) —
- *     requires auth or is a private workflow.
- *   - A deep link to a private resource (?quiz=, ?activity=, ?share=) —
- *     token-gated, noindex.
+ *   - An auth-gated dashboard (/dashboard, /admin, /superadmin/login) —
+ *     requires auth, noindex.
+ *   - A token-gated deep link (/verify/[token], /share/[token],
+ *     /invite/[token]) — private per-resource, noindex.
+ *   - A deep link to a private resource (/quiz/[slug], /event/[slug],
+ *     /org/[slug]) — auth-gated for participation, noindex.
  *
- * We allow the bare landing page so crawlers can follow internal links,
- * and disallow everything else.
+ * We allow the bare landing page + marketing pages so crawlers can follow
+ * internal links, and disallow everything else.
+ *
+ * Updated during the Phase 1 routing migration to use the new file-based
+ * routes.
  */
 export default function robots(): MetadataRoute.Robots {
   const origin = publicOrigin();
@@ -27,13 +32,19 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: [
         "/api/",
-        "/?view=admin",
-        "/?view=student",
-        "/?view=login",
-        "/?view=verify",
-        "/?share=",
-        "/?activity=",
-        "/?quiz=",
+        "/dashboard",
+        "/admin",
+        "/superadmin/",
+        "/login",
+        "/org-register",
+        "/no-org",
+        "/verify/",
+        "/share/",
+        "/invite/",
+        "/quiz/",
+        "/event/",
+        "/org/",
+        "/live/",
       ],
     },
     sitemap: `${origin}/sitemap.xml`,

@@ -305,7 +305,7 @@ export async function sendPublishNotifications(opts: {
         participantName: user.name || user.email,
         eventTitle: event?.title || "your assessment",
         percentage: attempt.percentage,
-        resultUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/?view=student`,
+        resultUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard`,
       })
       if (result.sent) {
         sent++

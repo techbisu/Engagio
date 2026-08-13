@@ -52,6 +52,9 @@ export async function generateQrCodeDataUrl(
 /**
  * Build the public verification URL for a certificate token.
  * Uses the origin from the request headers (works on Vercel).
+ *
+ * NOTE: This is the SERVER-side URL builder. It uses the new
+ * file-based route `/verify/[token]` (Phase 1 routing migration).
  */
 export function buildVerificationUrl(
   req: Request | { headers: { get: (k: string) => string | null } },
@@ -66,5 +69,5 @@ export function buildVerificationUrl(
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
     "localhost:3000"
-  return `${proto}://${host}/?verify=${token}`
+  return `${proto}://${host}/verify/${token}`
 }

@@ -10,7 +10,8 @@
  *   - generateSecret() → base32 string
  *
  * Flow:
- *   1. Super admin goes to /?view=superadmin-security (after first password login)
+ *   1. Super admin goes to /superadmin/login (after first password login
+ *      they may toggle to the TOTP setup sub-view internally)
  *   2. generateTotpSecret() → base32 secret
  *   3. buildTotpUri() → otpauth:// URI
  *   4. generateTotpQrCode() → QR code data URL

@@ -374,9 +374,9 @@ export async function GET() {
     results.push("  Participant:  demo.participant@engagio.app")
     results.push("")
     results.push(`Public URLs:`)
-    results.push(`  Org page:   /?org=demo-medical`)
-    results.push(`  Event page: /?event=medical-summit-2026`)
-    results.push(`  Direct quiz: /?quiz=${quizLink?.slug}`)
+    results.push(`  Org page:   /org/demo-medical`)
+    results.push(`  Event page: /event/medical-summit-2026`)
+    results.push(`  Direct quiz: /quiz/${quizLink?.slug}`)
 
     return NextResponse.json({
       success: true,

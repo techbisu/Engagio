@@ -212,16 +212,16 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                       const Icon = meta.icon
                       const isLive = act.status === "LIVE"
                       const href = act.quizLink?.slug
-                        ? `/?quiz=${act.quizLink.slug}`
+                        ? `/quiz/${act.quizLink.slug}`
                         : act.slug
-                          ? `/?activity=${act.slug}`
+                          ? `/dashboard?sub=activity&activity=${act.slug}`
                           : null
                       return (
                         <button
                           key={act.id}
                           onClick={() => {
                             if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
-                            else if (act.slug) window.location.href = `/?activity=${act.slug}`
+                            else if (act.slug) window.location.href = `/dashboard?sub=activity&activity=${act.slug}`
                           }}
                           className="group flex flex-col rounded-lg border p-3 text-left transition hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
                         >
@@ -673,7 +673,9 @@ function EmptyAttempts() {
 }
 
 /** Extract the slug from either a raw slug or a full URL like
- * `https://host/?quiz=R85XSX` or `https://host/quiz/R85XSX`. */
+ * `https://host/quiz/R85XSX` (new route) or `https://host/?quiz=R85XSX` (legacy).
+ * The legacy format is still supported for backward compatibility —
+ * old shared links will keep working thanks to the middleware 301 redirects. */
 function normalizeSlug(input: string): string {
   const trimmed = input.trim()
   if (!trimmed) return ""

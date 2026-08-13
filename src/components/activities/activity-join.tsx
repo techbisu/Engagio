@@ -130,7 +130,7 @@ export function ActivityJoin({
       return
     }
     if (typeof window !== "undefined") {
-      window.location.href = `/?quiz=${encodeURIComponent(quizSlug)}`
+      window.location.href = `/quiz/${encodeURIComponent(quizSlug)}`
     }
   }, [isQuizType, quizSlug, onQuizRedirect])
 

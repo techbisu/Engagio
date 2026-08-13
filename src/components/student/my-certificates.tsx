@@ -146,8 +146,8 @@ function CertificateCard({
 }) {
   const verifyUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/?verify=${cert.verificationToken}`
-      : `/?verify=${cert.verificationToken}`;
+      ? `${window.location.origin}/verify/${cert.verificationToken}`
+      : `/verify/${cert.verificationToken}`;
 
   return (
     <Card className="overflow-hidden">
@@ -304,8 +304,8 @@ function ViewCertificateDialog({
 
   const verifyUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/?verify=${cert.verificationToken}`
-      : `/?verify=${cert.verificationToken}`;
+      ? `${window.location.origin}/verify/${cert.verificationToken}`
+      : `/verify/${cert.verificationToken}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

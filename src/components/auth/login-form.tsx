@@ -58,7 +58,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   // After Google OAuth, the auto-route effect in page.tsx checks if the user
   // has an org. If not → no-org intermediate page. If yes → admin panel.
   const handleGoogleLogin = () => {
-    signIn('google', { callbackUrl: '/?view=login' }).catch(() => {
+    signIn('google', { callbackUrl: '/login' }).catch(() => {
       toast.error('Google sign-in failed. Make sure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.')
     })
   }
@@ -287,7 +287,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
               <div className="rounded-lg border border-dashed border-border p-3 text-center">
                 <p className="text-xs text-muted-foreground">
                   🎓 Participant? Use the event link shared by your organizer.<br />
-                  🔒 Super Admin? Use <code className="font-mono">/?view=superadmin</code>
+                  🔒 Super Admin? Use <code className="font-mono">/superadmin/login</code>
                 </p>
               </div>
             </TabsContent>
@@ -313,7 +313,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
               />
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900 dark:bg-amber-950/20">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                  🔒 Super Admin has a separate secure login at <code className="font-mono">/?view=superadmin</code>
+                  🔒 Super Admin has a separate secure login at <code className="font-mono">/superadmin/login</code>
                 </p>
               </div>
             </TabsContent>
@@ -322,8 +322,8 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
         <CardFooter className="flex flex-col gap-2">
           <p className="text-center text-xs text-muted-foreground">
             By continuing you agree to our{' '}
-            <a href="/?view=terms" className="underline hover:text-foreground">Terms</a> &{' '}
-            <a href="/?view=privacy" className="underline hover:text-foreground">Privacy</a>.
+            <a href="/terms" className="underline hover:text-foreground">Terms</a> &{' '}
+            <a href="/privacy" className="underline hover:text-foreground">Privacy</a>.
           </p>
           <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-400">
             <Sparkles className="size-3" /> Start free. No payment required.

@@ -410,7 +410,7 @@ export function LinksManager({
   }
 
   async function copyLink(slug: string) {
-    const url = `${window.location.origin}/?quiz=${slug}`
+    const url = `${window.location.origin}/quiz/${slug}`
     try {
       await navigator.clipboard.writeText(url)
       toast.success("Link copied to clipboard", {

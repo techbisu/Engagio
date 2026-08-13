@@ -119,7 +119,7 @@ model Event {
   organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   // Public URL slug — unique within the organization.
-  // Used for /?event=SLUG public event pages.
+  // Used for /event/SLUG public event pages (Phase 1 routing migration).
   // Auto-generated from title if not provided.
   slug                String?  @unique
 
@@ -343,7 +343,7 @@ model Registration {
 
 // Certificate issued to a participant. certificateNumber is human-readable
 // (e.g. EVT-2026-A8F42K). verificationToken is a separate long random string
-// used in the public verification URL (/?verify=TOKEN).
+// used in the public verification URL (/verify/TOKEN, Phase 1 routing migration).
 model Certificate {
   id                String   @id @default(cuid())
   eventId           String

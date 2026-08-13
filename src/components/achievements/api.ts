@@ -141,9 +141,9 @@ export function slugify(s: string): string {
 /** Build the public share URL for a given token. */
 export function buildShareUrl(token: string): string {
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/?share=${token}`
+    return `${window.location.origin}/share/${token}`
   }
-  return `/?share=${token}`
+  return `/share/${token}`
 }
 
 /** Build the achievement PNG download filename using the verify-at code. */

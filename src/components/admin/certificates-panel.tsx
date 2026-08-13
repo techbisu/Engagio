@@ -821,8 +821,8 @@ function DownloadButton({
             issuedAt={cert.issuedAt}
             verificationUrl={
               typeof window !== "undefined"
-                ? `${window.location.origin}/?verify=${cert.verificationToken}`
-                : `/?verify=${cert.verificationToken}`
+                ? `${window.location.origin}/verify/${cert.verificationToken}`
+                : `/verify/${cert.verificationToken}`
             }
             onRendered={handleRendered}
             className="h-0 w-0"
@@ -879,8 +879,8 @@ function ViewCertificateDialog({
             issuedAt={cert.issuedAt}
             verificationUrl={
               typeof window !== "undefined"
-                ? `${window.location.origin}/?verify=${cert.verificationToken}`
-                : `/?verify=${cert.verificationToken}`
+                ? `${window.location.origin}/verify/${cert.verificationToken}`
+                : `/verify/${cert.verificationToken}`
             }
             onRendered={setRenderedDataUrl}
           />
@@ -889,7 +889,7 @@ function ViewCertificateDialog({
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-2">
           <Button
             variant="outline"
-            onClick={() => window.open(`/?verify=${cert.verificationToken}`, "_blank")}
+            onClick={() => window.open(`/verify/${cert.verificationToken}`, "_blank")}
           >
             <Eye className="size-4" /> Public verify page
           </Button>
@@ -917,8 +917,8 @@ function ViewCertificateDialog({
                   certificateNumber: cert.certificateNumber,
                   certificateVerifyUrl:
                     typeof window !== "undefined"
-                      ? `${window.location.origin}/?verify=${cert.verificationToken}`
-                      : `/?verify=${cert.verificationToken}`,
+                      ? `${window.location.origin}/verify/${cert.verificationToken}`
+                      : `/verify/${cert.verificationToken}`,
                 },
                 templateId: "professional",
                 visibility: "PUBLIC",

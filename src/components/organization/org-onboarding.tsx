@@ -155,7 +155,7 @@ export function OrgOnboarding({ onCreated, onCancel, forced = true }: OrgOnboard
     try {
       // Redirect to Google OAuth; after success, the user returns here with a session
       // and the useEffect above auto-advances to Step 2.
-      await signIn("google", { callbackUrl: "/?view=org-onboarding" })
+      await signIn("google", { callbackUrl: "/org-register" })
     } catch {
       setGoogleLoading(false)
       toast.error("Google sign-in failed. Please try again.")
