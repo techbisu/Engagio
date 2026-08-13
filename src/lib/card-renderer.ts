@@ -1,24 +1,15 @@
 /**
  * Server-side card renderer using Satori + Resvg.
  *
- * ─── Reference-matched achievement card design ─────────────────────────────
- * Mint/aqua gradient background, trophy watermark, confetti, clean layout.
- * Inspired by the user's reference image (Gemini_Generated_Image).
+ * --- Filled, celebration-style achievement card ----------------------------
+ * NO blank space - content fills the entire card.
  *
- * Layout (top to bottom):
- *   1. Pill badge with type label
- *   2. Big score number + "SCORE" label
- *   3. Trophy watermark (large, behind text)
- *   4. "AWARDED TO" + participant name
- *   5. Event name + date
- *   6. Footer: serial + QR + "Powered by Engagio"
- *
- * 5 color palettes (all light backgrounds):
- *   1. minimal      — Mint/aqua (reference match)
- *   2. modern       — Emerald/mint
- *   3. professional — Amber/cream
- *   4. celebration  — Pink/rose
- *   5. conference   — Teal/sky
+ * Key design elements:
+ *   - BIG trophy icon in the center (the visual anchor)
+ *   - Paper burst/bumper vector radiating from behind the trophy
+ *   - Content distributed top-to-bottom (no gaps)
+ *   - Confetti concentrated around the trophy
+ *   - All text scaled up to fill space
  */
 
 import satori from "satori"
@@ -55,82 +46,76 @@ export interface RenderedCard {
 const W = 1200
 const H = 1500
 
-function base64ToBuffer(b64: string): Buffer {
-  return Buffer.from(b64, "base64")
-}
-
 const fonts = [
-  { name: "DejaVu Sans", data: base64ToBuffer(DEJAVU_SANS), weight: 400 as const, style: "normal" as const },
-  { name: "DejaVu Sans", data: base64ToBuffer(DEJAVU_SANS_BOLD), weight: 700 as const, style: "normal" as const },
-  { name: "DejaVu Sans Mono", data: base64ToBuffer(DEJAVU_SANS_MONO), weight: 400 as const, style: "normal" as const },
+  { name: "DejaVu Sans", data: Buffer.from(DEJAVU_SANS, 'base64'), weight: 400 as const, style: "normal" as const },
+  { name: "DejaVu Sans", data: Buffer.from(DEJAVU_SANS_BOLD, 'base64'), weight: 700 as const, style: "normal" as const },
+  { name: "DejaVu Sans Mono", data: Buffer.from(DEJAVU_SANS_MONO, 'base64'), weight: 400 as const, style: "normal" as const },
 ]
 
-// ─── 5 light color palettes ────────────────────────────────────────────────
+// --- 5 color palettes ------------------------------------------------------
 interface CardTheme {
-  bgFrom: string // top of gradient (lighter)
-  bgTo: string // bottom of gradient (slightly darker)
-  blobColor: string // large decorative blob
-  footerColor: string // footer curve color
-  text: string // primary text (dark)
-  textSecondary: string // secondary text
-  textMuted: string // muted text
-  accent: string // accent color (for score, badge)
-  accentDark: string // darker accent
-  badgeBg: string // badge background
-  badgeText: string // badge text
-  confetti: string[] // confetti colors
+  bgFrom: string
+  bgTo: string
+  blobColor: string
+  footerColor: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  accent: string
+  accentLight: string
+  accentDark: string
+  badgeBg: string
+  badgeText: string
+  burstColor: string // paper burst rays
+  burstColor2: string
+  confetti: string[]
 }
 
 const THEMES: Record<AchievementTemplateId, CardTheme> = {
-  // 1. Mint/aqua (reference match)
   minimal: {
     bgFrom: "#e0f7f4", bgTo: "#a8d5da",
-    blobColor: "#7bc4c9",
-    footerColor: "#f5f9f8",
+    blobColor: "#7bc4c9", footerColor: "#f5f9f8",
     text: "#1a3a3a", textSecondary: "#2c5f5f", textMuted: "#5a8585",
-    accent: "#0d9488", accentDark: "#0f766e",
+    accent: "#0d9488", accentLight: "#5eead4", accentDark: "#0f766e",
     badgeBg: "#8fb8b8", badgeText: "#1a4a4a",
-    confetti: ["#f4d03f", "#00ced1", "#48d1cc", "#7bc4c9", "#ffffff"],
+    burstColor: "#fbbf24", burstColor2: "#34d399",
+    confetti: ["#f4d03f", "#00ced1", "#48d1cc", "#7bc4c9", "#ffffff", "#fbbf24"],
   },
-  // 2. Emerald/mint
   modern: {
     bgFrom: "#d1fae5", bgTo: "#6ee7b7",
-    blobColor: "#34d399",
-    footerColor: "#f0fdf4",
+    blobColor: "#34d399", footerColor: "#f0fdf4",
     text: "#064e3b", textSecondary: "#047857", textMuted: "#059669",
-    accent: "#059669", accentDark: "#047857",
+    accent: "#059669", accentLight: "#6ee7b7", accentDark: "#047857",
     badgeBg: "#a7f3d0", badgeText: "#064e3b",
-    confetti: ["#fbbf24", "#10b981", "#34d399", "#6ee7b7", "#ffffff"],
+    burstColor: "#fbbf24", burstColor2: "#34d399",
+    confetti: ["#fbbf24", "#10b981", "#34d399", "#6ee7b7", "#ffffff", "#f59e0b"],
   },
-  // 3. Amber/cream
   professional: {
     bgFrom: "#fef3c7", bgTo: "#fcd34d",
-    blobColor: "#fbbf24",
-    footerColor: "#fffbeb",
+    blobColor: "#fbbf24", footerColor: "#fffbeb",
     text: "#78350f", textSecondary: "#92400e", textMuted: "#b45309",
-    accent: "#d97706", accentDark: "#92400e",
+    accent: "#d97706", accentLight: "#fde68a", accentDark: "#92400e",
     badgeBg: "#fde68a", badgeText: "#78350f",
-    confetti: ["#f59e0b", "#fbbf24", "#fde68a", "#ffffff", "#d97706"],
+    burstColor: "#f59e0b", burstColor2: "#fbbf24",
+    confetti: ["#f59e0b", "#fbbf24", "#fde68a", "#ffffff", "#d97706", "#fcd34d"],
   },
-  // 4. Pink/rose
   celebration: {
     bgFrom: "#fce7f3", bgTo: "#f9a8d4",
-    blobColor: "#f472b6",
-    footerColor: "#fdf2f8",
+    blobColor: "#f472b6", footerColor: "#fdf2f8",
     text: "#831843", textSecondary: "#9d174d", textMuted: "#be185d",
-    accent: "#db2777", accentDark: "#9d174d",
+    accent: "#db2777", accentLight: "#fbcfe8", accentDark: "#9d174d",
     badgeBg: "#fbcfe8", badgeText: "#831843",
-    confetti: ["#ec4899", "#f472b6", "#f9a8d4", "#ffffff", "#fbbf24"],
+    burstColor: "#fbbf24", burstColor2: "#f472b6",
+    confetti: ["#ec4899", "#f472b6", "#f9a8d4", "#ffffff", "#fbbf24", "#a78bfa"],
   },
-  // 5. Teal/sky
   conference: {
     bgFrom: "#ccfbf1", bgTo: "#5eead4",
-    blobColor: "#2dd4bf",
-    footerColor: "#f0fdfa",
+    blobColor: "#2dd4bf", footerColor: "#f0fdfa",
     text: "#134e4a", textSecondary: "#0f766e", textMuted: "#0d9488",
-    accent: "#0d9488", accentDark: "#0f766e",
+    accent: "#0d9488", accentLight: "#5eead4", accentDark: "#0f766e",
     badgeBg: "#99f6e4", badgeText: "#134e4a",
-    confetti: ["#14b8a6", "#2dd4bf", "#5eead4", "#ffffff", "#0d9488"],
+    burstColor: "#fbbf24", burstColor2: "#2dd4bf",
+    confetti: ["#14b8a6", "#2dd4bf", "#5eead4", "#ffffff", "#0d9488", "#fbbf24"],
   },
 }
 
@@ -192,8 +177,40 @@ function el(
   return { type, props: { style, children, ...extra } }
 }
 
-// ─── Confetti (scattered across entire card) ───────────────────────────────
-function buildConfetti(theme: CardTheme, count: number): SatoriNode[] {
+// --- Paper burst / bumper (radiating triangles using divs) -----------------
+function buildPaperBurst(theme: CardTheme, centerX: number, centerY: number): SatoriNode[] {
+  const rays: SatoriNode[] = []
+  const rayCount = 24
+  for (let i = 0; i < rayCount; i++) {
+    const angle = (i / rayCount) * 360
+    const length = i % 2 === 0 ? 200 : 140
+    const width = i % 2 === 0 ? 30 : 20
+    const color = i % 2 === 0 ? theme.burstColor : theme.burstColor2
+    const opacity = i % 2 === 0 ? 0.3 : 0.2
+
+    rays.push(
+      el("div", {
+        display: "flex",
+        position: "absolute",
+        left: `${centerX}px`,
+        top: `${centerY}px`,
+        width: "0px",
+        height: "0px",
+        borderLeft: `${width / 2}px solid transparent`,
+        borderRight: `${width / 2}px solid transparent`,
+        borderBottom: `${length}px solid ${color}`,
+        opacity: String(opacity),
+        transform: `rotate(${angle}deg)`,
+        transformOrigin: "top center",
+        marginLeft: `-${width / 2}px`,
+      }),
+    )
+  }
+  return rays
+}
+
+// --- Confetti (concentrated around trophy) ---------------------------------
+function buildConfetti(theme: CardTheme, count: number, centerX: number, centerY: number): SatoriNode[] {
   const confetti: SatoriNode[] = []
   let seed = 42
   const rand = () => {
@@ -201,54 +218,37 @@ function buildConfetti(theme: CardTheme, count: number): SatoriNode[] {
     return seed / 233280
   }
   for (let i = 0; i < count; i++) {
-    const x = Math.floor(rand() * 100)
-    const y = Math.floor(rand() * 70) // concentrate in top 70%
-    const size = 6 + Math.floor(rand() * 12)
+    const angle = rand() * Math.PI * 2
+    const distance = rand() * 350
+    const x = centerX + Math.cos(angle) * distance
+    const y = centerY + Math.sin(angle) * distance * 0.7
+    const size = 10 + Math.floor(rand() * 18)
     const color = theme.confetti[i % theme.confetti.length]
-    const opacity = 0.3 + rand() * 0.5
-    const rotation = Math.floor(rand() * 360)
+    const opacity = 0.4 + rand() * 0.5
     const shape = rand()
 
     let shapeElement: SatoriNode
     if (shape > 0.66) {
-      // Circle
       shapeElement = el("div", {
-        display: "flex",
-        position: "absolute",
-        left: `${x}%`,
-        top: `${y}%`,
-        width: `${size}px`,
-        height: `${size}px`,
-        backgroundColor: color,
-        borderRadius: "50%",
-        opacity: String(opacity),
+        display: "flex", position: "absolute",
+        left: `${x}px`, top: `${y}px`,
+        width: `${size}px`, height: `${size}px`,
+        backgroundColor: color, borderRadius: "50%", opacity: String(opacity),
       })
     } else if (shape > 0.33) {
-      // Square (rotated as diamond)
       shapeElement = el("div", {
-        display: "flex",
-        position: "absolute",
-        left: `${x}%`,
-        top: `${y}%`,
-        width: `${size}px`,
-        height: `${size}px`,
-        backgroundColor: color,
-        borderRadius: "2px",
-        opacity: String(opacity),
+        display: "flex", position: "absolute",
+        left: `${x}px`, top: `${y}px`,
+        width: `${size}px`, height: `${size}px`,
+        backgroundColor: color, borderRadius: "2px", opacity: String(opacity),
         transform: `rotate(45deg)`,
       })
     } else {
-      // Small sparkle dot
       shapeElement = el("div", {
-        display: "flex",
-        position: "absolute",
-        left: `${x}%`,
-        top: `${y}%`,
-        width: `${size * 0.6}px`,
-        height: `${size * 0.6}px`,
-        backgroundColor: color,
-        borderRadius: "50%",
-        opacity: String(opacity * 0.8),
+        display: "flex", position: "absolute",
+        left: `${x}px`, top: `${y}px`,
+        width: `${size * 0.6}px`, height: `${size * 0.6}px`,
+        backgroundColor: color, borderRadius: "50%", opacity: String(opacity * 0.7),
       })
     }
     confetti.push(shapeElement)
@@ -256,29 +256,90 @@ function buildConfetti(theme: CardTheme, count: number): SatoriNode[] {
   return confetti
 }
 
-// ─── Trophy watermark (large, behind text) ─────────────────────────────────
-function buildTrophyWatermark(theme: CardTheme): SatoriNode {
+// --- Big trophy (built from divs) ------------------------------------------
+function buildTrophy(theme: CardTheme, size: number): SatoriNode {
+  const s = size / 100
   return el("div", {
     display: "flex",
-    position: "absolute",
-    top: "35%",
-    left: "50%",
-    width: "500px",
-    height: "500px",
-    opacity: "0.08",
-    transform: "translateX(-50%)",
+    flexDirection: "column",
+    alignItems: "center",
+    width: `${size}px`,
+    height: `${size * 1.1}px`,
+    position: "relative",
   }, [
-    // Simple trophy shape using SVG path
-    el("svg", {
-      width: "500px",
-      height: "500px",
-      viewBox: "0 0 100 100",
+    // Trophy cup
+    el("div", {
+      display: "flex",
+      width: `${50 * s}px`,
+      height: `${55 * s}px`,
+      backgroundColor: theme.accent,
+      borderTopLeftRadius: `${5 * s}px`,
+      borderTopRightRadius: `${5 * s}px`,
+      borderBottomLeftRadius: `${15 * s}px`,
+      borderBottomRightRadius: `${15 * s}px`,
+      border: `${2 * s}px solid ${theme.accentDark}`,
+      position: "relative",
     }, [
-      el("path", {
-        d: "M30 15 L70 15 L68 45 Q68 55 60 58 L58 70 L72 70 L72 78 L28 78 L28 70 L42 70 L40 58 Q32 55 32 45 Z M20 20 L30 20 L30 30 Q30 38 24 38 Q18 38 18 30 Z M70 20 L80 20 L82 30 Q82 38 76 38 Q70 38 70 30 Z",
-        fill: theme.text,
+      // Star on trophy
+      el("div", {
+        display: "flex",
+        position: "absolute",
+        top: `${15 * s}px`,
+        left: "50%",
+        width: `${20 * s}px`,
+        height: `${20 * s}px`,
+        backgroundColor: "#ffffff",
+        opacity: "0.9",
+        marginLeft: `-${10 * s}px`,
+        clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
       }),
     ]),
+    // Left handle
+    el("div", {
+      display: "flex",
+      position: "absolute",
+      top: `${10 * s}px`,
+      left: `${5 * s}px`,
+      width: `${15 * s}px`,
+      height: `${25 * s}px`,
+      borderLeft: `${4 * s}px solid ${theme.accent}`,
+      borderBottom: `${4 * s}px solid ${theme.accent}`,
+      borderRight: `${4 * s}px solid ${theme.accent}`,
+      borderRadius: "0 0 50% 50%",
+      borderTop: "none",
+    }),
+    // Right handle
+    el("div", {
+      display: "flex",
+      position: "absolute",
+      top: `${10 * s}px`,
+      right: `${5 * s}px`,
+      width: `${15 * s}px`,
+      height: `${25 * s}px`,
+      borderLeft: `${4 * s}px solid ${theme.accent}`,
+      borderBottom: `${4 * s}px solid ${theme.accent}`,
+      borderRight: `${4 * s}px solid ${theme.accent}`,
+      borderRadius: "0 0 50% 50%",
+      borderTop: "none",
+    }),
+    // Base
+    el("div", {
+      display: "flex",
+      width: `${55 * s}px`,
+      height: `${8 * s}px`,
+      backgroundColor: theme.accentDark,
+      borderRadius: `${2 * s}px`,
+      marginTop: `${2 * s}px`,
+    }),
+    // Pedestal
+    el("div", {
+      display: "flex",
+      width: `${35 * s}px`,
+      height: `${5 * s}px`,
+      backgroundColor: theme.accentDark,
+      borderRadius: `${2 * s}px`,
+      marginTop: `${1 * s}px`,
+    }),
   ])
 }
 
@@ -291,33 +352,31 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   const hasScore = typeof score === "number" && typeof totalScore === "number"
   const isCertificate = p.type === "CERTIFICATE_EARNED"
 
-  // ─── Build hero metric ──
+  // --- Build hero metric --
   let heroNode: SatoriNode
   let heroLabel = ""
 
   if (isCertificate) {
     heroNode = el("div", {
-      display: "flex", alignItems: "center", justifyContent: "center",
-      width: "80px", height: "80px", borderRadius: "50%",
-      backgroundColor: theme.accent, fontSize: "40px",
-    }, "★")
+      display: "flex", alignItems: "baseline", justifyContent: "center",
+    }, [
+      el("span", { fontSize: "100px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, "COMPLETED"),
+    ])
   } else if (hasPercent) {
     heroNode = el("div", {
       display: "flex", alignItems: "baseline", justifyContent: "center",
     }, [
-      el("span", { fontSize: "140px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(percentage)),
-      el("span", { fontSize: "60px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, "%"),
+      el("span", { fontSize: "160px", fontWeight: "800", color: theme.text, lineHeight: "0.85" }, String(percentage)),
+      el("span", { fontSize: "70px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, "%"),
     ])
     heroLabel = "SCORE"
   } else if (hasRank) {
-    const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏆"
     heroNode = el("div", {
       display: "flex", flexDirection: "column", alignItems: "center",
     }, [
-      el("div", { fontSize: "56px", marginBottom: "8px" }, medal),
       el("div", { display: "flex", alignItems: "baseline" }, [
-        el("span", { fontSize: "120px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(rank)),
-        el("span", { fontSize: "50px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, rankSuffix(rank)),
+        el("span", { fontSize: "140px", fontWeight: "800", color: theme.text, lineHeight: "0.85" }, String(rank)),
+        el("span", { fontSize: "60px", fontWeight: "700", color: theme.accent, marginLeft: "4px" }, rankSuffix(rank)),
       ]),
     ])
     heroLabel = totalParticipants ? `RANK OF ${totalParticipants}` : "RANK"
@@ -325,16 +384,16 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     heroNode = el("div", {
       display: "flex", alignItems: "baseline", justifyContent: "center",
     }, [
-      el("span", { fontSize: "120px", fontWeight: "800", color: theme.text, lineHeight: "0.9" }, String(score)),
-      el("span", { fontSize: "50px", fontWeight: "700", color: theme.accent, marginLeft: "8px" }, `/ ${totalScore}`),
+      el("span", { fontSize: "140px", fontWeight: "800", color: theme.text, lineHeight: "0.85" }, String(score)),
+      el("span", { fontSize: "60px", fontWeight: "700", color: theme.accent, marginLeft: "8px" }, `/ ${totalScore}`),
     ])
     heroLabel = "POINTS"
   } else {
     heroNode = el("div", {
-      display: "flex", alignItems: "center", justifyContent: "center",
-      width: "80px", height: "80px", borderRadius: "50%",
-      backgroundColor: theme.accent, fontSize: "40px",
-    }, "✓")
+      display: "flex", alignItems: "baseline", justifyContent: "center",
+    }, [
+      el("span", { fontSize: "80px", fontWeight: "800", color: theme.text }, "COMPLETED"),
+    ])
   }
 
   const dateStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -342,13 +401,17 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
   const badgeLabel = isCertificate ? "CERTIFICATE OF COMPLETION" : typeLabel(p.type)
   const eventName = subtitle || p.achievementData?.eventTitle || title
 
-  // ─── QR code ──
+  // --- QR code --
   let qrDataUrl = ""
   if (p.shareUrl) {
     try { qrDataUrl = await generateAchievementQr(p.shareUrl) } catch { /* ignore */ }
   }
 
-  // ─── Build the card ──
+  // Trophy position (center of card, slightly above middle)
+  const trophyCenterX = W / 2
+  const trophyCenterY = H * 0.42
+
+  // --- Build the card --
   const card: SatoriNode = el("div", {
     display: "flex",
     flexDirection: "column",
@@ -357,117 +420,106 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
     background: `linear-gradient(160deg, ${theme.bgFrom} 0%, ${theme.bgTo} 100%)`,
     fontFamily: "DejaVu Sans",
   }, [
-    // ── Decorative blob (top-right) ──
+    // -- Decorative blob (top-right) --
     el("div", {
       display: "flex",
       position: "absolute",
-      top: "-100px",
-      right: "-100px",
-      width: "500px",
-      height: "500px",
+      top: "-150px",
+      right: "-150px",
+      width: "600px",
+      height: "600px",
       borderRadius: "50%",
       backgroundColor: theme.blobColor,
-      opacity: "0.3",
+      opacity: "0.25",
     }),
 
-    // ── Trophy watermark (behind text) ──
-    buildTrophyWatermark(theme),
+    // -- Paper burst (radiating rays behind trophy) --
+    ...buildPaperBurst(theme, trophyCenterX, trophyCenterY),
 
-    // ── Confetti ──
-    ...buildConfetti(theme, 35),
+    // -- Confetti (concentrated around trophy) --
+    ...buildConfetti(theme, 50, trophyCenterX, trophyCenterY),
 
-    // ── Content ──
+    // -- Content (fills entire card, no blank space) --
     el("div", {
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
+      justifyContent: "space-between",
       flex: "1",
-      padding: "70px",
+      padding: "50px 70px",
       position: "relative",
     }, [
-      // 1. Badge (pill)
+      // 1. Badge (pill) - top
       el("div", {
         display: "flex",
-        marginTop: "20px",
       }, [
         el("div", {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          paddingLeft: "24px", paddingRight: "24px",
-          paddingTop: "10px", paddingBottom: "10px",
-          borderRadius: "30px",
+          paddingLeft: "28px", paddingRight: "28px",
+          paddingTop: "12px", paddingBottom: "12px",
+          borderRadius: "40px",
           backgroundColor: theme.badgeBg,
         }, [
-          el("span", { fontSize: "16px", fontWeight: "700", color: theme.badgeText, letterSpacing: "4px" }, badgeLabel),
+          el("span", { fontSize: "18px", fontWeight: "700", color: theme.badgeText, letterSpacing: "5px" }, badgeLabel),
         ]),
       ]),
 
-      // 2. Hero metric
+      // 2. BIG TROPHY - (the visual anchor - fills the center)
+      el("div", {
+        display: "flex",
+      }, [
+        buildTrophy(theme, 220),
+      ]),
+
+      // 3. Hero metric (below trophy)
       el("div", {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        marginTop: "40px",
-      }, [heroNode]),
-
-      // 3. Score label
-      ...(heroLabel ? [
-        el("div", {
-          display: "flex",
-          marginTop: "12px",
-        }, [
-          el("span", { fontSize: "20px", fontWeight: "700", color: theme.textSecondary, letterSpacing: "6px" }, heroLabel),
-        ]),
-      ] : []),
-
-      // 4. "AWARDED TO"
-      el("div", {
-        display: "flex",
-        marginTop: "50px",
       }, [
-        el("span", { fontSize: "16px", fontWeight: "400", color: theme.textMuted, letterSpacing: "3px" }, "AWARDED TO"),
+        heroNode,
+        // 4. Score label (inside the hero group)
+        ...(heroLabel ? [
+          el("div", {
+            display: "flex",
+            marginTop: "8px",
+          }, [
+            el("span", { fontSize: "22px", fontWeight: "700", color: theme.textSecondary, letterSpacing: "8px" }, heroLabel),
+          ]),
+        ] : []),
       ]),
 
-      // 5. Participant name (BIG)
+      // 5. "AWARDED TO" + name + event + date (grouped at bottom)
       el("div", {
         display: "flex",
-        marginTop: "8px",
+        flexDirection: "column",
+        alignItems: "center",
       }, [
+        el("span", { fontSize: "18px", fontWeight: "400", color: theme.textMuted, letterSpacing: "4px" }, "AWARDED TO"),
         el("div", {
-          fontSize: "48px",
+          fontSize: "52px",
           fontWeight: "800",
           color: theme.text,
           textAlign: "center",
           maxWidth: "900px",
           lineHeight: "1.1",
+          marginTop: "8px",
         }, truncate(participantName, 30)),
-      ]),
-
-      // 6. Event name
-      el("div", {
-        display: "flex",
-        marginTop: "16px",
-      }, [
         el("div", {
-          fontSize: "28px",
+          fontSize: "30px",
           fontWeight: "600",
           color: theme.textSecondary,
           textAlign: "center",
           maxWidth: "900px",
+          marginTop: "12px",
         }, truncate(eventName, 45)),
-      ]),
-
-      // 7. Date
-      el("div", {
-        display: "flex",
-        marginTop: "12px",
-      }, [
-        el("div", { fontSize: "20px", color: theme.textMuted }, dateStr),
+        el("div", { fontSize: "22px", color: theme.textMuted, marginTop: "10px" }, dateStr),
       ]),
     ]),
 
-    // ── Footer (with curved background) ──
+    // -- Footer (curved, fills bottom) --
     el("div", {
       display: "flex",
       flexDirection: "column",
@@ -477,13 +529,11 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
       el("div", {
         display: "flex",
         position: "absolute",
-        top: "0",
-        left: "0",
-        width: "100%",
-        height: "100%",
+        top: "0", left: "0",
+        width: "100%", height: "100%",
         backgroundColor: theme.footerColor,
-        borderTopLeftRadius: "60px",
-        borderTopRightRadius: "60px",
+        borderTopLeftRadius: "50px",
+        borderTopRightRadius: "50px",
       }),
       // Footer content
       el("div", {
@@ -491,27 +541,25 @@ async function buildCardTree(p: CardRenderParams): Promise<SatoriNode> {
         flexDirection: "row",
         alignItems: "flex-end",
         justifyContent: "space-between",
-        padding: "40px 70px",
+        padding: "35px 70px",
         position: "relative",
       }, [
         // Left: serial + powered by
         el("div", { display: "flex", flexDirection: "column" }, [
-          el("div", { fontSize: "12px", color: theme.textMuted, letterSpacing: "3px", marginBottom: "6px" }, "VERIFY AT"),
-          el("div", { fontSize: "18px", fontWeight: "700", color: theme.text, fontFamily: "DejaVu Sans Mono", marginBottom: "16px" }, serial),
-          el("div", { fontSize: "14px", color: theme.textMuted }, "Powered by Engagio"),
+          el("div", { fontSize: "13px", color: theme.textMuted, letterSpacing: "3px", marginBottom: "6px" }, "VERIFY AT"),
+          el("div", { fontSize: "20px", fontWeight: "700", color: theme.text, fontFamily: "DejaVu Sans Mono", marginBottom: "14px" }, serial),
+          el("div", { fontSize: "15px", color: theme.textMuted }, "Powered by Engagio"),
         ]),
         // Right: QR code
         ...(qrDataUrl ? [
           el("div", { display: "flex", flexDirection: "column", alignItems: "center" }, [
             el("div", {
-              display: "flex",
-              padding: "12px",
-              borderRadius: "16px",
+              display: "flex", padding: "12px", borderRadius: "16px",
               backgroundColor: "#ffffff",
             }, [
-              el("img", { width: "120px", height: "120px" }, undefined, { src: qrDataUrl }),
+              el("img", { width: "110px", height: "110px" }, undefined, { src: qrDataUrl }),
             ]),
-            el("div", { fontSize: "11px", fontWeight: "600", color: theme.textMuted, letterSpacing: "2px", marginTop: "8px" }, "SCAN TO VERIFY"),
+            el("div", { fontSize: "12px", fontWeight: "600", color: theme.textMuted, letterSpacing: "2px", marginTop: "8px" }, "SCAN TO VERIFY"),
           ]),
         ] : []),
       ]),
@@ -534,7 +582,7 @@ export async function renderCard(p: CardRenderParams): Promise<RenderedCard> {
     const png = resvg.render().asPng()
     return { png: Buffer.from(png), svg }
   } catch (e) {
-    console.error("[card-renderer] Resvg SVG→PNG failed; using SVG fallback:", e)
+    console.error("[card-renderer] Resvg SVG-PNG failed; using SVG fallback:", e)
     return { png: Buffer.from(svg, "utf-8"), svg }
   }
 }
