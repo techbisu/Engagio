@@ -25,7 +25,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -684,7 +683,7 @@ export function QuizRunner({
           isOpen={securityOpen}
           onToggle={() => setSecurityOpen((v) => !v)}
           proctor={
-            security.aiProctor
+            security.aiProctor && !cameraGateOpen && !proctorBypassed
               ? {
                   isReady: aiProctor.isReady,
                   error: aiProctor.error,
@@ -753,7 +752,7 @@ export function QuizRunner({
               metrics={combinedMetrics}
               config={security}
               proctor={
-                security.aiProctor
+                security.aiProctor && !cameraGateOpen && !proctorBypassed
                   ? {
                       isReady: aiProctor.isReady,
                       error: aiProctor.error,
@@ -905,19 +904,23 @@ export function QuizRunner({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep working</AlertDialogCancel>
-            <AlertDialogAction
+            <Button
               type="button"
               onClick={() => {
-                // Close the dialog FIRST, then submit via the ref (which always
-                // has the latest doSubmit with current answers/counters).
+                // Close the dialog and submit directly.
+                // Use a direct call (not setTimeout) since doSubmit is stable
+                // via doSubmitRef and won't be affected by the dialog closing.
                 setShowSubmitDialog(false)
-                // Use doSubmitRef.current to avoid stale closure issues.
-                setTimeout(() => void doSubmitRef.current?.(false), 50)
+                if (doSubmitRef.current && attemptId && !submittedRef.current) {
+                  void doSubmitRef.current(false)
+                } else if (!attemptId) {
+                  toast.error("Quiz is still loading. Please try again in a moment.")
+                }
               }}
-              className={cn("bg-emerald-600 text-white hover:bg-emerald-700")}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
             >
               <Send className="size-4" /> Submit now
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
