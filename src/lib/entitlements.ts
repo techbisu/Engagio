@@ -186,3 +186,87 @@ export async function getEntitlements(orgId: string): Promise<{
 
   return { plan: planName, limits, features }
 }
+
+// ─── Usage-based plan limit checks ─────────────────────────────────────────
+
+export type UsageResource =
+  | "event"
+  | "participant"
+  | "member"
+  | "aiProctor"
+  | "customBranding"
+  | "certificates"
+
+interface CheckResult {
+  allowed: boolean
+  limit: number // -1 = unlimited
+  current: number
+  upgradeUrl: string
+}
+
+/**
+ * Check if the org can perform an action that would consume a plan resource.
+ *
+ *   const check = await checkPlanLimit(ctx, "event")
+ *   if (!check.allowed) return NextResponse.json({ error: "Plan limit reached", ... }, { status: 403 })
+ *
+ * For boolean features (aiProctor, customBranding, certificates), checks
+ * if the feature is enabled in the plan — current/limit are 0/1.
+ */
+export async function checkPlanLimit(
+  ctx: TenantContext,
+  resource: UsageResource,
+  _requestedCount = 1
+): Promise<CheckResult> {
+  const upgradeUrl = `/admin?tab=billing`
+
+  // Platform admins bypass all limits
+  if (ctx.isPlatformAdmin) {
+    return { allowed: true, limit: -1, current: 0, upgradeUrl }
+  }
+
+  const limits = await getPlanLimits(ctx.orgId)
+  const orgId = ctx.orgId
+
+  switch (resource) {
+    case "event": {
+      const limit = limits.max_events ?? 3
+      const current = await db.event.count({ where: { organizationId: orgId } })
+      return { allowed: limit === -1 || current < limit, limit, current, upgradeUrl }
+    }
+
+    case "participant": {
+      const limit = limits.max_participants_per_event ?? 100
+      const current = await db.organizationMember.count({
+        where: { organizationId: orgId, role: "PARTICIPANT", status: "ACTIVE" },
+      })
+      return { allowed: limit === -1 || current < limit, limit, current, upgradeUrl }
+    }
+
+    case "member": {
+      const limit = limits.max_members ?? 3
+      const current = await db.organizationMember.count({
+        where: { organizationId: orgId, status: "ACTIVE" },
+      })
+      return { allowed: limit === -1 || current < limit, limit, current, upgradeUrl }
+    }
+
+    case "aiProctor": {
+      const enabled = limits.aiProctor === true
+      return { allowed: enabled, limit: enabled ? 1 : 0, current: 0, upgradeUrl }
+    }
+
+    case "customBranding": {
+      const enabled = limits.customBranding === true
+      return { allowed: enabled, limit: enabled ? 1 : 0, current: 0, upgradeUrl }
+    }
+
+    case "certificates": {
+      const enabled = limits.certificates === true
+      return { allowed: enabled, limit: enabled ? 1 : 0, current: 0, upgradeUrl }
+    }
+
+    default:
+      return { allowed: true, limit: -1, current: 0, upgradeUrl }
+  }
+}
