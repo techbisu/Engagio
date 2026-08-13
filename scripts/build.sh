@@ -7,6 +7,24 @@ DB_URL="${DATABASE_URL:-}"
 
 echo "[build] DATABASE_URL starts with: ${DB_URL:0:30}..."
 
+# Production hardening: fail if using SQLite in production
+if [[ "$NODE_ENV" == "production" && "$DB_URL" == file:* ]]; then
+  echo "[build] ERROR: SQLite is not allowed in production. Set DATABASE_URL to a PostgreSQL connection string."
+  exit 1
+fi
+
+# Production hardening: fail if using example/default secrets
+if [[ "$NODE_ENV" == "production" ]]; then
+  if [[ -z "$NEXTAUTH_SECRET" || "$NEXTAUTH_SECRET" == "generate-with-openssl-rand-base64-32" ]]; then
+    echo "[build] ERROR: NEXTAUTH_SECRET must be set to a real value in production."
+    exit 1
+  fi
+  if [[ -z "$SUPERADMIN_EMAIL" ]]; then
+    echo "[build] ERROR: SUPERADMIN_EMAIL must be set in production."
+    exit 1
+  fi
+fi
+
 # Auto-switch Prisma provider based on DATABASE_URL
 if [[ "$DB_URL" == postgresql://* ]] || [[ "$DB_URL" == postgres://* ]]; then
   echo "[build] PostgreSQL detected — switching provider"
