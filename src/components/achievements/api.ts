@@ -146,8 +146,13 @@ export function buildShareUrl(token: string): string {
   return `/?share=${token}`
 }
 
-/** Build the achievement PNG download filename. */
-export function downloadFilename(title: string): string {
+/** Build the achievement PNG download filename using the verify-at code. */
+export function downloadFilename(title: string, verifyCode?: string): string {
+  // Prefer the verify-at code (e.g. "DEM-2026-7K9M2N") for a unique, sortable filename.
+  // Fall back to the slugified title if no code is provided.
+  if (verifyCode) {
+    return `engagio-${verifyCode}.png`
+  }
   const slug = slugify(title) || "achievement"
   return `engagio-achievement-${slug}.png`
 }

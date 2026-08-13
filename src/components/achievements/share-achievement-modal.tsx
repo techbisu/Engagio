@@ -71,6 +71,27 @@ export interface ShareAchievementModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+/**
+ * Build the "VERIFY AT" code from the achievement's public token + org name.
+ * This matches the serial number shown on the generated card image, so the
+ * downloaded filename uses the same code (e.g. "engagio-DEM-2026-7K9M2N.png").
+ */
+function buildVerifyCode(draft: ShareableAchievementDto): string {
+  const orgCode = (draft.achievementData?.orgName || "ENG")
+    .replace(/[^A-Z]/gi, "")
+    .toUpperCase()
+    .slice(0, 3) || "ENG"
+  const year = new Date().getFullYear()
+  const hash = (draft.title + draft.participantName)
+    .split("")
+    .reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffffff, 7)
+    .toString(36)
+    .toUpperCase()
+    .padStart(6, "0")
+    .slice(0, 6)
+  return `${orgCode}-${year}-${hash}`
+}
+
 export function ShareAchievementModal({
   achievement,
   open,
@@ -296,7 +317,7 @@ export function ShareAchievementModal({
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = downloadFilename(draft.title)
+      a.download = downloadFilename(draft.title, buildVerifyCode(draft))
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
