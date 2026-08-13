@@ -268,6 +268,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
   // Poll to attach the stream — runs continuously while enabled.
   // This is the KEY fix for the camera blank preview issue.
+  // Also re-attaches when isReady changes (stream becomes available).
   useEffect(() => {
     if (!enabled) {
       if (attachIntervalRef.current) {
@@ -277,21 +278,29 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       return
     }
 
-    // Check every 250ms if the stream needs to be attached
+    // Check every 200ms if the stream needs to be attached.
+    // This catches: video element mounting after camera starts,
+    // sidebar collapse/expand, Sheet open/close on mobile, React re-renders.
     attachIntervalRef.current = setInterval(() => {
       attachStreamToVideo()
-    }, 250)
+    }, 200)
 
-    // Also try immediately
+    // Also try immediately and after short delays
     attachStreamToVideo()
+    const t1 = setTimeout(() => attachStreamToVideo(), 100)
+    const t2 = setTimeout(() => attachStreamToVideo(), 500)
+    const t3 = setTimeout(() => attachStreamToVideo(), 1000)
 
     return () => {
       if (attachIntervalRef.current) {
         clearInterval(attachIntervalRef.current)
         attachIntervalRef.current = null
       }
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
     }
-  }, [enabled, attachStreamToVideo])
+  }, [enabled, attachStreamToVideo, isReady])
 
   // ─── Camera access + interval setup ────────────────────────────────────
   useEffect(() => {

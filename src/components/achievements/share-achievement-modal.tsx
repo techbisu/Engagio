@@ -246,9 +246,30 @@ export function ShareAchievementModal({
         const shareUrl = data.shareUrl || buildShareUrl(draft.publicToken)
 
         switch (platform) {
-          case "WHATSAPP":
+          case "WHATSAPP": {
+            // Try native share with image first (works on mobile WhatsApp)
+            if (typeof navigator !== "undefined" && navigator.share && draft.imageUrl) {
+              try {
+                const imgUrl = draft.imageUrl + (draft.imageUrl.includes("?") ? "&" : "?") + "v=" + draft.dataVersion
+                const res = await fetch(imgUrl)
+                const blob = await res.blob()
+                const file = new File([blob], `engagio-achievement.png`, { type: "image/png" })
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                  await navigator.share({
+                    title: draft.title,
+                    text: data.text || `Check out my achievement: ${draft.percentage ?? ""}% on ${draft.title}`,
+                    files: [file],
+                  })
+                  break
+                }
+              } catch {
+                // Fall through to URL-based sharing
+              }
+            }
+            // Fallback: open WhatsApp with URL
             window.open(data.urls.whatsapp, "_blank", "noopener,noreferrer")
             break
+          }
           case "LINKEDIN":
             window.open(data.urls.linkedin, "_blank", "noopener,noreferrer")
             break
@@ -281,11 +302,30 @@ export function ShareAchievementModal({
           case "NATIVE": {
             if (typeof navigator !== "undefined" && navigator.share) {
               try {
-                await navigator.share({
+                // Try to share with the card image (Web Share API Level 2)
+                const shareData: ShareData = {
                   title: data.text?.split("\n")[0] || draft.title,
-                  text: data.text,
+                  text: data.text || `${draft.participantName} achieved ${draft.percentage ?? ""}% on ${draft.title}`,
                   url: shareUrl,
-                })
+                }
+
+                // If we have an image URL, try to fetch it as a blob and share as a file
+                if (draft.imageUrl) {
+                  try {
+                    const imgUrl = draft.imageUrl + (draft.imageUrl.includes("?") ? "&" : "?") + "v=" + draft.dataVersion
+                    const res = await fetch(imgUrl)
+                    const blob = await res.blob()
+                    const file = new File([blob], `engagio-achievement.png`, { type: "image/png" })
+                    // Check if navigator.canShare supports files
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                      shareData.files = [file]
+                    }
+                  } catch {
+                    // Image fetch failed — share without the image
+                  }
+                }
+
+                await navigator.share(shareData)
               } catch {
                 // User cancelled — no-op.
               }

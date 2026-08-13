@@ -908,12 +908,11 @@ export function QuizRunner({
             <AlertDialogAction
               type="button"
               onClick={() => {
-                // Close the dialog FIRST, then submit. Using a microtask delay
-                // ensures the dialog unmounts cleanly before the async submit
-                // starts (prevents the AlertDialogAction's default close
-                // handler from interfering with the submit call).
+                // Close the dialog FIRST, then submit via the ref (which always
+                // has the latest doSubmit with current answers/counters).
                 setShowSubmitDialog(false)
-                setTimeout(() => void doSubmit(false), 0)
+                // Use doSubmitRef.current to avoid stale closure issues.
+                setTimeout(() => void doSubmitRef.current?.(false), 50)
               }}
               className={cn("bg-emerald-600 text-white hover:bg-emerald-700")}
             >
