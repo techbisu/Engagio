@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     const event = await db.event.findUnique({
       where: { id: eventId },
-      select: { id: true, requireRegistration: true },
+      select: { id: true, requireRegistration: true, organizationId: true },
     });
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -158,21 +158,50 @@ export async function POST(req: NextRequest) {
           : String(raw);
     }
 
-    // --- Step 4: Upsert ------------------------------------------------------
-    const registration = await db.registration.upsert({
-      where: { eventId_userId: { eventId, userId } },
-      update: { data: stringifyJson(cleanData) },
-      create: {
-        eventId,
-        userId,
-        data: stringifyJson(cleanData),
-      },
-      select: {
-        id: true,
-        eventId: true,
-        userId: true,
-        createdAt: true,
-      },
+    // --- Step 4: Upsert registration + auto-enroll as org participant ------
+    // Use a transaction to ensure both the registration AND the org membership
+    // are created atomically. The OrganizationMember upsert uses the unique
+    // [organizationId, userId] constraint to avoid duplicates.
+    const registration = await db.$transaction(async (tx) => {
+      const reg = await tx.registration.upsert({
+        where: { eventId_userId: { eventId, userId } },
+        update: { data: stringifyJson(cleanData) },
+        create: {
+          eventId,
+          userId,
+          data: stringifyJson(cleanData),
+        },
+        select: {
+          id: true,
+          eventId: true,
+          userId: true,
+          createdAt: true,
+        },
+      });
+
+      // Auto-enroll the user as a PARTICIPANT in the event's organization
+      // (if they're not already a member). This makes them appear in the
+      // org's participant list and enables cross-org enrollment.
+      if (event.organizationId) {
+        await tx.organizationMember.upsert({
+          where: {
+            organizationId_userId: {
+              organizationId: event.organizationId,
+              userId,
+            },
+          },
+          update: {}, // No update if already a member — keep their existing role
+          create: {
+            organizationId: event.organizationId,
+            userId,
+            role: "PARTICIPANT",
+            status: "ACTIVE",
+            joinedAt: new Date(),
+          },
+        });
+      }
+
+      return reg;
     });
 
     return NextResponse.json({
