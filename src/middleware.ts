@@ -138,6 +138,10 @@ export function middleware(request: NextRequest) {
     if (invite) {
       return buildRedirect(request, `/invite/${encodeURIComponent(invite)}`, ["invite"], false)
     }
+    const gate = url.searchParams.get("gate")
+    if (gate) {
+      return buildRedirect(request, `/gate/${encodeURIComponent(gate)}`, ["gate"], false)
+    }
     if (quiz) {
       return buildRedirect(request, `/quiz/${encodeURIComponent(quiz)}`, ["quiz"], false)
     }

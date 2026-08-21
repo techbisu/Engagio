@@ -39,6 +39,7 @@ export type AdminTab =
   | "payments"
   | "certificates"
   | "results"
+  | "gatepasses"
 
 export type Role = "ADMIN" | "STUDENT"
 

@@ -16,6 +16,7 @@ import {
   ReceiptIndianRupee,
   Award,
   Trophy,
+  QrCode,
   Sparkles,
   Settings as SettingsIcon,
 } from "lucide-react"
@@ -46,6 +47,7 @@ import { QuestionsManager } from "./questions-manager"
 import { LinksManager } from "./links-manager"
 import { AttemptsTable } from "./attempts-table"
 import { UsersList } from "./users-list"
+import { GatePassManager } from "./gate-pass-manager"
 import { RegistrationFormBuilder } from "./registration-form-builder"
 import { RegistrationsList } from "./registrations-list"
 import { CertificatesPanel } from "./certificates-panel"
@@ -86,6 +88,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "attempts", label: "Attempts", icon: ClipboardList, description: "All participant attempts" },
   { id: "payments", label: "Payments", icon: ReceiptIndianRupee, description: "Verify manual UPI payments" },
   { id: "results", label: "Results & Certs", icon: Trophy, description: "Publish results + issue certificates" },
+  { id: "gatepasses", label: "Gate Passes", icon: QrCode, description: "ID cards + check-in" },
   { id: "users", label: "Users", icon: Users, description: "Registered participants" },
   { id: "certificates", label: "Certificates", icon: Award, description: "Issue & verify certificates" },
 ]
@@ -99,6 +102,7 @@ const TAB_LABEL: Record<AdminTab, string> = {
   attempts: "Attempts",
   payments: "Payments",
   results: "Results & Certs",
+  gatepasses: "Gate Passes",
   users: "Users",
   certificates: "Certificates",
 }
@@ -502,6 +506,10 @@ export function AdminShell({
             {tab === "payments" && <PaymentsPanel />}
 
             {tab === "results" && <ResultsCertDashboard />}
+
+            {tab === "gatepasses" && (
+              <GatePassManager eventId={linkPreselectedEventId || ""} />
+            )}
 
             {tab === "users" && <UsersList />}
 
