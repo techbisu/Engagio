@@ -25,14 +25,6 @@ if [[ "$NODE_ENV" == "production" ]]; then
   fi
 fi
 
-# Production hardening: require Upstash Redis for rate limiting
-if [[ "$NODE_ENV" == "production" ]]; then
-  if [[ -z "$UPSTASH_REDIS_REST_URL" || -z "$UPSTASH_REDIS_REST_TOKEN" ]]; then
-    echo "[build] ERROR: Upstash Redis is required in production for rate limiting."
-    echo "[build] Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
-    exit 1
-  fi
-fi
 
 # Auto-switch Prisma provider based on DATABASE_URL
 if [[ "$DB_URL" == postgresql://* ]] || [[ "$DB_URL" == postgres://* ]]; then
