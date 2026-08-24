@@ -42,8 +42,8 @@ npx prisma generate
 
 # Production: run migrations, not db push
 if [[ "$NODE_ENV" == "production" ]]; then
-  echo "[build] Running prisma migrate deploy..."
-  npx prisma migrate deploy
+  echo "[build] Running prisma db push (production — applies schema changes)..."
+  npx prisma db push
 else
   echo "[build] Running prisma db push (dev)..."
   npx prisma db push --accept-data-loss
