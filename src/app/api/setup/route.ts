@@ -218,176 +218,24 @@ export async function GET() {
       results.push(`Backfilled ${questionsWithoutOrg} questions`)
     }
 
-    results.push("")
-    results.push("Now seeding demo organization + event + questions...")
-
-    // ─── 6. Demo Organization ────────────────────────────────────────────
-    let demoOrg = await db.organization.findUnique({ where: { slug: "demo-medical" } })
-    if (!demoOrg) {
-      demoOrg = await db.organization.create({
-        data: {
-          name: "Demo Medical Association",
-          slug: "demo-medical",
-          description: "A demo medical association running a summit with Engagio.",
-          primaryColor: "#10b981",
-          secondaryColor: "#14b8a6",
-          status: "ACTIVE",
-          industry: "Medical",
-          planId: freePlan?.id,
-        },
-      })
-      results.push("Created Demo Medical Association")
-    } else {
-      results.push("Demo org already exists")
-    }
-
-    // ─── 7. Demo Admin ───────────────────────────────────────────────────
-    const demoAdmin = await db.user.upsert({
-      where: { email: "demo.admin@engagio.app" },
-      update: { role: "ADMIN", name: "Dr. Demo Admin" },
-      create: { email: "demo.admin@engagio.app", name: "Dr. Demo Admin", role: "ADMIN" },
-    })
-    await db.organizationMember.upsert({
-      where: { organizationId_userId: { organizationId: demoOrg.id, userId: demoAdmin.id } },
-      update: { role: "OWNER", status: "ACTIVE" },
-      create: { organizationId: demoOrg.id, userId: demoAdmin.id, role: "OWNER", status: "ACTIVE" },
-    }).catch(() => {})
-    results.push("Demo admin ready: demo.admin@engagio.app")
-
-    // ─── 8. Demo Event (with slug) ──────────────────────────────────────
-    let demoEvent = await db.event.findFirst({ where: { organizationId: demoOrg.id, title: "Medical Summit 2026" } })
-    if (!demoEvent) {
-      demoEvent = await db.event.create({
-        data: {
-          organizationId: demoOrg.id,
-          title: "Medical Summit 2026",
-          slug: "medical-summit-2026",
-          description: "A 2-day medical summit covering cardiology, emergency medicine, and recent advances in treatment.",
-          startDate: new Date("2026-01-01"),
-          endDate: new Date("2026-12-31"),
-          isActive: true,
-          paymentMethod: "FREE",
-          certEnabled: true,
-          certTemplate: "modern",
-          certIssueCondition: "PASSED",
-          certPassingScore: 60,
-          certOrgName: "Demo Medical Association",
-        },
-      })
-      results.push("Created demo event: Medical Summit 2026")
-    } else if (!demoEvent.slug) {
-      demoEvent = await db.event.update({ where: { id: demoEvent.id }, data: { slug: "medical-summit-2026" } })
-      results.push("Updated event slug")
-    } else {
-      results.push("Demo event already exists")
-    }
-
-    // ─── 9. Demo Questions ───────────────────────────────────────────────
-    const existingQs = await db.question.count({ where: { eventId: demoEvent.id } })
-    if (existingQs === 0) {
-      const demoQuestions = [
-        { question: "What is the first-line treatment for acute STEMI?", options: ["Beta blockers", "Aspirin + P2Y12 inhibitor", "ACE inhibitors", "Statins"], correctAnswer: 1, category: "Cardiology" },
-        { question: "Which ECG finding is diagnostic of a posterior wall MI?", options: ["ST elevation in V1-V3", "ST depression in V1-V3", "T wave inversion in V1-V3", "Q waves in V1-V3"], correctAnswer: 1, category: "Cardiology" },
-        { question: "What is the most common cause of acute epiglottitis in adults?", options: ["Haemophilus influenzae", "Streptococcus pyogenes", "Staphylococcus aureus", "Candida albicans"], correctAnswer: 0, category: "Emergency Medicine" },
-        { question: "True or False: Type 2 diabetes is always insulin-dependent.", options: ["True", "False"], correctAnswer: 1, category: "Endocrinology", type: "TRUE_FALSE" },
-        { question: "What is the Glasgow Coma Scale score for a patient who opens eyes to pain, makes incomprehensible sounds, and withdraws to pain?", options: ["6", "7", "8", "9"], correctAnswer: 2, category: "Emergency Medicine" },
-        { question: "Which medication is contraindicated in patients with acute asthma?", options: ["Salbutamol", "Ipratropium", "Propranolol", "Montelukast"], correctAnswer: 2, category: "Pharmacology" },
-        { question: "What is the normal anion gap range?", options: ["3-11 mEq/L", "8-12 mEq/L", "12-16 mEq/L", "20-30 mEq/L"], correctAnswer: 1, category: "Nephrology" },
-        { question: "Which antibiotic is the first-line for community-acquired pneumonia?", options: ["Vancomycin", "Amoxicillin", "Metronidazole", "Gentamicin"], correctAnswer: 1, category: "Infectious Disease" },
-        { question: "What is the most sensitive marker for acute kidney injury?", options: ["BUN", "Serum creatinine", "Urine output", "eGFR"], correctAnswer: 1, category: "Nephrology" },
-        { question: "True or False: A patient with a GCS of 13 is considered to have a mild head injury.", options: ["True", "False"], correctAnswer: 0, category: "Emergency Medicine", type: "TRUE_FALSE" },
-      ]
-      for (const [i, q] of demoQuestions.entries()) {
-        await db.question.create({
-          data: {
-            eventId: demoEvent.id,
-            organizationId: demoOrg.id,
-            question: q.question,
-            type: (q as any).type || "MCQ",
-            options: JSON.stringify(q.options),
-            correctAnswer: q.correctAnswer,
-            marks: 1,
-            negativeMarks: 0,
-            category: q.category,
-            difficulty: "MEDIUM",
-            order: i,
-          },
-        })
-      }
-      results.push(`Created ${demoQuestions.length} demo questions`)
-    } else {
-      results.push(`Demo questions already exist (${existingQs})`)
-    }
-
-    // ─── 10. Demo Quiz Link ──────────────────────────────────────────────
-    let quizLink = await db.quizLink.findFirst({ where: { eventId: demoEvent.id } })
-    if (!quizLink) {
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-      let quizSlug = ""
-      for (let i = 0; i < 6; i++) quizSlug += chars.charAt(Math.floor(Math.random() * chars.length))
-      quizLink = await db.quizLink.create({
-        data: {
-          eventId: demoEvent.id,
-          slug: quizSlug,
-          isActive: true,
-          shuffleQuestions: true,
-          timeLimit: 15,
-          maxAttempts: 0,
-          showResults: true,
-          passThreshold: 60,
-          requireFullscreen: true,
-          autoSubmitOnExit: true,
-          tabSwitchDetection: true,
-          copyPasteBlocking: true,
-          rightClickDisable: true,
-          keyboardShortcutBlocking: true,
-          devtoolsDetection: true,
-          antiScreenshot: true,
-          watermarkOverlay: true,
-          aiProctor: false,
-        },
-      })
-      results.push(`Created quiz link: ${quizSlug}`)
-    } else {
-      results.push(`Quiz link already exists: ${quizLink.slug}`)
-    }
-
-    // ─── 11. Demo Participant ─────────────────────────────────────────────
-    const demoParticipant = await db.user.upsert({
-      where: { email: "demo.participant@engagio.app" },
-      update: { name: "Demo Participant" },
-      create: { email: "demo.participant@engagio.app", name: "Demo Participant", role: "STUDENT" },
-    })
-    await db.organizationMember.upsert({
-      where: { organizationId_userId: { organizationId: demoOrg.id, userId: demoParticipant.id } },
-      update: { role: "PARTICIPANT", status: "ACTIVE" },
-      create: { organizationId: demoOrg.id, userId: demoParticipant.id, role: "PARTICIPANT", status: "ACTIVE" },
-    }).catch(() => {})
-    results.push("Demo participant ready: demo.participant@engagio.app")
-
     // ─── 12. Super Admin ─────────────────────────────────────────────────
     const superAdmin = await db.user.upsert({
-      where: { email: "superadmin@engagio.app" },
+      where: { email: process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app" },
       update: { role: "ADMIN", name: "Super Admin" },
-      create: { email: "superadmin@engagio.app", name: "Super Admin", role: "ADMIN" },
+      create: { email: process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app", name: "Super Admin", role: "ADMIN" },
     })
     await db.organizationMember.upsert({
       where: { organizationId_userId: { organizationId: defaultOrg.id, userId: superAdmin.id } },
       update: {},
       create: { organizationId: defaultOrg.id, userId: superAdmin.id, role: "OWNER", status: "ACTIVE" },
     }).catch(() => {})
-    results.push("Super admin ready: superadmin@engagio.app")
+    results.push("Super admin ready: " + (process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app"))
 
     results.push("")
-    results.push("🎉 Setup complete! All demo data is ready.")
+    results.push("🎉 Setup complete!")
     results.push("")
-    results.push("Demo accounts (use on login page Quick Demo tab):")
-    results.push("  Org Admin:    demo.admin@engagio.app")
-    results.push("  Participant:  demo.participant@engagio.app")
     results.push("")
     results.push(`Public URLs:`)
-    results.push(`  Org page:   /org/demo-medical`)
-    results.push(`  Event page: /event/medical-summit-2026`)
     results.push(`  Direct quiz: /quiz/${quizLink?.slug}`)
 
     return NextResponse.json({

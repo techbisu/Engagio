@@ -24,9 +24,7 @@ export function assertEnv(): void {
     errors.push("NEXTAUTH_SECRET must be set to a real random value")
   }
 
-  if (!process.env.SUPERADMIN_EMAIL) {
-    errors.push("SUPERADMIN_EMAIL must be set")
-  }
+  // SUPERADMIN_EMAIL is optional — defaults to superadmin@engagio.app if not set
 
   const encKey = process.env.PAYMENT_ENCRYPTION_KEY || ""
   if (

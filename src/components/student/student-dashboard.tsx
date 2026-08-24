@@ -46,7 +46,7 @@ import type { AttemptListResponse, AttemptListItem } from "./api"
 import { cn, formatDuration } from "@/lib/utils"
 import type { SafeUser } from "@/types"
 
-const DEMO_SLUG = "R85XSX"
+// Demo quiz removed for production
 
 interface StudentDashboardProps {
   user: SafeUser
@@ -276,7 +276,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
             <div>
               <CardTitle>Take a Quiz</CardTitle>
               <CardDescription>
-                Enter the quiz code your instructor shared (e.g. {DEMO_SLUG}) or
+                Enter the quiz code your instructor shared (e.g. ABC123) or
                 paste the full quiz link.
               </CardDescription>
             </div>
@@ -295,7 +295,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                     id="quiz-slug"
                     value={slugInput}
                     onChange={(e) => setSlugInput(e.target.value)}
-                    placeholder={`e.g. ${DEMO_SLUG} or paste full link`}
+                    placeholder="Enter quiz code"
                     className="pl-9"
                     autoComplete="off"
                     autoCapitalize="characters"
@@ -311,18 +311,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                 <PlayCircle className="size-4" /> Start Quiz
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSlugInput(DEMO_SLUG)}
-                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
-              >
-                <Sparkles className="size-4" /> Try the demo quiz ({DEMO_SLUG})
-              </Button>
-            </div>
-          </form>
+            </form>
         </CardContent>
       </Card>
 
@@ -354,7 +343,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                     id="leaderboard-slug"
                     value={leaderboardInput}
                     onChange={(e) => setLeaderboardInput(e.target.value)}
-                    placeholder={`e.g. ${DEMO_SLUG}`}
+                    placeholder="Enter quiz code"
                     className="pl-9"
                     autoComplete="off"
                     autoCapitalize="characters"

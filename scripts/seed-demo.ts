@@ -51,12 +51,13 @@ async function main() {
   // Default password: Engagio@2026 (can be changed after first login).
   // TOTP 2FA can be enabled via the super admin security settings.
   // platformRole=SUPERADMIN replaces the old SUPERADMIN_EMAIL env-var check.
-  const SUPERADMIN_PASSWORD = "Engagio@2026"
+  const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app"
+  const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || "Engagio@2026"
   const superAdminHash = await bcrypt.hash(SUPERADMIN_PASSWORD, 10)
   const superAdmin = await db.user.upsert({
-    where: { email: "superadmin@engagio.app" },
+    where: { email: SUPERADMIN_EMAIL },
     update: { role: "ADMIN", platformRole: "SUPERADMIN", name: "Super Admin", passwordHash: superAdminHash },
-    create: { email: "superadmin@engagio.app", name: "Super Admin", role: "ADMIN", platformRole: "SUPERADMIN", passwordHash: superAdminHash },
+    create: { email: SUPERADMIN_EMAIL, name: "Super Admin", role: "ADMIN", platformRole: "SUPERADMIN", passwordHash: superAdminHash },
   })
   console.log(`  ✓ Super Admin: ${superAdmin.email} (password: ${SUPERADMIN_PASSWORD}, platformRole: SUPERADMIN)`)
 

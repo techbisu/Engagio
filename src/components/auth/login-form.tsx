@@ -44,7 +44,7 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
-  const [tab, setTab] = React.useState<'login' | 'demo'>('login')
+  // Demo tab removed for production
   const [email, setEmail] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [demoLoading, setDemoLoading] = React.useState<string | null>(null)
@@ -154,14 +154,9 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as 'login' | 'demo')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Sign In</TabsTrigger>
-              <TabsTrigger value="demo">Quick Demo</TabsTrigger>
-            </TabsList>
 
             {/* ─── Sign In Tab ──────────────────────────────────────── */}
-            <TabsContent value="login" className="mt-5 space-y-4">
+            <div className="space-y-4">
               {/* Google — primary login method for org admins */}
               <Button
                 type="button"
@@ -290,34 +285,7 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
                   🔒 Super Admin? Use <code className="font-mono">/superadmin/login</code>
                 </p>
               </div>
-            </TabsContent>
-
-            {/* ─── Quick Demo Tab ──────────────────────────────────── */}
-            <TabsContent value="demo" className="mt-5 space-y-3">
-              <DemoButton
-                onClick={() => handleDemo('orgadmin')}
-                loading={demoLoading === 'orgadmin'}
-                icon={Building2}
-                title="Organization Admin"
-                description="Demo Medical Association — manage events & certificates."
-                accent="from-emerald-600 to-teal-500"
-              />
-              <DemoButton
-                onClick={() => handleDemo('participant')}
-                loading={demoLoading === 'participant'}
-                icon={ShieldCheck}
-                title="Participant"
-                description="Take a quiz with anti-cheat, view results & certificates."
-                accent="from-slate-700 to-slate-800 dark:from-slate-200 dark:to-slate-300"
-                textOnDark
-              />
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900 dark:bg-amber-950/20">
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                  🔒 Super Admin has a separate secure login at <code className="font-mono">/superadmin/login</code>
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
+          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
           <p className="text-center text-xs text-muted-foreground">
@@ -334,22 +302,3 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
   )
 }
 
-function DemoButton({
-  onClick, loading, icon: Icon, title, description, accent, textOnDark = false,
-}: {
-  onClick: () => void; loading: boolean; icon: React.ComponentType<{ className?: string }>; title: string; description: string; accent: string; textOnDark?: boolean
-}) {
-  return (
-    <button onClick={onClick} disabled={loading}
-      className={`group relative flex w-full items-center gap-3 rounded-xl border border-border bg-background p-4 text-left transition-all hover:border-transparent hover:shadow-md disabled:opacity-60 ${textOnDark ? 'text-white' : 'text-foreground'}`}>
-      <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accent} text-white shadow-sm`}>
-        {loading ? <Loader2 className="size-5 animate-spin" /> : <Icon className="size-5" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold ${textOnDark ? 'text-white' : 'text-foreground'}`}>{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-    </button>
-  )
-}
