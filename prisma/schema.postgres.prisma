@@ -145,4 +145,9 @@ model QuizAttempt {
   @@index([userId])
   @@index([quizLinkId])
   @@index([eventId])
+  @@index([quizLinkId, status])
+  @@index([eventId, status])
+  @@index([userId, quizLinkId])
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([eventId, startedAt(sort: Desc)])
 }

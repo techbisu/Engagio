@@ -136,6 +136,7 @@ model Event {
   activities     Activity[]
   landingSections EventLandingSection[]
   gatePasses     GatePass[]
+  @@index([organizationId])  // events by org (admin queries)
 }
 
 // ─── Event Landing Page Builder ─────────────────────────────────────────────
@@ -295,6 +296,12 @@ model QuizAttempt {
   @@index([userId])
   @@index([quizLinkId])
   @@index([eventId])
+  @@index([quizLinkId, status])
+  @@index([quizLinkId, status, publishedAt])
+  @@index([eventId, status])
+  @@index([userId, quizLinkId])
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([eventId, startedAt(sort: Desc)])
 }
 
 // Dynamic registration form field — admin defines these per event.
