@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ParticipantLogin } from '@/components/auth/participant-login'
+import { EventRegistrationForm } from '@/components/public/event-registration-form'
 import { LandingSectionsRenderer } from '@/components/public/landing-sections-renderer'
 import type { ViewName, SafeUser, LandingSectionDto } from '@/types'
 
@@ -274,34 +275,62 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
         </div>
       </section>
 
-      {/* ═══ DETAILS SECTION — stats grid + security info ═══ */}
-      <section className="border-t border-white/5 bg-slate-900/50">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <DetailStat icon={FileQuestion} label="Questions" value={String(questionCount || 0)} />
-            <DetailStat icon={Clock} label="Duration" value={quizLink?.timeLimit ? `${quizLink.timeLimit} min` : '—'} />
-            <DetailStat icon={Target} label="Pass Mark" value={quizLink ? `${quizLink.passThreshold}%` : '—'} />
-            <DetailStat icon={Calendar} label="Date" value={startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-          </div>
-
-          {/* Security info */}
-          {quizLink && quizLink.requireFullscreen && (
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-amber-500/15">
-                <ShieldCheck className="size-5 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-amber-200">
-                  Anti-cheat protection enabled
-                </p>
-                <p className="mt-0.5 text-xs text-amber-200/70">
-                  Fullscreen mode, tab-switch detection, copy/paste blocking, and watermark overlay.
-                </p>
-              </div>
+        {/* ═══ REGISTRATION SECTION (if registration required) ═══ */}
+        {event.requireRegistration && !showLogin && !canStart && (
+          <section className="border-t border-white/5 bg-slate-900/50">
+            <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4 }}
+              >
+                <div className="mb-8 text-center">
+                  <h2 className="text-2xl font-bold text-white sm:text-3xl">Complete Registration</h2>
+                  <p className="mt-2 text-sm text-white/60">
+                    Register for {event.title} to gain access to the event
+                  </p>
+                </div>
+                <EventRegistrationForm
+                  eventId={event.id}
+                  onSuccess={() => {
+                    // Refresh event data to check if registration completed
+                    window.location.reload()
+                  }}
+                />
+              </motion.div>
             </div>
-          )}
-        </div>
-      </section>
+          </section>
+        )}
+
+        {/* ═══ DETAILS SECTION — stats grid + security info ═══ */}
+        <section className="border-t border-white/5 bg-slate-900/50">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <DetailStat icon={FileQuestion} label="Questions" value={String(questionCount || 0)} />
+              <DetailStat icon={Clock} label="Duration" value={quizLink?.timeLimit ? `${quizLink.timeLimit} min` : '—'} />
+              <DetailStat icon={Target} label="Pass Mark" value={quizLink ? `${quizLink.passThreshold}%` : '—'} />
+              <DetailStat icon={Calendar} label="Date" value={startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+            </div>
+
+            {/* Security info */}
+            {quizLink && quizLink.requireFullscreen && (
+              <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-amber-500/15">
+                  <ShieldCheck className="size-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-amber-200">
+                    Anti-cheat protection enabled
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-200/70">
+                    Fullscreen mode, tab-switch detection, copy/paste blocking, and watermark overlay.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
       {/* ═══ CUSTOM SECTIONS (built by org admin) ═══ */}
       {customSections.length > 0 && (
