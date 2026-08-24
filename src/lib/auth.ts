@@ -6,6 +6,23 @@ import bcrypt from "bcryptjs"
 import { headers as nextHeaders, cookies as nextCookies } from "next/headers"
 import type { NextRequest } from "next/server"
 import { db } from "./db"
+import { rateLimit } from "./rate-limit"
+
+/**
+ * Extract the client IP from a next-auth RequestInternal or a NextRequest.
+ * Works with both a plain-object `headers` (next-auth) and a `Headers`
+ * instance (route handlers).
+ */
+function requestIp(req: unknown): string {
+  const headers = (req as any)?.headers
+  if (!headers) return "unknown"
+  const get = (k: string): string | undefined =>
+    typeof headers.get === "function" ? headers.get(k) ?? undefined : headers[k]
+  const forwarded = get("x-forwarded-for")
+  if (forwarded) return forwarded.split(",")[0].trim()
+  const real = get("x-real-ip")
+  return real || "unknown"
+}
 
 // ─── Next.js 16 + next-auth v4 compatibility shim ───────────────────────────
 // next-auth v4.24.x calls `req.headers.get("cookie")` internally, but when
@@ -85,6 +102,26 @@ export const isEmailSuperAdmin = (email?: string | null): boolean => {
   return email.toLowerCase().trim() === SUPERADMIN_EMAIL
 }
 
+// DB-backed platform-admin check. Re-fetches User.platformRole on every
+// request so demotions take effect immediately, instead of trusting the
+// value cached in the JWT at login time.
+export async function isDbPlatformAdmin(session: {
+  user?: { id?: string | null }
+} | null): Promise<boolean> {
+  const userId = session?.user?.id
+  if (!userId) return false
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { platformRole: true },
+    })
+    return user?.platformRole === "SUPERADMIN"
+  } catch (e) {
+    console.error("[isDbPlatformAdmin] failed:", e)
+    return false
+  }
+}
+
 // Additional admin emails from env (for org-level admins)
 const adminEmails = (process.env.ADMIN_EMAILS || "")
   .split(",")
@@ -123,15 +160,22 @@ export const authOptions: NextAuthOptions = {
         totpCode: { label: "TOTP Code", type: "text" },
         skipTotp: { label: "Skip TOTP", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         const email = credentials?.email?.trim().toLowerCase()
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null
 
+        // Brute-force protection: rate limit credential attempts per IP and per
+        // email. Per-email limiting also defends against distributed password
+        // guessing on a specific account (e.g. the super admin).
+        const ip = requestIp(req)
+        const ipCheck = await rateLimit(`login:ip:${ip}`, 30, 60_000)
+        if (!ipCheck.allowed) throw new Error("RATE_LIMITED")
+        const emailCheck = await rateLimit(`login:email:${email}`, 10, 60_000)
+        if (!emailCheck.allowed) throw new Error("RATE_LIMITED")
+
         const password = credentials?.password?.trim()
         const name = credentials?.name?.trim() || email.split("@")[0] || "Participant"
-        const asAdmin = credentials?.asAdmin === "true"
         const totpCode = credentials?.totpCode?.trim()
-        const skipTotp = credentials?.skipTotp === "true"
 
         // ─── Lookup existing user ────────────────────────────────────
         const existing = await db.user.findUnique({ where: { email } })
@@ -145,21 +189,22 @@ export const authOptions: NextAuthOptions = {
           }
 
           // ─── TOTP (2FA) check for super admin accounts ──────────────
-          // If the user has TOTP enabled AND this is a super admin login
-          // (asAdmin=true OR the email matches SUPERADMIN_EMAIL), require
-          // a valid TOTP code. The client sends skipTotp=true on the first
-          // step to detect that TOTP is required (returns a special error).
-          const isSuperAdminEmail = isEmailSuperAdmin(existing.email)
-          const requiresTotp = existing.totpEnabled && existing.totpSecret && isSuperAdminEmail
+          // If the user has TOTP enabled AND this is a platform admin
+          // (User.platformRole === "SUPERADMIN" from the DB), a valid TOTP
+          // code is ALWAYS required. Previously this was keyed to the
+          // SUPERADMIN_EMAIL env var and a client-supplied `skipTotp=true`
+          // skipped the block and granted a full session without 2FA — a
+          // bypass. The client detects TOTP presence via
+          // /api/auth/totp/status (before submitting), so there is no
+          // legitimate flow that needs to skip this check.
+          const requiresTotp =
+            existing.totpEnabled && existing.totpSecret && existing.platformRole === "SUPERADMIN"
 
-          if (requiresTotp && !skipTotp) {
+          if (requiresTotp) {
             if (!totpCode) {
               // Signal to the client that a TOTP code is required.
-              // We return null (auth failure) but the client can detect
-              // this case by re-querying the user's totpEnabled status
-              // via /api/auth/totp/status after a failed login.
-              // For a cleaner UX, we throw a custom error that next-auth
-              // surfaces as the error message.
+              // Throw a custom error — no session is ever issued without
+              // a valid code.
               throw new Error("TOTP_REQUIRED")
             }
             // Verify the TOTP code
@@ -176,16 +221,25 @@ export const authOptions: NextAuthOptions = {
             name: existing.name,
             image: existing.image,
             role: existing.role,
+            platformRole: existing.platformRole ?? "USER",
           } as any
         }
 
         // ─── Create new user ─────────────────────────────────────────
         // Determine role based on context:
         // - Superadmin email → ADMIN (platform super admin)
-        // - asAdmin flag → ADMIN (org registration/login page)
         // - In ADMIN_EMAILS env → ADMIN
         // - Otherwise → STUDENT (participant)
-        const shouldBeAdmin = asAdmin || isEmailAdmin(email)
+        //
+        // NOTE: the client-supplied `asAdmin` flag is intentionally ignored
+        // here. Accepting it let ANY caller create an ADMIN-role account for
+        // any email, which unlocked every legacy `requireAdmin()` admin route
+        // (quiz-links, questions, activities, certificates, …) across ALL
+        // tenants. Admin role is now only granted when the email is in the
+        // trusted env lists (or the user already has ADMIN in the DB — they
+        // take the `existing` path above). Org-registration admins are created
+        // by /api/organizations POST with a hashed password, not via this flag.
+        const shouldBeAdmin = isEmailAdmin(email)
 
         // If a password was provided, hash it (for org admins registering)
         let passwordHash: string | null = null

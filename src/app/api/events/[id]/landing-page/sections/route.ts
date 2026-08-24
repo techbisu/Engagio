@@ -1,6 +1,7 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession, authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import type { LandingSectionDto, LandingSectionType } from "@/types";
 
 const ALLOWED_TYPES: LandingSectionType[] = [
@@ -17,11 +18,6 @@ const ALLOWED_TYPES: LandingSectionType[] = [
   "STATS",
   "CUSTOM",
 ];
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as { role?: string } | undefined)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -40,12 +36,16 @@ type RouteContext = { params: Promise<{ id: string }> };
  */
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
     const event = await db.event.findUnique({ where: { id }, select: { id: true } });
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(dto, { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

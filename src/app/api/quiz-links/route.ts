@@ -1,14 +1,9 @@
+import { checkBodySize, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { generateQuizSlug } from "@/lib/utils";
 import type { QuizLinkDto } from "@/types";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 /** Shared mapper — includes every field exposed on QuizLinkDto. */
 export function toQuizLinkDto(link: any): QuizLinkDto {
@@ -79,30 +74,37 @@ const BOOLEAN_TOGGLES = [
   "isActive",
 ] as const;
 
-/** GET /api/quiz-links — list all quiz links (admin only). */
-export async function GET() {
+/** GET /api/quiz-links — list quiz links for the current org (org-scoped admin). */
+export async function GET(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "assessment.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) return NextResponse.json([]);
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const links = await db.quizLink.findMany({
+      where: { event: { organizationId: auth.ctx.orgId } },
       include: { event: { select: { id: true, title: true, description: true, image: true } } },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(links.map(toQuizLinkDto));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** POST /api/quiz-links — create a quiz link (admin only). */
+/** POST /api/quiz-links — create a quiz link (org-scoped admin). */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "assessment.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const body = await req.json();
     const { eventId, expiresAt, timeLimit, maxAttempts, passThreshold, questionCount } =
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "eventId is required" }, { status: 400 });
     }
     const event = await db.event.findUnique({ where: { id: eventId } });
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
@@ -223,7 +225,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(toQuizLinkDto(created), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -17,13 +17,23 @@ import * as React from "react"
 import { useSession } from "next-auth/react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { signOut } from "next-auth/react"
-import { clearOrgSlug } from "@/components/organization/api"
+import {
+  clearOrgSlug,
+  getOrgSlug,
+} from "@/components/organization/api"
 import { useAppStore } from "@/store/app-store"
 import type { SafeUser } from "@/types"
 
 async function fetchMe(): Promise<SafeUser | null> {
   try {
-    const res = await fetch("/api/me", { credentials: "include" })
+    // Send the active org slug so the server resolves permissions for the
+    // SAME org the admin panel is showing (matches the API routes' header).
+    const orgSlug =
+      typeof window !== "undefined" ? getOrgSlug() : null
+    const res = await fetch("/api/me", {
+      credentials: "include",
+      headers: orgSlug ? { "x-org-slug": orgSlug } : undefined,
+    })
     if (!res.ok) return null
     const data = await res.json()
     return (data as SafeUser) ?? null

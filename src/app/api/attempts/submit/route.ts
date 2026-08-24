@@ -1,3 +1,4 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
@@ -30,7 +31,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as SubmitBody;
+  const bodyResult = await enforceLimit<SubmitBody>(req, BODY_LIMITS.STANDARD);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const {
       attemptId,
       answers,

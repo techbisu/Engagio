@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseJsonArray } from "@/lib/utils";
 
 export async function GET(
@@ -9,16 +8,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
-    }
-
-    if (session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "analytics.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;
@@ -35,7 +30,7 @@ export async function GET(
       },
     });
 
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json(
         { error: "Event not found" },
         { status: 404 }

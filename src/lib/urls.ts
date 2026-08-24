@@ -14,6 +14,7 @@
  * (The base domain is configurable via BASE_DOMAIN env var.)
  */
 
+import { randomBytes } from "crypto"
 import { db } from "./db"
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || "engagio.app"
@@ -145,13 +146,10 @@ export async function resolveOrgFromHost(
 /**
  * Generate the DNS verification token for a custom domain.
  * Format: "engagio-verify-{random}"
+ * Security: Uses crypto.randomBytes() (not Math.random).
  */
 export function generateDomainVerificationToken(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let random = ""
-  for (let i = 0; i < 16; i++) {
-    random += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
+  const random = randomBytes(8).toString("hex")
   return `engagio-verify-${random}`
 }
 

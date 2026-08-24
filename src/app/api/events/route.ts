@@ -1,8 +1,10 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
+import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
-import { requireOrgRole, orgScope, auditLog, type TenantContext } from "@/lib/tenant";
+import { requirePermission, orgScope, auditLog, type TenantContext } from "@/lib/tenant";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
 
 /** Check the session for an admin role. Returns true if the caller is an admin. */
@@ -60,10 +62,10 @@ function toEventDto(e: any): EventDto {
 /** GET /api/events — list all events in the current organization (org-scoped). */
 export async function GET(req: NextRequest) {
   try {
-    // Use org context: requires EVENT_MANAGER role. Platform admins see all.
-    const ctxResult = await requireOrgRole(req, "EVENT_MANAGER");
+    // Use org context: requires event.view (permission matrix). Platform admins see all.
+    const authResult = await requirePermission(req, "event.view");
     let ctx: TenantContext;
-    if ("error" in ctxResult) {
+    if (!authResult.ok) {
       // Fallback to legacy admin check for backward compat (single-tenant admins)
       if (!(await requireAdmin())) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -71,7 +73,7 @@ export async function GET(req: NextRequest) {
       // Legacy admin without org membership — return empty (no org scope)
       return NextResponse.json([]);
     }
-    ctx = ctxResult;
+    ctx = authResult.ctx;
 
     const events = await db.event.findMany({
       where: orgScope(ctx),
@@ -93,7 +95,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -102,15 +104,27 @@ export async function GET(req: NextRequest) {
 /** POST /api/events — create a new event in the current organization. */
 export async function POST(req: NextRequest) {
   try {
-    const ctxResult = await requireOrgRole(req, "EVENT_MANAGER");
+    const authResult = await requirePermission(req, "event.create");
     let ctx: TenantContext;
-    if ("error" in ctxResult) {
+    if (!authResult.ok) {
       if (!(await requireAdmin())) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       return NextResponse.json({ error: "No organization context" }, { status: 403 });
     }
-    ctx = ctxResult;
+    ctx = authResult.ctx;
+
+    // ── Soft-lock: a non-ACTIVE (SUSPENDED/ARCHIVED) org cannot create events ──
+    const orgRow = await db.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { status: true },
+    });
+    if (orgRow && orgRow.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "This organization is suspended and cannot create events." },
+        { status: 403 }
+      );
+    }
 
     // ── Usage limit enforcement (server-side) ──
     const { checkUsageLimit } = await import("@/lib/usage");
@@ -122,7 +136,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+  const bodyResult = await enforceLimit(req, BODY_LIMITS.STANDARD);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data as any;
     const { title, description, image, startDate, endDate, isActive, requireRegistration,
             paymentMethod, paymentAmount, paymentCurrency, paymentInstructions, upiId, upiLink, qrCodeUrl, requireTransactionRef, requireScreenshot,
             certEnabled, certTemplate, certIssueCondition, certPassingScore, certAutoGenerate, certOrgName, certSigneeName, certSigneeTitle, certSigneeImage, certLogo,
@@ -142,7 +158,7 @@ export async function POST(req: NextRequest) {
         .replace(/^-|-$/g, "")
         .slice(0, 60);
       // Add random suffix for uniqueness
-      eventSlug += "-" + Math.random().toString(36).slice(2, 6);
+      eventSlug += "-" + randomBytes(3).toString("hex");
     }
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -225,7 +241,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(toEventDto(event), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

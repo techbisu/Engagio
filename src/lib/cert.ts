@@ -1,16 +1,19 @@
 import QRCode from "qrcode"
+import { randomBytes } from "crypto"
 
 /**
  * Generate a human-readable certificate number.
  * Format: EVT-{YEAR}-{6-char-base32} e.g. EVT-2026-A8F42K
  * Uses unambiguous characters (no 0/O/1/I).
+ * Security: Uses crypto.randomBytes() (not Math.random).
  */
 export function generateCertificateNumber(): string {
   const year = new Date().getFullYear()
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  const bytes = randomBytes(6)
   let random = ""
   for (let i = 0; i < 6; i++) {
-    random += chars.charAt(Math.floor(Math.random() * chars.length))
+    random += chars.charAt(bytes[i] % chars.length)
   }
   return `EVT-${year}-${random}`
 }
@@ -21,8 +24,7 @@ export function generateCertificateNumber(): string {
  * is long and unguessable, while the number is human-readable.
  */
 export function generateVerificationToken(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
+  const bytes = randomBytes(16)
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")

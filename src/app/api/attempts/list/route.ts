@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, type TenantContext } from "@/lib/tenant";
 import { db } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -13,16 +14,31 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const isAdmin = session.user.role === "ADMIN";
     const url = new URL(req.url);
     const all = url.searchParams.get("all") === "true";
     const eventId = url.searchParams.get("eventId") || undefined;
 
-    const showAll = isAdmin && all;
+    // The admin (`all=true`) view is org-scoped and permission-gated. The
+    // default view (a participant's own attempts) must stay available to
+    // every authenticated user.
+    let adminCtx: TenantContext | null = null;
+    if (all) {
+      const auth = await requirePermission(req, "result.view");
+      if (!auth.ok) {
+        if (auth.legacyAdmin) {
+          return NextResponse.json({ attempts: [], total: 0 });
+        }
+        return NextResponse.json({ error: auth.error }, { status: auth.status });
+      }
+      adminCtx = auth.ctx;
+    }
 
-    if (showAll) {
+    if (all && adminCtx) {
       const attempts = await db.quizAttempt.findMany({
-        where: eventId ? { eventId } : undefined,
+        where: {
+          ...(eventId ? { eventId } : {}),
+          event: { organizationId: adminCtx.orgId },
+        },
         orderBy: { startedAt: "desc" },
         take: 200,
         include: {

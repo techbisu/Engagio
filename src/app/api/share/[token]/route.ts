@@ -76,7 +76,7 @@ export async function GET(_req: Request, ctxParams: RouteContext) {
   } catch (e) {
     console.error("[GET /api/share/[token]] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

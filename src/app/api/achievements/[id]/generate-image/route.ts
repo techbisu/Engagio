@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, ctxParams: RouteContext) {
   } catch (e) {
     console.error("[POST /api/achievements/[id]/generate-image] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

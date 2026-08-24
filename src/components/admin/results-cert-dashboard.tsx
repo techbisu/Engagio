@@ -1894,7 +1894,8 @@ function Timeline({ row, event }: { row: ParticipantRow; event?: EventDto }) {
 
   // Determine step states.
   const registered = true // we only have rows for users with attempts/certs
-  const requiresPayment = event?.paymentMethod === "MANUAL"
+  const requiresPayment =
+    !!event?.paymentMethod && event.paymentMethod !== "FREE"
   const submitted = !!a && a.status !== "IN_PROGRESS"
   const isTerminal =
     !!a &&

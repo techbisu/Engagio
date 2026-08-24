@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
 import type { EventFieldDto, EventFieldType } from "@/types";
 
@@ -64,7 +65,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(fields.map(toFieldDto));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -81,16 +82,27 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "registration.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const orgCtx = auth.ctx;
     const { id } = await ctx.params;
     const event = await db.event.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, organizationId: true },
     });
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+    if (!ownsResource(event, orgCtx)) {
+      return NextResponse.json(
+        { error: "Event not found" },
+        { status: 404 }
+      );
     }
 
     const body = await req.json().catch(() => null);
@@ -160,7 +172,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toFieldDto(field), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

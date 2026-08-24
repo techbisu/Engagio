@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { memo } from "react"
 import { Flag, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -15,7 +16,7 @@ interface QuestionNavigatorProps {
   onJump: (idx: number) => void
 }
 
-export function QuestionNavigator({
+export const QuestionNavigator = memo(function QuestionNavigator({
   total,
   current,
   answered,
@@ -136,4 +137,5 @@ export function QuestionNavigator({
       </div>
     </div>
   )
-}
+
+})

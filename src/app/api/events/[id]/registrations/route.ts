@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import type { RegistrationDto } from "@/types";
 
 /** Map a Prisma Registration row (with `user` relation) to RegistrationDto. */
@@ -62,17 +63,26 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "registration.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) return NextResponse.json([]);
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const orgCtx = auth.ctx;
 
     const { id } = await ctx.params;
     const event = await db.event.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, organizationId: true },
     });
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+    if (!ownsResource(event, orgCtx)) {
+      return NextResponse.json(
+        { error: "Event not found" },
+        { status: 404 }
+      );
     }
 
     // Fetch fields ordered (used for both CSV columns and value lookups).
@@ -142,7 +152,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(registrations.map(toRegistrationDto));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

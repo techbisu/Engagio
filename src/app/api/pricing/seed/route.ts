@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getActiveCurrencies } from "@/lib/i18n";
@@ -59,7 +59,8 @@ const SEED_PRICES: Record<string, Record<string, [number, number]>> = {
 
 async function requirePlatformAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return (session?.user as any)?.role === "ADMIN"
+  // DB-backed: re-fetch User.platformRole so demotions apply immediately.
+  return isDbPlatformAdmin(session)
 }
 
 export async function POST() {
@@ -160,7 +161,6 @@ export async function POST() {
     return NextResponse.json(
       {
         error: "Internal Server Error",
-        detail: e instanceof Error ? e.message : String(e),
       },
       { status: 500 },
     )

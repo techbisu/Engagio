@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import {
   generateCertificateNumber,
   generateVerificationToken,
@@ -12,14 +11,6 @@ import type {
   CertStatus,
   CertTemplate,
 } from "@/types";
-
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as
-    | { id?: string; name?: string | null; email?: string | null; role?: string }
-    | undefined;
-  return user?.role === "ADMIN" ? user : null;
-}
 
 function toCertDto(c: any): CertificateDto {
   return {
@@ -331,13 +322,27 @@ async function issueFor(opts: {
  */
 export async function POST(req: NextRequest) {
   try {
-    const admin = await requireAdmin();
-    if (!admin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "certificate.generate");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const body = await req.json();
     const { userId, eventId, attemptId, userIds, manualOverride, regenerate } = body || {};
-    const issuedBy = (admin as { id?: string }).id ?? null;
+    const issuedBy = auth.ctx.userId;
+
+    // The target event must belong to the caller's organization.
+    if (typeof eventId === "string" && eventId) {
+      const event = await db.event.findUnique({
+        where: { id: eventId },
+        select: { id: true },
+      });
+      if (!event || !ownsResource(event, auth.ctx)) {
+        return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      }
+    }
 
     // --- BULK ----------------------------------------------------------------
     if (Array.isArray(userIds) && eventId) {
@@ -395,7 +400,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

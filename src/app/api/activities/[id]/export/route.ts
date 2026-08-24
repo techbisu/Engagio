@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseJsonArray, parseResponseMetadata } from "@/lib/activity-mapper";
-
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -34,17 +27,24 @@ function row(values: (string | number | null | undefined)[]): string {
  *   - Q_AND_A: one row per submitted question with upvotes + status.
  *   - QUIZ/LIVE_QUIZ: refuse (use the existing assessment export).
  */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "result.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
     const activity = await db.activity.findUnique({
       where: { id },
-      include: { questions: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        questions: { orderBy: { sortOrder: "asc" } },
+        event: { select: { organizationId: true } },
+      },
     });
-    if (!activity) {
+    if (!activity || !ownsResource(activity.event, auth.ctx)) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
 
@@ -221,7 +221,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

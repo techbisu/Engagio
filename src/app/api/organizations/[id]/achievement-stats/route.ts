@@ -73,7 +73,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   } catch (e) {
     console.error("[GET /api/organizations/[id]/achievement-stats] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

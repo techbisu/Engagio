@@ -26,13 +26,12 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Only super admins can set up TOTP
-    const isSuper = user.email.toLowerCase().trim() === (
-      process.env.SUPERADMIN_EMAIL || "superadmin@engagio.app"
-    ).toLowerCase().trim();
-    if (!isSuper) {
+    // Only platform admins (User.platformRole === "SUPERADMIN" from the DB)
+    // can set up TOTP — the DB field is authoritative, not the
+    // SUPERADMIN_EMAIL env var.
+    if (user.platformRole !== "SUPERADMIN") {
       return NextResponse.json(
-        { error: "TOTP is only available for super admin accounts" },
+        { error: "TOTP is only available for platform admin accounts" },
         { status: 403 }
       );
     }
@@ -63,7 +62,7 @@ export async function GET() {
   } catch (e) {
     console.error("[GET /api/auth/totp/setup] error:", e);
     return NextResponse.json(
-      { error: "Failed to generate TOTP setup", detail: String(e) },
+      { error: "Failed to generate TOTP setup" },
       { status: 500 }
     );
   }

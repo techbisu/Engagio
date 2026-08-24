@@ -128,7 +128,7 @@ function SidebarBody({
       {config.aiProctor && proctor && (
         <>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900 dark:border-slate-700">
-            <div className="relative aspect-video w-full bg-black">
+            <div className="relative w-full max-h-32 overflow-hidden rounded-md bg-black sm:max-h-40">
               <video
                 ref={videoRef}
                 className="size-full object-cover"

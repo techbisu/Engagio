@@ -45,7 +45,7 @@ interface OrgData {
 export function OrgLandingPage({ orgSlug, onNavigate, onOpenEvent }: OrgLandingPageProps) {
   const { data, isLoading, isError } = useQuery<OrgData>({
     queryKey: ['public-org', orgSlug],
-    queryFn: () => fetch(`/api/public/org?slug=${orgSlug}`).then(r => {
+    queryFn: () => fetch(`/api/public/org/${encodeURIComponent(orgSlug)}`).then(r => {
       if (!r.ok) throw new Error('Organization not found')
       return r.json()
     }),

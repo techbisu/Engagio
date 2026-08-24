@@ -15,10 +15,12 @@
  * existing data remains accessible.
  */
 
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import type { NextRequest } from "next/server"
 import { authOptions } from "./auth"
 import { db } from "./db"
+import type { Permission } from "./permissions"
+import { hasPermission } from "./permissions"
 import type { Role } from "@/types"
 
 export type OrgRole =
@@ -102,15 +104,39 @@ export async function getTenantContext(
   const session = await getServerSession(authOptions)
   if (!session?.user?.id || !session.user.email) return null
 
-  const isPlatformAdmin = (session.user as any).platformRole === "SUPERADMIN" ||
-    (session.user as any).isSuperAdmin === true
+  // DB-backed (re-fetches User.platformRole per request so demotions apply
+  // immediately rather than at next login).
+  const isPlatformAdmin = await isDbPlatformAdmin(session)
 
-  // Determine the target org slug from header or query
+  // Determine the target org slug from:
+  // 1. x-org-slug header (explicit org switch via OrgSwitcher)
+  // 2. ?org= query param (legacy/URL-based)
+  // 3. x-engagio-org-host header (subdomain-based, set by middleware)
+  // 4. User's first org membership (fallback)
   let targetSlug: string | null = null
   if (req) {
     targetSlug =
-      req.headers.get("x-org-slug") ||
-      new URL(req.url).searchParams.get("org")
+      req.headers.get('x-org-slug') ||
+      new URL(req.url).searchParams.get('org')
+
+    // Subdomain-based org resolution: middleware sets x-engagio-org-host
+    // when the hostname is a subdomain (slug.engagio.app) or custom domain.
+    if (!targetSlug) {
+      const hostHeader = req.headers.get('x-engagio-org-host')
+      if (hostHeader) {
+        const baseDomain = process.env.BASE_DOMAIN || 'engagio.app'
+        if (hostHeader.endsWith('.' + baseDomain)) {
+          targetSlug = hostHeader.slice(0, -('.' + baseDomain).length)
+        } else {
+          // Custom domain - look up in OrganizationDomain table
+          const domain = await db.organizationDomain.findFirst({
+            where: { domain: hostHeader, status: 'ACTIVE' },
+            include: { organization: { select: { slug: true } } },
+          })
+          if (domain) targetSlug = domain.organization.slug
+        }
+      }
+    }
   }
 
   // Fetch the user's org memberships
@@ -120,7 +146,7 @@ export async function getTenantContext(
   })
 
   // If target slug specified, find that membership
-  let activeMembership = null
+  let activeMembership: (typeof memberships)[number] | null = null
   if (targetSlug) {
     activeMembership = memberships.find(
       (m) => m.organization.slug === targetSlug && m.organization.status === "ACTIVE"
@@ -202,6 +228,54 @@ export async function requireOrgRole(
     }
   }
   return result
+}
+
+// ─── Permission-based org-scoped admin auth ────────────────────────────────
+// The permission matrix (src/lib/permissions.ts) is the single source of
+// truth for what each org role may do. Routes express their access
+// requirement as a specific permission (e.g. `event.update`) instead of a
+// hardcoded minimum role, so role changes propagate automatically.
+
+export type PermissionResult =
+  | { ok: true; ctx: TenantContext }
+  | { ok: false; error: string; status: number; legacyAdmin: boolean }
+
+/**
+ * Require a specific permission (from the permission matrix) for the
+ * caller's org context. Platform admins bypass all permission checks.
+ *
+ *   const auth = await requirePermission(req, "event.update")
+ *   if (!auth.ok) {
+ *     if (auth.legacyAdmin) {
+ *       // Legacy single-tenant admin without an org membership — no org
+ *       // scope, so return empty/403 instead of leaking cross-tenant data.
+ *       return NextResponse.json({ error: "No organization context" }, { status: 403 })
+ *     }
+ *     return NextResponse.json({ error: auth.error }, { status: auth.status })
+ *   }
+ *   const ctx = auth.ctx
+ */
+export async function requirePermission(
+  req: NextRequest | undefined,
+  permission: Permission
+): Promise<PermissionResult> {
+  const result = await requireTenantContext(req)
+  if ("error" in result) {
+    // Unauthenticated — return the original 401 (legacyAdmin=false so
+    // routes don't misclassify it as a legacy admin and rewrite the status).
+    return { ok: false, error: result.error, status: result.status, legacyAdmin: false }
+  }
+  if (!hasPermission(result, permission)) {
+    const session = await getServerSession(authOptions)
+    const legacyAdmin = (session?.user as any)?.role === "ADMIN"
+    return {
+      ok: false,
+      error: `Insufficient permissions (requires ${permission})`,
+      status: 403,
+      legacyAdmin,
+    }
+  }
+  return { ok: true, ctx: result }
 }
 
 /**

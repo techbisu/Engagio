@@ -32,7 +32,8 @@ export function UserMenu({
   onSignOut,
   align = 'end',
 }: UserMenuProps) {
-  const isAdmin = user.role === 'ADMIN'
+  // Org access is membership-based (canManageOrg), not the legacy global role.
+  const isAdmin = user.canManageOrg === true
 
   return (
     <DropdownMenu>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, type TenantContext } from "@/lib/tenant";
 import type {
   CertificateDto,
   CertStatus,
@@ -77,21 +78,35 @@ export async function GET(req: NextRequest) {
     if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const isAdmin = user.role === "ADMIN";
     const url = new URL(req.url);
     const wantsAll = url.searchParams.get("all") === "true";
     const eventIdFilter = url.searchParams.get("eventId") || undefined;
 
-    // Participants can never request ?all=true — silently ignore and return only
-    // their own rows to avoid leaking other users' certificates.
-    const scopeAll = isAdmin && wantsAll;
+    // The admin (`all=true`) view is org-scoped and permission-gated. The
+    // default view (a user's own certificates) is available to every
+    // authenticated user — participants must NOT be blocked from their own
+    // certificates by the admin permission.
+    let scopeAll = false;
+    let adminCtx: TenantContext | null = null;
+    if (wantsAll) {
+      const auth = await requirePermission(req, "certificate.view");
+      if (!auth.ok) {
+        // Legacy single-tenant admins without an org membership can't be
+        // scoped — return empty rather than leaking cross-tenant rows.
+        if (auth.legacyAdmin) {
+          return NextResponse.json({ certificates: [], total: 0 });
+        }
+        return NextResponse.json({ error: auth.error }, { status: auth.status });
+      }
+      scopeAll = true;
+      adminCtx = auth.ctx;
+    }
 
-    const where: {
-      userId?: string;
-      eventId?: string;
-    } = {};
+    const where: Record<string, unknown> = {};
     if (!scopeAll) {
       where.userId = user.id;
+    } else {
+      where.event = { organizationId: adminCtx!.orgId };
     }
     if (eventIdFilter) {
       where.eventId = eventIdFilter;
@@ -129,7 +144,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ certificates: dtos, total: dtos.length });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

@@ -66,7 +66,7 @@ export async function GET(req: NextRequest, ctxParams: RouteContext) {
   } catch (e) {
     console.error("[GET /api/achievements/[id]] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }
@@ -164,7 +164,7 @@ export async function PATCH(req: NextRequest, ctxParams: RouteContext) {
   } catch (e) {
     console.error("[PATCH /api/achievements/[id]] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }
@@ -204,7 +204,7 @@ export async function DELETE(req: NextRequest, ctxParams: RouteContext) {
   } catch (e) {
     console.error("[DELETE /api/achievements/[id]] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

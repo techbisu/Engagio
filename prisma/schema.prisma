@@ -666,12 +666,31 @@ model Subscription {
   status          String   @default("ACTIVE")
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
+  // Gateway wiring: set when a subscription is created through Stripe/
+  // Razorpay. Used by the webhook handlers to map incoming events back to
+  // this row. Null for demo/manual upgrades.
+  billingProvider      String? // stripe | razorpay
+  providerSubscriptionId String? @unique
+  providerCustomerId    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   plan Plan @relation(fields: [planId], references: [id])
 
   @@index([organizationId])
+}
+
+// Dedupe table for payment webhooks — each provider event id is processed
+// exactly once (Stripe/Razorpay retry deliveries on failure).
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String // stripe | razorpay
+  eventId     String // the provider's event id
+  type        String? // event type (e.g. customer.subscription.updated)
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider])
 }
 
 // ────────────────────────────────────────────────────────────────────────────

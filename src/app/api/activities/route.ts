@@ -1,7 +1,7 @@
+import { checkBodySize, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { generateQuizSlug } from "@/lib/utils";
 import {
   toActivityDto,
@@ -11,17 +11,13 @@ import {
 } from "@/lib/activity-mapper";
 import type { ActivitySettings } from "@/types";
 
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
-
-/** GET /api/activities?eventId=xxx — list all activities for an event (admin only). */
+/** GET /api/activities?eventId=xxx — list all activities for an event (org-scoped admin). */
 export async function GET(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) return NextResponse.json([]);
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const eventId = req.nextUrl.searchParams.get("eventId");
     if (!eventId) {
@@ -34,7 +30,7 @@ export async function GET(req: NextRequest) {
       where: { id: eventId },
       select: { id: true },
     });
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const activities = await db.activity.findMany({
@@ -72,20 +68,23 @@ export async function GET(req: NextRequest) {
     );
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** POST /api/activities — create a new activity (admin only). */
+/** POST /api/activities — create a new activity (org-scoped admin). */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if ((session?.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.create");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const adminId = (session?.user as any)?.id ?? null;
+    const adminId = auth.ctx.userId;
     const body = await req.json();
     const {
       eventId,
@@ -110,7 +109,7 @@ export async function POST(req: NextRequest) {
       where: { id: eventId },
       select: { id: true },
     });
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
@@ -246,7 +245,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(toActivityDto(created, quizLink), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

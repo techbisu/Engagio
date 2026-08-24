@@ -1,48 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { toQuizLinkDto } from "@/app/api/quiz-links/route";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-/** GET /api/quiz-links/[id] — fetch a quiz link with its event (admin only). */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+/** Load a quiz link with its event's org id, for ownership checks. */
+async function findLinkWithOrg(id: string) {
+  return db.quizLink.findUnique({
+    where: { id },
+    include: {
+      event: {
+        select: { id: true, title: true, description: true, image: true, organizationId: true },
+      },
+    },
+  });
+}
+
+/** GET /api/quiz-links/[id] — fetch a quiz link with its event (org-scoped admin). */
+export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "assessment.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const link = await db.quizLink.findUnique({
-      where: { id },
-      include: { event: { select: { id: true, title: true, description: true, image: true } } },
-    });
-    if (!link) {
+    const link = await findLinkWithOrg(id);
+    if (!link || !ownsResource(link.event, auth.ctx)) {
       return NextResponse.json({ error: "Quiz link not found" }, { status: 404 });
     }
     return NextResponse.json(toQuizLinkDto(link));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** PATCH /api/quiz-links/[id] — update a quiz link (admin only). */
+/** PATCH /api/quiz-links/[id] — update a quiz link (org-scoped admin). */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "assessment.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const existing = await db.quizLink.findUnique({ where: { id } });
-    if (!existing) {
+    const existing = await findLinkWithOrg(id);
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Quiz link not found" }, { status: 404 });
     }
 
@@ -143,28 +154,32 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toQuizLinkDto(updated));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** DELETE /api/quiz-links/[id] — delete a quiz link (admin only). */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+/** DELETE /api/quiz-links/[id] — delete a quiz link (org-scoped admin). */
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "assessment.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const existing = await db.quizLink.findUnique({ where: { id } });
-    if (!existing) {
+    const existing = await findLinkWithOrg(id);
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Quiz link not found" }, { status: 404 });
     }
     await db.quizLink.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -1,3 +1,4 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { auditLog } from "@/lib/tenant";
@@ -60,7 +61,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -76,7 +77,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
     const { ctx: tenantCtx } = result;
 
-    const body = await req.json().catch(() => ({}));
+    const bodyResult = await enforceLimit(req, BODY_LIMITS.STANDARD);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const {
       name,
       description,
@@ -154,7 +157,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -1,3 +1,4 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
@@ -20,7 +21,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const bodyResult = await enforceLimit(req, BODY_LIMITS.SMALL);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const { secret, token } = body as { secret?: string; token?: string };
 
     if (!token || typeof token !== "string") {
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("[POST /api/auth/totp/verify] error:", e);
     return NextResponse.json(
-      { error: "Failed to verify TOTP", detail: String(e) },
+      { error: "Failed to verify TOTP" },
       { status: 500 }
     );
   }

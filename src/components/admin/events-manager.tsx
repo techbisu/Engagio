@@ -72,6 +72,9 @@ interface EventsManagerProps {
   onManageRegistration?: (eventId: string, eventTitle: string) => void
   onViewRegistrations?: (eventId: string, eventTitle: string) => void
   onBuildLandingPage?: (eventId: string, eventTitle: string) => void
+  /** Permission gate for action-menu items — returns true when the active-org
+   *  role may perform the given permission. When omitted, actions show. */
+  can?: (permission: string) => boolean
 }
 
 interface EventFormState {
@@ -120,6 +123,7 @@ export function EventsManager({
   onManageRegistration,
   onViewRegistrations,
   onBuildLandingPage,
+  can,
 }: EventsManagerProps) {
   const qc = useQueryClient()
   const { data, isLoading, isError, error } = useQuery<EventDto[]>({
@@ -282,7 +286,11 @@ export function EventsManager({
             Manage quiz events, dates, and activation status.
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+        <Button
+          onClick={openCreate}
+          disabled={can ? !can("event.create") : false}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
           <Plus className="size-4" />
           Create Event
         </Button>
@@ -315,6 +323,7 @@ export function EventsManager({
             <Button
               className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={openCreate}
+              disabled={can ? !can("event.create") : false}
             >
               <Plus className="size-4" />
               Create Event
@@ -462,21 +471,29 @@ export function EventsManager({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem onClick={() => openEdit(ev)}>
+                    <DropdownMenuItem
+                      onClick={() => openEdit(ev)}
+                      disabled={can ? !can("event.update") : false}
+                    >
                       <Pencil className="size-4" /> Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() =>
                         onManageQuestions?.(ev.id, ev.title)
                       }
+                      disabled={can ? !can("question.view") : false}
                     >
                       <FileQuestion className="size-4" /> Manage Questions
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onGenerateLink?.(ev.id)}>
+                    <DropdownMenuItem
+                      onClick={() => onGenerateLink?.(ev.id)}
+                      disabled={can ? !can("assessment.manage") : false}
+                    >
                       <Link2 className="size-4" /> Generate Link
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => onBuildLandingPage?.(ev.id, ev.title)}
+                      disabled={can ? !can("event.update") : false}
                     >
                       <PanelsTopLeft className="size-4" /> Build Landing Page
                     </DropdownMenuItem>
@@ -508,23 +525,29 @@ export function EventsManager({
                     )}
                     <DropdownMenuItem
                       onClick={() => onManageRegistration?.(ev.id, ev.title)}
+                      disabled={can ? !can("registration.manage") : false}
                     >
                       <ClipboardList className="size-4" /> Registration Form
                     </DropdownMenuItem>
                     {(ev.registrationCount ?? 0) > 0 || ev.requireRegistration ? (
                       <DropdownMenuItem
                         onClick={() => onViewRegistrations?.(ev.id, ev.title)}
+                        disabled={can ? !can("registration.view") : false}
                       >
                         <Users className="size-4" /> View Registrations
                       </DropdownMenuItem>
                     ) : null}
-                    <DropdownMenuItem onClick={() => onViewAnalytics?.(ev.id)}>
+                    <DropdownMenuItem
+                      onClick={() => onViewAnalytics?.(ev.id)}
+                      disabled={can ? !can("analytics.view") : false}
+                    >
                       <BarChart3 className="size-4" /> View Analytics
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-rose-600 focus:text-rose-700"
                       onClick={() => setDeleteTarget(ev)}
+                      disabled={can ? !can("event.delete") : false}
                     >
                       <Trash2 className="size-4" /> Delete
                     </DropdownMenuItem>

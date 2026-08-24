@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ member: updated });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -131,7 +131,7 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { uploadFile, deleteFile } from "@/lib/storage";
 import type {
   CertificateDto,
@@ -9,15 +8,6 @@ import type {
   CertTemplate,
   CertIssueCondition,
 } from "@/types";
-
-/** Admin-only check — returns the admin user object or null. */
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  const user = session?.user as
-    | { id?: string; name?: string | null; email?: string | null; role?: string }
-    | undefined;
-  return user?.role === "ADMIN" ? user : null;
-}
 
 /**
  * Map a Prisma Certificate row (with event + user relations) to a full
@@ -83,9 +73,12 @@ type RouteContext = { params: Promise<{ id: string }> };
  */
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    const admin = await requireAdmin();
-    if (!admin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "certificate.generate");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
 
@@ -96,8 +89,9 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
         certificateNumber: true,
         certificatePublicId: true,
       },
+      include: { event: { select: { organizationId: true } } },
     });
-    if (!existing) {
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json(
         { error: "Certificate not found" },
         { status: 404 },
@@ -171,7 +165,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ certificate: toCertDto(updated) });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

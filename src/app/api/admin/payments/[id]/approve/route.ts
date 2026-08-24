@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import type { PaymentStatus, RegistrationDto } from "@/types";
 
 function toRegistrationDto(r: any): RegistrationDto {
@@ -55,26 +54,25 @@ type RouteContext = { params: Promise<{ id: string }> };
  *
  * Returns: `{ success: true, registration }`.
  */
-export async function POST(_req: NextRequest, ctx: RouteContext) {
+export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Payment verification is an ADMIN-level action (per the role matrix).
+    const auth = await requirePermission(req, "registration.payment.verify");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    const adminId = (session.user as any).id as string | undefined;
-    if (!adminId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const adminId = auth.ctx.userId;
 
     const { id } = await ctx.params;
     const existing = await db.registration.findUnique({
       where: { id },
       select: { id: true, paymentStatus: true },
+      include: { event: { select: { organizationId: true } } },
     });
-    if (!existing) {
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json(
         { error: "Registration not found" },
         { status: 404 },
@@ -110,7 +108,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

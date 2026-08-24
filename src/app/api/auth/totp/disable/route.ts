@@ -1,3 +1,4 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
@@ -19,7 +20,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const bodyResult = await enforceLimit(req, BODY_LIMITS.SMALL);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const { token } = body as { token?: string };
 
     if (!token || typeof token !== "string") {
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("[POST /api/auth/totp/disable] error:", e);
     return NextResponse.json(
-      { error: "Failed to disable TOTP", detail: String(e) },
+      { error: "Failed to disable TOTP" },
       { status: 500 }
     );
   }

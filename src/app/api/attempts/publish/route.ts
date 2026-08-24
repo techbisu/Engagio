@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import {
   autoGenerateCertificates,
   sendPublishNotifications,
 } from "@/lib/cert-service";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 /**
  * POST /api/attempts/publish
@@ -31,8 +25,12 @@ async function requireAdmin(): Promise<boolean> {
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "result.publish");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const body = await req.json().catch(() => ({}));
     const { quizLinkId, attemptId } = body || {};
@@ -60,8 +58,9 @@ export async function POST(req: NextRequest) {
       const link = await db.quizLink.findUnique({
         where: { id: quizLinkId },
         select: { id: true, eventId: true },
+        include: { event: { select: { organizationId: true } } },
       });
-      if (!link) {
+      if (!link || !ownsResource(link.event, auth.ctx)) {
         return NextResponse.json(
           { error: "Quiz link not found" },
           { status: 404 }
@@ -93,8 +92,9 @@ export async function POST(req: NextRequest) {
       const attempt = await db.quizAttempt.findUnique({
         where: { id: attemptId },
         select: { id: true, status: true, publishedAt: true, quizLinkId: true, eventId: true },
+        include: { event: { select: { organizationId: true } } },
       });
-      if (!attempt) {
+      if (!attempt || !ownsResource(attempt.event, auth.ctx)) {
         return NextResponse.json(
           { error: "Attempt not found" },
           { status: 404 }
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -174,8 +174,12 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "result.publish");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const body = await req.json().catch(() => ({}));
     const { quizLinkId, attemptId } = body || {};
@@ -198,8 +202,9 @@ export async function DELETE(req: NextRequest) {
       const link = await db.quizLink.findUnique({
         where: { id: quizLinkId },
         select: { id: true },
+        include: { event: { select: { organizationId: true } } },
       });
-      if (!link) {
+      if (!link || !ownsResource(link.event, auth.ctx)) {
         return NextResponse.json(
           { error: "Quiz link not found" },
           { status: 404 }
@@ -214,8 +219,9 @@ export async function DELETE(req: NextRequest) {
       const attempt = await db.quizAttempt.findUnique({
         where: { id: attemptId },
         select: { id: true, publishedAt: true },
+        include: { event: { select: { organizationId: true } } },
       });
-      if (!attempt) {
+      if (!attempt || !ownsResource(attempt.event, auth.ctx)) {
         return NextResponse.json(
           { error: "Attempt not found" },
           { status: 404 }
@@ -234,7 +240,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ unpublished: unpublishedCount });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

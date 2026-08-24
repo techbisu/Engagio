@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[POST /api/events/register-participant] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

@@ -111,16 +111,17 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     regCheckQuery.isFetched
 
   // ---- Payment gate ---------------------------------------------------
-  // The event requires manual payment when:
-  //   - The event's paymentMethod is "MANUAL" AND
-  //   - The paymentAmount is > 0 (or there's any payment config at all).
+  // The event requires payment when its paymentMethod is a paid method
+  // (MANUAL, RAZORPAY, or STRIPE — gateway flows are not wired yet, so all
+  // paid events use the manual screenshot+approve path).
   // We only render the PaymentScreen when the participant is past the
   // registration gate (either registered already, or registration isn't
   // required at all — in which case we can't have a `Registration` row yet,
   // so payment can't apply; treat as no payment required).
   const eventRequiresPayment =
     !!meta?.event?.id &&
-    (meta.event?.paymentMethod === "MANUAL") &&
+    !!meta.event?.paymentMethod &&
+    meta.event.paymentMethod !== "FREE" &&
     !!isRegistered
 
   const paymentStatusQuery = useQuery<PaymentStatusResponse>({
@@ -228,7 +229,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
   }
 
   // Payment gate: render the PaymentScreen instead of the pre-quiz card
-  // when the event requires MANUAL payment AND the participant's registration
+  // when the event requires payment AND the participant's registration
   // is not yet COMPLETED. After payment verification (onPaid), we
   // invalidate the payment-status query and fall through to the pre-quiz
   // card below.

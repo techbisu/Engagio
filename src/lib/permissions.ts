@@ -10,7 +10,7 @@
  * prefer `hasPermission()` over `requireOrgRole()`.
  */
 
-import { hasRole, type OrgRole, type TenantContext } from "./tenant"
+import type { OrgRole, TenantContext } from "./tenant"
 
 // ─── Role tier helpers ─────────────────────────────────────────────────────
 // Groups the 7 org roles into 3 tiers for simplified permission checks.
@@ -121,13 +121,18 @@ const ROLE_PERMISSIONS: Record<OrgRole, Permission[]> = {
     "organization.update",
     "organization.audit.read",
     "organization.view",
+    "event.view",
     "event.create",
     "event.update",
     "event.delete",
     "event.publish",
     "registration.payment.verify",
+    "activity.view",
+    "activity.delete",
     "activity.moderate",
+    "question.view",
     "assessment.evaluate",
+    "result.view",
     "result.publish",
     "certificate.generate",
     "certificate.revoke",
@@ -141,13 +146,18 @@ const ROLE_PERMISSIONS: Record<OrgRole, Permission[]> = {
     "organization.branding.manage",
     "organization.audit.read",
     "organization.view",
+    "event.view",
     "event.create",
     "event.update",
     "event.delete",
     "event.publish",
     "registration.payment.verify",
+    "activity.view",
+    "activity.delete",
     "activity.moderate",
+    "question.view",
     "assessment.evaluate",
+    "result.view",
     "result.publish",
     "certificate.generate",
     "certificate.revoke",
@@ -155,15 +165,29 @@ const ROLE_PERMISSIONS: Record<OrgRole, Permission[]> = {
     "analytics.view",
   ],
   EVENT_MANAGER: [
+    // The admin panel routes are EVENT_MANAGER-gated, so this role needs the
+    // full content-management surface: viewing + deleting events/activities,
+    // viewing questions and results, and managing assessments.
     "organization.view",
+    "event.view",
     "event.create",
     "event.update",
+    "event.delete",
     "event.publish",
     "registration.manage",
+    "activity.view",
     "activity.create",
     "activity.update",
+    "activity.delete",
+    "question.view",
+    "question.create",
+    "question.update",
+    "question.delete",
+    "question.import",
     "assessment.create",
     "assessment.manage",
+    "result.view",
+    "certificate.view",
     "certificate.generate",
     "checkin.manage",
     "analytics.view",
@@ -199,12 +223,38 @@ const ROLE_PERMISSIONS: Record<OrgRole, Permission[]> = {
   ],
 }
 
+// Roles ordered from least to most privileged, for permission inheritance.
+const ROLE_ORDER: OrgRole[] = [
+  "PARTICIPANT",
+  "CHECKIN_STAFF",
+  "EVALUATOR",
+  "MODERATOR",
+  "EVENT_MANAGER",
+  "ADMIN",
+  "OWNER",
+]
+
+// Effective permissions per role: own list + everything granted to roles
+// below it in the hierarchy (so e.g. EVENT_MANAGER inherits result.view from
+// EVALUATOR and activity.moderate from MODERATOR).
+const EFFECTIVE_PERMISSIONS: Record<OrgRole, Permission[]> = (() => {
+  const acc = new Set<Permission>()
+  const result = {} as Record<OrgRole, Permission[]>
+  for (const role of ROLE_ORDER) {
+    for (const p of ROLE_PERMISSIONS[role] || []) acc.add(p)
+    result[role] = [...acc]
+  }
+  return result
+})()
+
 /**
  * Check if the current tenant context has a permission.
  *
- * Platform admins always have all permissions.
+ * Permissions are inherited: a role has everything listed for it PLUS
+ * everything granted to roles below it in the hierarchy. Platform admins
+ * always have all permissions.
  *
- *   if (await hasPermission(ctx, "event.create")) { ... }
+ *   if (hasPermission(ctx, "event.create")) { ... }
  */
 export function hasPermission(
   ctx: TenantContext,
@@ -213,7 +263,7 @@ export function hasPermission(
   // Platform admins bypass all permission checks
   if (ctx.isPlatformAdmin) return true
 
-  const rolePerms = ROLE_PERMISSIONS[ctx.orgRole] || []
+  const rolePerms = EFFECTIVE_PERMISSIONS[ctx.orgRole] || []
   return rolePerms.includes(permission)
 }
 
@@ -240,10 +290,11 @@ export function hasAnyPermission(
 }
 
 /**
- * Get all permissions for a role (useful for the role management UI).
+ * Get all effective (inherited) permissions for a role — useful for the
+ * role management UI and for validating role changes.
  */
 export function getPermissionsForRole(role: OrgRole): Permission[] {
-  return ROLE_PERMISSIONS[role] || []
+  return EFFECTIVE_PERMISSIONS[role] || []
 }
 
 /**

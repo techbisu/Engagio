@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import {
   toActivityDto,
   toActivityQuestionDto,
@@ -10,12 +11,6 @@ import {
   parseActivitySettings,
 } from "@/lib/activity-mapper";
 import type { ActivitySettings } from "@/types";
-
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -47,21 +42,28 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** PATCH /api/activities/[id] — update activity fields (admin only). */
+/** PATCH /api/activities/[id] — update activity fields (org-scoped admin). */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const existing = await db.activity.findUnique({ where: { id } });
-    if (!existing) {
+    const existing = await db.activity.findUnique({
+      where: { id },
+      include: { event: { select: { organizationId: true } } },
+    });
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
 
@@ -182,28 +184,35 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** DELETE /api/activities/[id] — delete activity (cascades to children) (admin only). */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+/** DELETE /api/activities/[id] — delete activity (cascades to children) (org-scoped admin). */
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.delete");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const existing = await db.activity.findUnique({ where: { id } });
-    if (!existing) {
+    const existing = await db.activity.findUnique({
+      where: { id },
+      include: { event: { select: { organizationId: true } } },
+    });
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
     await db.activity.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

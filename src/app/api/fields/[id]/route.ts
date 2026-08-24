@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
 import type { EventFieldDto, EventFieldType } from "@/types";
 
@@ -49,13 +50,27 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "registration.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const orgCtx = auth.ctx;
     const { id } = await ctx.params;
-    const existing = await db.eventField.findUnique({ where: { id } });
+    const existing = await db.eventField.findUnique({
+      where: { id },
+      include: { event: { select: { organizationId: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Field not found" }, { status: 404 });
+    }
+    if (!ownsResource(existing.event, orgCtx)) {
+      return NextResponse.json(
+        { error: "Field not found" },
+        { status: 404 }
+      );
     }
 
     const body = await req.json().catch(() => null);
@@ -166,7 +181,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toFieldDto(updated));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -181,19 +196,33 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "registration.manage");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const orgCtx = auth.ctx;
     const { id } = await ctx.params;
-    const existing = await db.eventField.findUnique({ where: { id } });
+    const existing = await db.eventField.findUnique({
+      where: { id },
+      include: { event: { select: { organizationId: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Field not found" }, { status: 404 });
+    }
+    if (!ownsResource(existing.event, orgCtx)) {
+      return NextResponse.json(
+        { error: "Field not found" },
+        { status: 404 }
+      );
     }
     await db.eventField.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

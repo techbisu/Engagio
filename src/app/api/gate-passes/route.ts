@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ gatePasses: passes });
   } catch (e) {
     console.error("[GET /api/gate-passes] error:", e);
-    return NextResponse.json({ error: "Internal Server Error", detail: String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error", detail: "An unexpected error occurred" }, { status: 500 });
   }
 }
 
@@ -106,6 +106,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ gatePass }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/gate-passes] error:", e);
-    return NextResponse.json({ error: "Internal Server Error", detail: String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error", detail: "An unexpected error occurred" }, { status: 500 });
   }
 }

@@ -1,32 +1,14 @@
 "use client"
 
-// Prevent static prerendering — this page uses useSearchParams() which
-// requires a Suspense boundary during static generation.
-export const dynamic = "force-dynamic"
-
 /**
- * /dashboard
+ * /dashboard — Participant dashboard.
  *
- * Participant dashboard. Default landing for signed-in STUDENT users.
- *
- * Supports the following sub-views via URL search params (so they're
- * shareable + survive refresh):
- *
- *   /dashboard                            → StudentDashboard (overview)
- *   /dashboard?sub=certificates           → MyCertificates
- *   /dashboard?sub=leaderboard&quiz=SLUG  → Leaderboard for the given quiz
- *   /dashboard?sub=activity&activity=SLUG → ActivityJoin for the activity
- *
- * If the user is not signed in, redirects to /login.
- *
- * Replaces the old `/?view=student` query-param route (and the in-dashboard
- * sub-views: leaderboard, certificates, activity). The quiz-start /
- * quiz-runner sub-views now live on their own /quiz/[quizSlug] route.
- *
- * Added during the Phase 1 routing migration.
+ * Wrapped in <Suspense> because useSearchParams() requires a Suspense
+ * boundary during prerendering in Next.js 16 / Turbopack.
  */
 
 import * as React from "react"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ActivityJoin } from "@/components/activities/activity-join"
 import { Leaderboard } from "@/components/student/leaderboard"
@@ -38,6 +20,20 @@ import { useAppStore } from "@/store/app-store"
 import type { ActivityType } from "@/types"
 
 export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      }
+    >
+      <DashboardPageInner />
+    </Suspense>
+  )
+}
+
+function DashboardPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, signOutEverything } = useCurrentUser()
@@ -47,8 +43,6 @@ export default function DashboardPage() {
   const quizSlugParam = searchParams.get("quiz") ?? ""
   const activitySlugParam = searchParams.get("activity") ?? ""
 
-  // Redirect to /login if not signed in. Wait for the session + meQuery to
-  // finish before redirecting to avoid a flash on page reload.
   React.useEffect(() => {
     if (!user) {
       router.replace("/login")
@@ -101,7 +95,6 @@ export default function DashboardPage() {
     [router, setLiveActivity],
   )
 
-  // Loading state until session resolves (avoid flashing the login redirect).
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -110,7 +103,6 @@ export default function DashboardPage() {
     )
   }
 
-  // Sub-view: certificates
   if (sub === "certificates") {
     return (
       <StudentShell
@@ -124,7 +116,6 @@ export default function DashboardPage() {
     )
   }
 
-  // Sub-view: leaderboard
   if (sub === "leaderboard" && quizSlugParam) {
     return (
       <StudentShell
@@ -141,7 +132,6 @@ export default function DashboardPage() {
     )
   }
 
-  // Sub-view: activity
   if (sub === "activity" && activitySlugParam) {
     return (
       <StudentShell
@@ -160,7 +150,6 @@ export default function DashboardPage() {
     )
   }
 
-  // Default: dashboard overview
   return (
     <StudentShell
       user={user}

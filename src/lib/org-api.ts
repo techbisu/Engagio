@@ -13,7 +13,7 @@
  * using `include: { plan: true }`.
  */
 
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import { authOptions } from "./auth"
 import { db } from "./db"
 import { hasRole, type TenantContext, type OrgRole } from "./tenant"
@@ -70,7 +70,14 @@ export async function resolveOrgMembership(
     },
   })
 
-  const isPlatformAdmin = (session.user as any).role === "ADMIN"
+  // Platform admin = User.platformRole === "SUPERADMIN" (set in the DB),
+  // re-fetched per request so demotions apply immediately. NOT the legacy
+  // `role === "ADMIN"` field — that is a self-asserted value
+  // that used to be reachable by any caller passing `asAdmin` to the
+  // credentials provider, which would have let any "ADMIN" bypass the
+  // membership check on every /api/organizations/[id]/... route (billing,
+  // members, domains, audit logs) across ALL tenants.
+  const isPlatformAdmin = await isDbPlatformAdmin(session)
   if (!membership && !isPlatformAdmin) {
     return { error: "Not a member of this organization", status: 403 }
   }

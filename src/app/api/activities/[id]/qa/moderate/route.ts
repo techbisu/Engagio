@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseResponseMetadata, toActivityResponseDto } from "@/lib/activity-mapper";
-
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -28,10 +21,23 @@ const VALID_ACTIONS = new Set([
  */
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.moderate");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
+    const activity = await db.activity.findUnique({
+      where: { id },
+      select: { id: true },
+      include: { event: { select: { organizationId: true } } },
+    });
+    if (!activity || !ownsResource(activity.event, auth.ctx)) {
+      return NextResponse.json({ error: "Activity not found" }, { status: 404 });
+    }
+
     const body = await req.json();
     const { responseId, action } = body || {};
     if (typeof responseId !== "string" || !responseId) {
@@ -93,7 +99,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

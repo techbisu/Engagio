@@ -1,3 +1,4 @@
+import { checkBodySize, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -341,7 +342,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     );
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

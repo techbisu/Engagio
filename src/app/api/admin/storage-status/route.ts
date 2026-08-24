@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/tenant";
 import { getStorageStatus } from "@/lib/storage";
 import { getEmailStatus } from "@/lib/email";
 
@@ -18,14 +17,14 @@ import { getEmailStatus } from "@/lib/email";
  *     email:   { configured: boolean, provider: "resend" | "disabled", from?: string }
  *   }
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const user = session?.user as
-      | { id?: string; name?: string | null; email?: string | null; role?: string }
-      | undefined;
-    if (user?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "organization.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     return NextResponse.json({
@@ -34,7 +33,7 @@ export async function GET() {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

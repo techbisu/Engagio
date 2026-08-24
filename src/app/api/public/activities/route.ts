@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("[GET /api/public/activities] error:", e);
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

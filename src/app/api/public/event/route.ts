@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[GET /api/public/event] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

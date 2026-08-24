@@ -1,28 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { toActivityDto, fetchActivityQuizLink } from "@/lib/activity-mapper";
-
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** POST /api/activities/[id]/start — admin activates an activity.
  *  Sets status=LIVE, isEnabled=true, startsAt=now() (if not already set).
  */
-export async function POST(_req: NextRequest, ctx: RouteContext) {
+export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const existing = await db.activity.findUnique({ where: { id } });
-    if (!existing) {
+    const existing = await db.activity.findUnique({
+      where: { id },
+      include: { event: { select: { organizationId: true } } },
+    });
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
 
@@ -43,7 +43,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toActivityDto(updated, quizLink));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

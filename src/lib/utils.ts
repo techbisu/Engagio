@@ -1,16 +1,18 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { randomBytes } from "crypto"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Generate a short, human-readable quiz slug (no ambiguous chars). */
+/** Generate a short, human-readable quiz slug (no ambiguous chars). Uses crypto. */
 export function generateQuizSlug(length = 6): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  const bytes = randomBytes(length)
   let result = ""
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars.charAt(bytes[i] % chars.length)
   }
   return result
 }

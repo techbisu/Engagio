@@ -2,13 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { resolveImageValue, deleteFile } from "@/lib/storage";
 import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 async function requireAuth(): Promise<boolean> {
   const session = await getServerSession(authOptions);
@@ -87,21 +83,25 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toEventDto(event));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** PATCH /api/events/[id] — update an event (admin only). */
+/** PATCH /api/events/[id] — update an event (org-scoped admin). */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
     const existing = await db.event.findUnique({ where: { id } });
-    if (!existing) {
+    if (!existing || !ownsResource(existing, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const body = await req.json();
@@ -216,21 +216,25 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toEventDto(updated));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
 }
 
-/** DELETE /api/events/[id] — delete an event (admin only). Cascades to children. */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+/** DELETE /api/events/[id] — delete an event (org-scoped admin). Cascades to children. */
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.delete");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
     const existing = await db.event.findUnique({ where: { id } });
-    if (!existing) {
+    if (!existing || !ownsResource(existing, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     // Best-effort: delete any Cloudinary assets owned by this event before
@@ -244,7 +248,7 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

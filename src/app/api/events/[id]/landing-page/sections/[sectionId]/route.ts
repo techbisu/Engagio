@@ -1,12 +1,8 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession, authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import type { LandingSectionDto, LandingSectionType } from "@/types";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as { role?: string } | undefined)?.role === "ADMIN";
-}
 
 function toDto(s: {
   id: string;
@@ -46,12 +42,20 @@ type RouteContext = { params: Promise<{ id: string; sectionId: string }> };
  * GET /api/events/[id]/landing-page/sections/[sectionId]
  * Admin-only. Returns a single section.
  */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
+    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
+    if (!event || !ownsResource(event, auth.ctx)) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
     const section = await db.eventLandingSection.findFirst({
       where: { id: sectionId, eventId: id },
     });
@@ -61,7 +65,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toDto(section));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -73,10 +77,18 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
  */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
+    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
+    if (!event || !ownsResource(event, auth.ctx)) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
     const existing = await db.eventLandingSection.findFirst({
       where: { id: sectionId, eventId: id },
     });
@@ -113,7 +125,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toDto(updated));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -124,12 +136,20 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
  * Admin-only. Deletes a section. Remaining sections keep their order values;
  * the client re-normalizes orders on save (the PUT bulk endpoint).
  */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "event.update");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
+    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
+    if (!event || !ownsResource(event, auth.ctx)) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
     const existing = await db.eventLandingSection.findFirst({
       where: { id: sectionId, eventId: id },
     });
@@ -140,7 +160,7 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { invalidatePlanCache } from "@/lib/entitlements"
 
 async function requirePlatformAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return (session?.user as any)?.role === "ADMIN"
+  // DB-backed: re-fetch User.platformRole so demotions apply immediately.
+  return isDbPlatformAdmin(session)
 }
 
 /** GET /api/platform/plans — list all plans with prices + subscription counts */
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[GET /api/platform/plans] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[POST /api/platform/plans] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

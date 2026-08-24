@@ -1,13 +1,8 @@
+import { checkBodySize, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { parseCsvQuestions } from "@/lib/csv";
-
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 /**
  * POST /api/questions/import
@@ -25,8 +20,12 @@ async function requireAdmin(): Promise<boolean> {
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "question.import");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     let eventId: string | undefined;
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     const event = await db.event.findUnique({ where: { id: eventId } });
-    if (!event) {
+    if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
@@ -84,6 +83,7 @@ export async function POST(req: NextRequest) {
         db.question.create({
           data: {
             eventId,
+            organizationId: auth.ctx.orgId,
             question: row.question,
             type: row.type ?? "MCQ",
             options: JSON.stringify(row.options),
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ imported: rows.length, errors: [] });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

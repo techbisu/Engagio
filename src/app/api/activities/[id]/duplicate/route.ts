@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { generateQuizSlug } from "@/lib/utils";
 import { toActivityDto, fetchActivityQuizLink } from "@/lib/activity-mapper";
-
-/** Check the session for an admin role. Returns true if the caller is an admin. */
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -18,20 +11,26 @@ type RouteContext = { params: Promise<{ id: string }> };
  *  but NOT responses or participations. Status is reset to DRAFT, slug is
  *  regenerated, sortOrder is appended to the end.
  */
-export async function POST(_req: NextRequest, ctx: RouteContext) {
+export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
-    if ((session?.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "activity.create");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const currentAdminId = (session?.user as any)?.id ?? null;
+    const currentAdminId = auth.ctx.userId;
 
     const { id } = await ctx.params;
     const existing = await db.activity.findUnique({
       where: { id },
-      include: { questions: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        questions: { orderBy: { sortOrder: "asc" } },
+        event: { select: { organizationId: true } },
+      },
     });
-    if (!existing) {
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
 
@@ -122,7 +121,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(toActivityDto(created, quizLink), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

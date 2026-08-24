@@ -126,6 +126,7 @@ export function QuizRunner({
   const [fullscreenBlocked, setFullscreenBlocked] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(true)
   const [securityOpen, setSecurityOpen] = useState(true)
   const [securitySheetOpen, setSecuritySheetOpen] = useState(false)
   const [submitResult, setSubmitResult] = useState<SubmitAttemptResponse | null>(null)
@@ -259,7 +260,7 @@ export function QuizRunner({
         clearInterval(id)
         void doSubmitRef.current?.(true)
       }
-    }, 250)
+    }, 1000)
     return () => clearInterval(id)
   }, [timerStarted, status, timeLimit, totalSeconds])
 
@@ -593,7 +594,7 @@ export function QuizRunner({
       )}
 
       {/* Main content — 3-column layout on xl: questions + navigator + security */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-7xl">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-[90rem]">
         {/* Question column */}
         <section className="flex flex-1 flex-col">
           <Card className="flex-1">
@@ -652,7 +653,7 @@ export function QuizRunner({
         </section>
 
         {/* Desktop navigator sidebar (lg+) */}
-        <aside className="hidden w-64 shrink-0 lg:block xl:hidden">
+        <aside className="hidden w-64 shrink-0 xl:block">
           <Card className="sticky top-24">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">

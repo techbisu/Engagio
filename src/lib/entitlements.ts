@@ -153,7 +153,12 @@ export async function getLimit(
   if (ctx.isPlatformAdmin) return -1
   const limits = await getPlanLimits(ctx.orgId)
   const val = limits[limit]
-  return typeof val === "number" ? val : 0
+  if (typeof val === "number") return val
+  // Missing key → fall back to the FREE plan default instead of 0. Returning
+  // 0 here would hard-block resource creation for any org whose stored plan
+  // JSON uses different keys (e.g. the camelCase seed in scripts/build.sh).
+  const fallback = FREE_PLAN_LIMITS[limit]
+  return typeof fallback === "number" ? fallback : 0
 }
 
 /**

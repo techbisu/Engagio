@@ -1,9 +1,11 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
 import { auditLog, type TenantContext } from "@/lib/tenant";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 /** Generate a URL-safe slug from a name. */
 function slugify(name: string): string {
@@ -70,7 +72,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ organizations });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -82,8 +84,20 @@ export async function GET(req: NextRequest) {
  * Otherwise, uses the currently authenticated session user. */
 export async function POST(req: NextRequest) {
   try {
+    // Org creation is open to unauthenticated callers (registration flow) —
+    // rate limit per IP to prevent org spam.
+    const rl = await rateLimit(`org-create:${getClientIp(req)}`, 5, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many organization sign-ups. Try again later." },
+        { status: 429 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
-    const body = await req.json().catch(() => ({}));
+  const bodyResult = await enforceLimit<{ name?: string; slug?: string; description?: string; industry?: string; adminName?: string; adminEmail?: string; adminPassword?: string }>(req, BODY_LIMITS.STANDARD);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const { name, slug, description, industry, adminName, adminEmail, adminPassword } = body || {};
 
     if (!name || typeof name !== "string" || !name.trim()) {
@@ -217,7 +231,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ organization: org, role: "OWNER" }, { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

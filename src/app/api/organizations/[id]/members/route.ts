@@ -1,3 +1,4 @@
+import { enforceLimit, BODY_LIMITS } from "@/lib/body-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
@@ -67,7 +68,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -87,9 +88,19 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    const { ctx: tenantCtx, membership: callerMembership } = result;
+    const { ctx: tenantCtx, membership: callerMembership, org: orgRow } = result;
 
-    const body = await req.json().catch(() => ({}));
+    // Soft-lock: a non-ACTIVE (SUSPENDED/ARCHIVED) org cannot invite members.
+    if (orgRow && orgRow.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "This organization is suspended and cannot invite members." },
+        { status: 403 }
+      );
+    }
+
+    const bodyResult = await enforceLimit(req, BODY_LIMITS.STANDARD);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data;
     const { email, role } = body || {};
 
     if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -102,6 +113,32 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json(
         { error: "Invalid role. OWNER cannot be assigned via invitation." },
         { status: 400 }
+      );
+    }
+
+    // Enforce the org's max_members plan limit before adding a new member
+    // (Phase 7). Both the direct-add and the invitation paths consume a slot.
+    const { checkPlanLimit } = await import("@/lib/entitlements");
+    const check = await checkPlanLimit(tenantCtx, "member");
+    if (!check.allowed) {
+      return NextResponse.json(
+        {
+          error: "This organization has reached its member limit. Ask the owner to upgrade.",
+          code: "USAGE_LIMIT_EXCEEDED",
+          limit: check.limit,
+          current: check.current,
+        },
+        { status: 403 }
+      );
+    }
+
+    // Rate limit invitation sends (per IP).
+    const { rateLimit, getClientIp } = await import("@/lib/rate-limit");
+    const rl = await rateLimit(`invite:${getClientIp(req)}`, 20, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many invitations sent. Try again later." },
+        { status: 429 }
       );
     }
 
@@ -179,7 +216,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ invitation, direct: false }, { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

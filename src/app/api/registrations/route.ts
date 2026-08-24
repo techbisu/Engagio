@@ -1,3 +1,4 @@
+import { checkBodySize, BODY_LIMITS } from "@/lib/body-limit"
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -22,6 +23,8 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 export async function POST(req: NextRequest) {
   try {
+    const limitErr = await checkBodySize(req, BODY_LIMITS.STANDARD)
+    if (limitErr) return limitErr
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -212,7 +215,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error", detail: "An unexpected error occurred" },
       { status: 500 }
     );
   }

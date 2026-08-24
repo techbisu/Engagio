@@ -12,8 +12,9 @@
  *   2. Quiz deep-link (/quiz/[slug]) → student quiz-start
  *   3. Activity deep-link (?activity=slug) → student dashboard activity
  *   4. Event deep-link (/event/[slug]) → event landing page
- *   5. Role-based: STUDENT → /dashboard, ADMIN with org → /admin,
- *      ADMIN without org → /org-register (via NoOrgRedirect)
+ *   5. Role-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER in an ACTIVE org,
+ *      or platform admin) → /admin, STUDENT → /dashboard, legacy ADMIN without
+ *      an org → /org-register (via NoOrgRedirect)
  *
  * Added during the Phase 1 routing migration.
  */
@@ -37,12 +38,22 @@ export function useRouteAfterAuth() {
       // 5. Role-based routing (the only remaining logic after deep-link checks
       //    were moved to dedicated routes — /quiz, /event, /activity are now
       //    separate files that the user lands on directly).
+      //
+      // Org access is membership-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER
+      // in an ACTIVE org, or platform admin) goes straight to the admin panel.
+      // The flag is server-computed from memberships, so no extra fetch needed.
+      if (me.canManageOrg) {
+        router.push("/admin")
+        return
+      }
+
       if (me.role === "STUDENT") {
         router.push("/dashboard")
         return
       }
 
-      // ADMIN role: check for org membership
+      // Legacy ADMIN role without an org-management membership: check for org
+      // membership so they land on /no-org instead of an empty admin panel.
       try {
         const orgRes = await fetch("/api/organizations")
         const orgData = await orgRes.json()

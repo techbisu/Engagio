@@ -6,5 +6,11 @@
   "devCommand": "next dev",
   "github": {
     "silent": true
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/platform/subscriptions/sweep",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }

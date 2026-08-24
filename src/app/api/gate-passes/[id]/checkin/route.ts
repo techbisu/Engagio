@@ -55,6 +55,6 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     }
   } catch (e) {
     console.error("[POST /api/gate-passes/[id]/checkin] error:", e);
-    return NextResponse.json({ error: "Internal Server Error", detail: String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error", detail: "An unexpected error occurred" }, { status: 500 });
   }
 }

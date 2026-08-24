@@ -1,3 +1,5 @@
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 
@@ -18,6 +20,16 @@ import { db } from "@/lib/db"
  */
 export async function GET() {
   const results: string[] = []
+
+  // Platform admin auth required
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  const user = session.user as any
+  if (user.platformRole !== "SUPERADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   try {
     // 1. Seed Plans
@@ -387,7 +399,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: String(error),
+        error: "An unexpected error occurred",
         steps: results,
       },
       { status: 500 }

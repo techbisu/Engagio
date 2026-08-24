@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }
@@ -113,13 +113,13 @@ export async function GET(req: NextRequest) {
  *
  * Validation:
  *   - The user must have an existing registration for the event.
- *   - The event's paymentMethod must be "MANUAL".
+ *   - The event's paymentMethod must be a paid method (not "FREE").
  *   - If `event.requireTransactionRef` is true -> `transactionReference` non-empty.
  *   - If `event.requireScreenshot` is true -> `screenshotUrl` non-empty base64 data URL.
  *
  * Sets:
  *   - paymentStatus = "PENDING_VERIFICATION"
- *   - paymentMethod = "MANUAL"
+ *   - paymentMethod = the event's payment method (MANUAL | RAZORPAY | STRIPE)
  *   - transactionReference / screenshotUrl from body
  *   - clears rejectionReason / verifiedBy / verifiedAt (fresh submission).
  *
@@ -162,9 +162,9 @@ export async function POST(req: NextRequest) {
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-    if (event.paymentMethod !== "MANUAL") {
+    if (!event.paymentMethod || event.paymentMethod === "FREE") {
       return NextResponse.json(
-        { error: "This event does not require manual payment" },
+        { error: "This event does not require payment" },
         { status: 400 },
       );
     }
@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
       where: { id: registration.id },
       data: {
         paymentStatus: "PENDING_VERIFICATION",
-        paymentMethod: "MANUAL",
+        paymentMethod: event.paymentMethod,
         transactionReference: txRef || null,
         screenshotUrl: storedScreenshotUrl,
         verifiedBy: null,
@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

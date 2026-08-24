@@ -118,10 +118,13 @@ export async function POST(req: NextRequest) {
             { status: 403 }
           );
         }
-        // Payment gate — for MANUAL payment events, the registration must
-        // have paymentStatus = "COMPLETED" before the participant can start.
-        // PENDING_VERIFICATION / REJECTED / NONE all block the attempt.
-        if (event.paymentMethod === "MANUAL") {
+        // Payment gate — for any paid event (MANUAL, RAZORPAY, STRIPE), the
+        // registration must have paymentStatus = "COMPLETED" before the
+        // participant can start. PENDING_VERIFICATION / REJECTED / NONE all
+        // block the attempt. (Gateway flows are not wired yet, so all paid
+        // events use the manual screenshot+approve path — this gate prevents
+        // a participant on a paid event from starting without paying.)
+        if (event.paymentMethod && event.paymentMethod !== "FREE") {
           if (registration.paymentStatus !== "COMPLETED") {
             return NextResponse.json(
               {

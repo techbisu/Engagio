@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import type {
   CertificateDto,
   CertIssueCondition,
@@ -85,6 +86,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
             certLogo: true,
             certTemplate: true,
             certPassingScore: true,
+            organizationId: true,
           },
         },
         user: { select: { name: true, email: true } },
@@ -93,14 +95,16 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     if (!cert) {
       return NextResponse.json({ error: "Certificate not found" }, { status: 404 });
     }
-    // Participants can only see their own certificates.
-    if (user.role !== "ADMIN" && cert.userId !== user.id) {
+    // Org-scoped admin can view any cert in their org; participants only their own.
+    const auth = await requirePermission(req, "certificate.view");
+    const isAdminView = auth.ok && ownsResource(cert.event, auth.ctx);
+    if (!isAdminView && cert.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     return NextResponse.json({ certificate: toCertDto(cert) });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }
@@ -116,16 +120,20 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
  */
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
   try {
-    const user = await getSessionUser();
-    if (user?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "certificate.revoke");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
     const existing = await db.certificate.findUnique({
       where: { id },
       select: { id: true, status: true },
+      include: { event: { select: { organizationId: true } } },
     });
-    if (!existing) {
+    if (!existing || !ownsResource(existing.event, auth.ctx)) {
       return NextResponse.json({ error: "Certificate not found" }, { status: 404 });
     }
     const body = await req.json();
@@ -138,7 +146,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       updateData = {
         status: nextStatus,
         revokedAt: new Date(),
-        revokedBy: user.id ?? null,
+        revokedBy: auth.ctx.userId,
         revocationReason: reason || null,
       };
     } else if (action === "reinstate") {
@@ -178,7 +186,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ success: true, certificate: toCertDto(updated) });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

@@ -60,20 +60,10 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
       const totpStatus = await totpStatusRes.json()
 
       if (totpStatus.totpRequired) {
-        // TOTP is enabled → try credentials first (skipTotp=true), then show TOTP step
-        const res = await signIn('credentials', {
-          email,
-          password,
-          asAdmin: 'true',
-          skipTotp: 'true',
-          redirect: false,
-          callbackUrl: '/',
-        })
-        if (!res || res.error) {
-          toast.error('Invalid email or password.')
-          return
-        }
-        // Credentials valid → proceed to TOTP step
+        // TOTP is enabled → go straight to the code step. The server NEVER
+        // issues a session for this account without a valid code, so the
+        // password + code are both verified in the single sign-in on the
+        // next step.
         setTotpRequired(true)
         setStep('totp')
         toast.info('Enter your 6-digit authenticator code to continue.')
@@ -127,7 +117,7 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
         callbackUrl: '/',
       })
       if (!res || res.error) {
-        toast.error('Invalid TOTP code. Please try again.')
+        toast.error('Sign-in failed. Check your password and authenticator code, then try again.')
         return
       }
       // Verify super admin status

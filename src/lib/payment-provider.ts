@@ -13,7 +13,24 @@ import crypto from "crypto"
 
 // ─── Encryption ────────────────────────────────────────────────────────────
 
-const ENCRYPTION_KEY = process.env.PAYMENT_ENCRYPTION_KEY || "dev-encryption-key-change-in-production-32b"
+const DEV_ENCRYPTION_KEY = "dev-encryption-key-change-in-production-32b"
+const ENCRYPTION_KEY_ENV = process.env.PAYMENT_ENCRYPTION_KEY
+
+// Fail closed in production: a missing or known-dev key means "encrypted"
+// credentials are decryptable by anyone who can read the source. Dev keeps
+// the fallback so local work doesn't require the env var.
+if (
+  process.env.NODE_ENV === "production" &&
+  (!ENCRYPTION_KEY_ENV ||
+    ENCRYPTION_KEY_ENV === DEV_ENCRYPTION_KEY ||
+    ENCRYPTION_KEY_ENV === "change-me-to-a-random-string")
+) {
+  throw new Error(
+    "[payment-provider] PAYMENT_ENCRYPTION_KEY must be set to a real, random secret in production."
+  )
+}
+
+const ENCRYPTION_KEY = ENCRYPTION_KEY_ENV || DEV_ENCRYPTION_KEY
 const ALGORITHM = "aes-256-cbc"
 const IV_LENGTH = 16
 

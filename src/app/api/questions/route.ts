@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
 import { uploadFile } from "@/lib/storage";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import {
   toQuestionDto,
   isValidQuestionType,
@@ -11,23 +10,21 @@ import {
 } from "@/lib/question-mapper";
 import type { MatchPair, QuestionDifficulty } from "@/types";
 
-async function requireAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session?.user as any)?.role === "ADMIN";
-}
-
-/** GET /api/questions?eventId=xxx — list questions for an event (admin only). */
+/** GET /api/questions?eventId=xxx — list questions for an event (org-scoped admin). */
 export async function GET(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "question.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) return NextResponse.json([]);
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const ctx = auth.ctx;
     const eventId = req.nextUrl.searchParams.get("eventId");
     if (!eventId) {
       return NextResponse.json({ error: "Missing eventId query param" }, { status: 400 });
     }
     const event = await db.event.findUnique({ where: { id: eventId } });
-    if (!event) {
+    if (!event || !ownsResource(event, ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const questions = await db.question.findMany({
@@ -37,7 +34,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(questions.map(toQuestionDto));
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -257,12 +254,17 @@ function buildQuestionData(body: any, existing?: any) {
   };
 }
 
-/** POST /api/questions — create a question (admin only). */
+/** POST /api/questions — create a question (org-scoped admin). */
 export async function POST(req: NextRequest) {
   try {
-    if (!(await requireAdmin())) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requirePermission(req, "question.create");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const ctx = auth.ctx;
     const body = await req.json();
     const { eventId } = body || {};
 
@@ -271,7 +273,7 @@ export async function POST(req: NextRequest) {
     }
 
     const event = await db.event.findUnique({ where: { id: eventId } });
-    if (!event) {
+    if (!event || !ownsResource(event, ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
@@ -307,12 +309,13 @@ export async function POST(req: NextRequest) {
         eventId,
         ...data,
         order: nextOrder,
+        organizationId: ctx.orgId,
       },
     });
     return NextResponse.json(toQuestionDto(created), { status: 201 });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

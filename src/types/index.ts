@@ -55,6 +55,29 @@ export interface SafeUser {
   name?: string | null
   image?: string | null
   role: Role
+  /** True if the user is a platform super admin. */
+  isPlatformAdmin?: boolean
+  /**
+   * True if the user can manage at least one organization — any ACTIVE
+   * membership with role OWNER | ADMIN | EVENT_MANAGER, or a platform admin.
+   * This replaces the legacy `role === "ADMIN"` gate for the admin panel.
+   */
+  canManageOrg?: boolean
+  /** Active org memberships (org slug + the user's role in that org). */
+  orgMemberships?: Array<{
+    organizationId: string
+    slug: string
+    name: string
+    role: string
+  }>
+  /**
+   * Effective (inherited) permission keys for the ACTIVE org — same
+   * resolution as the server routes (`x-org-slug` header, else first
+   * membership). Used to gate admin-panel tabs/actions client-side.
+   */
+  permissions?: string[]
+  /** Permissions per org slug, so the UI reacts to org switching instantly. */
+  permissionsByOrg?: Record<string, string[]>
 }
 
 export type PaymentMethod = "FREE" | "RAZORPAY" | "STRIPE" | "MANUAL"

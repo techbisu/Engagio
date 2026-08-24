@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 
+const PAGE_SIZE = 50
+
 async function requirePlatformAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return (session?.user as any)?.role === "ADMIN"
+  return isDbPlatformAdmin(session)
 }
 
-/** GET /api/platform/organizations — list ALL organizations with stats */
+/**
+ * GET /api/platform/organizations — list ALL organizations (paginated)
+ *
+ * Query params:
+ *   - `search` (optional): search by name, slug, or email
+ *   - `status` (optional): filter by status (ALL, ACTIVE, SUSPENDED, ARCHIVED)
+ *   - `cursor` (optional): pagination cursor
+ *   - `limit` (optional): page size, default 50, max 100
+ */
 export async function GET(req: NextRequest) {
   try {
     if (!(await requirePlatformAdmin())) {
@@ -18,6 +28,8 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const search = url.searchParams.get("search") || ""
     const status = url.searchParams.get("status") || "ALL"
+    const cursor = url.searchParams.get("cursor")
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || String(PAGE_SIZE), 10) || PAGE_SIZE, 1), 100)
 
     const where: Record<string, unknown> = {}
     if (status !== "ALL") where.status = status
@@ -28,7 +40,11 @@ export async function GET(req: NextRequest) {
         { email: { contains: search, mode: "insensitive" } },
       ]
     }
+    if (cursor) {
+      where.id = { gt: cursor }
+    }
 
+    // Fetch one extra to determine if there's a next page
     const orgs = await db.organization.findMany({
       where,
       include: {
@@ -44,11 +60,15 @@ export async function GET(req: NextRequest) {
         subscription: { select: { status: true, currentPeriodEnd: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: limit + 1,
     })
 
+    const hasNextPage = orgs.length > limit
+    const items = hasNextPage ? orgs.slice(0, limit) : orgs
+    const nextCursor = hasNextPage ? items[items.length - 1]?.id ?? null : null
+
     return NextResponse.json({
-      organizations: orgs.map((org) => ({
+      organizations: items.map((org) => ({
         id: org.id,
         name: org.name,
         slug: org.slug,
@@ -69,16 +89,14 @@ export async function GET(req: NextRequest) {
           certificates: org._count.certificates,
         },
       })),
-      total: orgs.length,
+      nextCursor,
+      total: items.length,
     })
   } catch (error) {
     console.error("[GET /api/platform/organizations] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }
 }
-
-/** PATCH /api/platform/organizations/[id] — change org status or plan */
-// (handled in [id]/route.ts)

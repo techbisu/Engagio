@@ -74,7 +74,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   const centroidHistoryRef = useRef<{ x: number; y: number }[]>([])
   const lastCentroidRef = useRef<{ x: number; y: number } | null>(null)
   const lastFiredRef = useRef<Record<string, number>>({})
-  const canFire = useCallback((key: string, windowMs = 3000, now = Date.now()) => {
+  const canFire = useCallback((key: string, windowMs = 5000, now = Date.now()) => {
     const last = lastFiredRef.current[key] ?? 0
     if (now - last < windowMs) return false
     lastFiredRef.current[key] = now
@@ -119,7 +119,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const data = imageData.data
 
     // Use a larger center region (60×60 instead of 40×40) for better face detection
-    const centerSize = 60
+    const centerSize = 80
     const cx0 = Math.floor((CW - centerSize) / 2)
     const cy0 = Math.floor((CH - centerSize) / 2)
     let centerCount = 0
@@ -177,7 +177,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     // Face is detected if the center region has enough skin-tone pixels.
     // Threshold: 300+ skin pixels in the 60×60 center region (out of 3600 total)
     if (faceDetection) {
-      const hasFace = result.count >= 300
+      const hasFace = result.count >= 250
       if (!hasFace && canFire("counter:face")) {
         setFaceNotDetected((n) => n + 1)
         onViolationRef.current?.("face")
@@ -217,13 +217,13 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
       // Add to history (keep last 3 frames)
       centroidHistoryRef.current.push(currentCentroid)
-      if (centroidHistoryRef.current.length > 3) {
+      if (centroidHistoryRef.current.length > 5) {
         centroidHistoryRef.current.shift()
       }
 
       // Calculate average centroid from history
       const history = centroidHistoryRef.current
-      if (history.length >= 2) {
+      if (history.length >= 3) {
         const avgX = history.reduce((s, p) => s + p.x, 0) / history.length
         const avgY = history.reduce((s, p) => s + p.y, 0) / history.length
 
@@ -235,7 +235,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           const dy = avgY - last.y
           const delta = Math.sqrt(dx * dx + dy * dy)
           // Lower threshold (8 instead of 15) for better sensitivity
-          if (delta > 8 && canFire("counter:lookAway")) {
+          if (delta > 18 && canFire("counter:lookAway", 8000)) {
             setLookAwayAlerts((n) => n + 1)
             onViolationRef.current?.("lookAway")
             fireToast(
@@ -291,6 +291,19 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const t2 = setTimeout(() => attachStreamToVideo(), 500)
     const t3 = setTimeout(() => attachStreamToVideo(), 1000)
 
+    // MutationObserver: watch for video element changes.
+    // Scoped to videoRef's parent to avoid expensive full-DOM observation.
+    const observer = new MutationObserver(() => {
+      attachStreamToVideo()
+    })
+    const target = videoRef.current?.parentElement || document.body
+    observer.observe(target, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src", "srcobject"],
+    })
+
     return () => {
       if (attachIntervalRef.current) {
         clearInterval(attachIntervalRef.current)
@@ -299,6 +312,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       clearTimeout(t1)
       clearTimeout(t2)
       clearTimeout(t3)
+      observer.disconnect()
     }
   }, [enabled, attachStreamToVideo, isReady])
 

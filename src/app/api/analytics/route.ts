@@ -1,21 +1,19 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/tenant";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+    // Dashboard analytics are org-scoped to the caller's organization.
+    const auth = await requirePermission(req, "analytics.view");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-
-    if (session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const orgId = auth.ctx.orgId;
+    const orgAttemptWhere = { event: { organizationId: orgId } };
 
     const statuses = ["IN_PROGRESS", "COMPLETED", "CHEAT_DETECTED", "TIMEOUT"];
 
@@ -34,25 +32,28 @@ export async function GET() {
       recentAttemptsRaw,
       allAttemptsEventIds,
     ] = await Promise.all([
-      db.event.count(),
-      db.question.count(),
-      db.quizLink.count(),
-      db.quizAttempt.count(),
-      db.user.count(),
-      db.quizAttempt.count({ where: { status: "COMPLETED" } }),
-      db.quizAttempt.count({ where: { status: "IN_PROGRESS" } }),
-      db.quizAttempt.count({ where: { status: "CHEAT_DETECTED" } }),
-      db.quizAttempt.count({ where: { status: "TIMEOUT" } }),
+      db.event.count({ where: { organizationId: orgId } }),
+      db.question.count({ where: { organizationId: orgId } }),
+      db.quizLink.count({ where: orgAttemptWhere }),
+      db.quizAttempt.count({ where: orgAttemptWhere }),
+      db.organizationMember.count({
+        where: { organizationId: orgId, status: "ACTIVE" },
+      }),
+      db.quizAttempt.count({ where: { ...orgAttemptWhere, status: "COMPLETED" } }),
+      db.quizAttempt.count({ where: { ...orgAttemptWhere, status: "IN_PROGRESS" } }),
+      db.quizAttempt.count({ where: { ...orgAttemptWhere, status: "CHEAT_DETECTED" } }),
+      db.quizAttempt.count({ where: { ...orgAttemptWhere, status: "TIMEOUT" } }),
       db.quizAttempt.count({
-        where: { status: "COMPLETED", passed: true },
+        where: { ...orgAttemptWhere, status: "COMPLETED", passed: true },
       }),
       db.quizAttempt.aggregate({
         _avg: { percentage: true },
-        where: { status: "COMPLETED", percentage: { not: null } },
+        where: { ...orgAttemptWhere, status: "COMPLETED", percentage: { not: null } },
       }),
       db.quizAttempt.findMany({
         take: 5,
         orderBy: { startedAt: "desc" },
+        where: orgAttemptWhere,
         include: {
           user: { select: { name: true, email: true } },
           event: { select: { title: true } },
@@ -60,6 +61,7 @@ export async function GET() {
       }),
       // Fetch all attempt eventIds to compute top events by attempt count
       db.quizAttempt.findMany({
+        where: orgAttemptWhere,
         select: { eventId: true },
       }),
     ]);
@@ -86,7 +88,7 @@ export async function GET() {
     // Resolve top events — fetch event titles + per-event aggregates
     const topEventIds = topEventsRaw.map((t) => t.eventId);
     const topEventsInfo = await db.event.findMany({
-      where: { id: { in: topEventIds } },
+      where: { id: { in: topEventIds }, organizationId: orgId },
       select: { id: true, title: true },
     });
     const topEventMap = new Map(topEventsInfo.map((e) => [e.id, e.title]));

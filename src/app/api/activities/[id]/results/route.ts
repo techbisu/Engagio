@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import {
   parseActivitySettings,
   parseJsonArray,
@@ -20,22 +21,28 @@ type RouteContext = { params: Promise<{ id: string }> };
  *  `settings.showResults` is true (and may be further gated by
  *  `hideResultsUntilClosed`).
  */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const isAdmin = (session?.user as any)?.role === "ADMIN";
+    // Org-scoped admin view: managers see full results for their org's
+    // activities; participants see the visibility-gated aggregate.
+    const auth = await requirePermission(req, "result.view");
 
     const { id } = await ctx.params;
     const activity = await db.activity.findUnique({
       where: { id },
-      include: { questions: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        questions: { orderBy: { sortOrder: "asc" } },
+        event: { select: { organizationId: true } },
+      },
     });
     if (!activity) {
       return NextResponse.json({ error: "Activity not found" }, { status: 404 });
     }
+    const isAdmin = auth.ok && ownsResource(activity.event, auth.ctx);
 
     const settings = parseActivitySettings(activity.settings);
 
@@ -243,7 +250,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(payload);
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

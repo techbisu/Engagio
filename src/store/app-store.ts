@@ -76,8 +76,8 @@ interface AppState {
   setInviteToken: (token: string | null) => void
 
   // Admin tab (preserved across navigations within /admin).
-  adminTab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results"
-  setAdminTab: (tab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results") => void
+  adminTab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results" | "gatepasses"
+  setAdminTab: (tab: "dashboard" | "events" | "questions" | "links" | "activities" | "attempts" | "users" | "payments" | "certificates" | "results" | "gatepasses") => void
 
   // In-progress quiz attempt metadata. Set when the user clicks "Begin" on
   // QuizStart; consumed by QuizRunner (which takes over the screen).

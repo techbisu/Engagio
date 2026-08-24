@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requirePermission } from "@/lib/tenant";
 import type { PaymentStatus, RegistrationDto } from "@/types";
+
+/** Default page size for paginated results. */
+const PAGE_SIZE = 50;
 
 /** Map a Prisma Registration row to a RegistrationDto (with payment fields). */
 function toRegistrationDto(r: any): RegistrationDto {
@@ -48,37 +50,33 @@ function toRegistrationDto(r: any): RegistrationDto {
  *   - `status` (default: PENDING_VERIFICATION): one of
  *     PENDING_VERIFICATION | COMPLETED | REJECTED | ALL.
  *   - `eventId` (optional): filter to a single event.
+ *   - `cursor` (optional): pagination cursor (the `id` of the last item from previous page).
+ *   - `limit` (optional): page size, default 50, max 100.
  *
- * Ordering:
- *   - For PENDING_VERIFICATION: createdAt desc (newest submissions first).
- *   - For COMPLETED / REJECTED: verifiedAt desc.
- *   - For ALL: verifiedAt desc (or createdAt desc when verifiedAt is null).
- *
- * Returns: `{ payments: RegistrationDto[], total: number }`.
- * Each payment DTO also includes an `event` object with paymentAmount /
- * paymentCurrency / title for display convenience. (We attach these to the
- * returned DTO via the `data` field — clients consume `payment.event`.)
+ * Returns: `{ payments: RegistrationDto[], nextCursor: string | null, total: number }`.
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if ((session.user as any)?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await requirePermission(req, "registration.payment.verify");
+    if (!auth.ok) {
+      if (auth.legacyAdmin) {
+        return NextResponse.json({ error: "No organization context" }, { status: 403 });
+      }
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const url = new URL(req.url);
     const statusParam = (url.searchParams.get("status") || "PENDING_VERIFICATION").toUpperCase();
     const eventId = url.searchParams.get("eventId");
+    const cursor = url.searchParams.get("cursor");
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || String(PAGE_SIZE), 10) || PAGE_SIZE, 1), 100);
 
-    // Build where clause.
+    // Build where clause — org-scoped via the registration's event.
     const where: any = {
       paymentStatus: { not: "NONE" },
+      event: { organizationId: auth.ctx.orgId },
     };
     if (statusParam !== "ALL") {
-      // Only allow the documented statuses.
       if (
         statusParam === "PENDING_VERIFICATION" ||
         statusParam === "COMPLETED" ||
@@ -92,9 +90,11 @@ export async function GET(req: NextRequest) {
     if (eventId) {
       where.eventId = eventId;
     }
+    // Cursor-based pagination
+    if (cursor) {
+      where.id = { gt: cursor };
+    }
 
-    // Order: pending → createdAt desc; completed/rejected → verifiedAt desc;
-    // ALL → verifiedAt desc (with createdAt desc fallback for null verifiedAt).
     let orderBy: any = { createdAt: "desc" };
     if (
       statusParam === "COMPLETED" ||
@@ -104,6 +104,7 @@ export async function GET(req: NextRequest) {
       orderBy = [{ verifiedAt: "desc" }, { createdAt: "desc" }];
     }
 
+    // Fetch one extra to determine if there's a next page
     const registrations = await db.registration.findMany({
       where,
       include: {
@@ -118,18 +119,14 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy,
-      take: 200,
+      take: limit + 1,
     });
 
-    // Map to DTOs with attached event info.
-    const payments: (RegistrationDto & {
-      event: {
-        id: string;
-        title: string;
-        paymentAmount: number;
-        paymentCurrency: string;
-      };
-    })[] = registrations.map((r: any) => ({
+    const hasNextPage = registrations.length > limit;
+    const items = hasNextPage ? registrations.slice(0, limit) : registrations;
+    const nextCursor = hasNextPage ? items[items.length - 1]?.id ?? null : null;
+
+    const payments = items.map((r: any) => ({
       ...toRegistrationDto(r),
       event: {
         id: r.event.id,
@@ -141,11 +138,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       payments,
+      nextCursor,
       total: payments.length,
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

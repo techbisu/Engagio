@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("[POST /api/achievements] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }
@@ -240,7 +240,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("[GET /api/achievements] error:", e)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

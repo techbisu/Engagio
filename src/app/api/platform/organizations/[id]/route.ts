@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { invalidatePlanCache } from "@/lib/entitlements"
 
 async function requirePlatformAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return (session?.user as any)?.role === "ADMIN"
+  // DB-backed: re-fetch User.platformRole so demotions apply immediately.
+  return isDbPlatformAdmin(session)
 }
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -55,7 +56,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
   } catch (error) {
     console.error("[PATCH /api/platform/organizations/[id]] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

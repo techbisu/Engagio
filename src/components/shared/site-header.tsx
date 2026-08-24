@@ -33,7 +33,8 @@ const NAV_LINKS = [
 export function SiteHeader({ session, onNavigate, onSignOut }: SiteHeaderProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const user = session?.user ?? null
-  const isAdmin = user?.role === 'ADMIN'
+  // Org access is membership-based (canManageOrg), not the legacy global role.
+  const isAdmin = user?.canManageOrg === true
 
   const handleNav = (view: ViewName) => {
     onNavigate(view)

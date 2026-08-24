@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { Flag, Code2, Type as TypeIcon, Shuffle } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -140,7 +140,7 @@ function MatchingInput({
  *   - MATCHING         → left items × Select dropdowns (answer = { left: right })
  *   - CODING           → Textarea with language label (answer = string code)
  */
-export function QuestionCard({
+export const QuestionCard = memo(function QuestionCard({
   index,
   total,
   question,
@@ -318,4 +318,5 @@ export function QuestionCard({
       )}
     </div>
   )
-}
+
+})

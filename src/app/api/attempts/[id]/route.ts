@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
+import { requirePermission, ownsResource } from "@/lib/tenant";
 import { db } from "@/lib/db";
 import { parseJsonArray } from "@/lib/utils";
 import type { MatchPair } from "@/types";
@@ -34,7 +35,7 @@ export async function GET(
           },
         },
         event: {
-          select: { id: true, title: true, description: true },
+          select: { id: true, title: true, description: true, organizationId: true },
         },
       },
     });
@@ -43,8 +44,11 @@ export async function GET(
       return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
     }
 
-    const isAdmin = session.user.role === "ADMIN";
-    if (attempt.userId !== session.user.id && !isAdmin) {
+    // Org-scoped admin view: a manager can review attempts belonging to their
+    // org. Owners always keep their own-attempt access.
+    const auth = await requirePermission(req, "result.view");
+    const isAdminView = auth.ok && ownsResource(attempt.event, auth.ctx);
+    if (attempt.userId !== session.user.id && !isAdminView) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -238,7 +242,7 @@ export async function GET(
     const hideForStudent =
       attempt.quizLink.publishResults &&
       !isPublished &&
-      !isAdmin;
+      !isAdminView;
 
     const publishedAtIso = attempt.publishedAt
       ? attempt.publishedAt.toISOString()

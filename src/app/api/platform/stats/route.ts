@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "@/lib/auth"
+import { getServerSession, isDbPlatformAdmin } from "@/lib/auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 
-/** Platform admin only — checks User.role === "ADMIN" */
+/** Platform admin only — checks User.platformRole === "SUPERADMIN" (DB-backed). */
 async function requirePlatformAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return (session?.user as any)?.role === "ADMIN"
+  // DB-backed: re-fetch User.platformRole so demotions apply immediately.
+  return isDbPlatformAdmin(session)
 }
 
 /** GET /api/platform/stats — platform-wide dashboard stats */
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[GET /api/platform/stats] error:", error)
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(error) },
+      { error: "Internal Server Error" },
       { status: 500 }
     )
   }

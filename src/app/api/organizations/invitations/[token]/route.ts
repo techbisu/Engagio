@@ -100,7 +100,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -162,6 +162,38 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
       },
     });
 
+    // Enforce the org's max_members plan limit before adding a new member
+    // (Phase 7). Only enforced when this acceptance actually creates a member.
+    if (!existing) {
+      const { checkPlanLimit } = await import("@/lib/entitlements");
+      const check = await checkPlanLimit(
+        {
+          userId: session.user.id,
+          userEmail: session.user.email,
+          userName: session.user.name ?? null,
+          userRole: (session.user as any).role,
+          orgId: invitation.organizationId,
+          orgSlug: invitation.organization.slug,
+          orgName: invitation.organization.name,
+          orgRole: invitation.role as OrgRole,
+          isPlatformAdmin:
+            (session.user as any).platformRole === "SUPERADMIN" ||
+            (session.user as any).isSuperAdmin === true,
+        },
+        "member"
+      );
+      if (!check.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              "This organization has reached its member limit. Ask the owner to upgrade.",
+            code: "USAGE_LIMIT_EXCEEDED",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     let member = existing;
     await db.$transaction(async (tx) => {
       if (!existing) {
@@ -193,7 +225,9 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
       orgSlug: invitation.organization.slug,
       orgName: invitation.organization.name,
       orgRole: invitation.role as OrgRole,
-      isPlatformAdmin: (session.user as any).role === "ADMIN",
+      isPlatformAdmin:
+        (session.user as any).platformRole === "SUPERADMIN" ||
+        (session.user as any).isSuperAdmin === true,
     };
     await auditLog(auditCtx, "MEMBER_JOINED", "Member", member?.id ?? "", {
       email: invitation.email,
@@ -208,7 +242,7 @@ export async function POST(_req: NextRequest, ctx: RouteContext) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: "Internal Server Error", detail: String(e) },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }

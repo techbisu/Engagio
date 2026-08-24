@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * POST /api/auth/check-org
@@ -19,6 +20,16 @@ import { db } from "@/lib/db";
  */
 export async function POST(req: NextRequest) {
   try {
+    // Public endpoint — rate limit per IP so it can't be hammered to probe
+    // which emails belong to an organization.
+    const rl = await rateLimit(`check-org:${getClientIp(req)}`, 30, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { email } = body as { email?: string };
 
