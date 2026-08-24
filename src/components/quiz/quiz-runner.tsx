@@ -53,10 +53,11 @@ import type {
 import type { SafeUser } from "@/types"
 import { QuizTimer } from "./quiz-timer"
 import { QuestionNavigator } from "./question-navigator"
+import type { SecurityMetrics } from "./security-sidebar"
 import { QuestionCard, type QuestionAnswer } from "./question-card"
 import { QuizResults } from "./quiz-results"
 import { WatermarkOverlay } from "./watermark-overlay"
-import { SecuritySidebar, type SecurityMetrics } from "./security-sidebar"
+import { ExamSidebar } from "./exam-sidebar"
 
 type RunnerStatus = "loading" | "active" | "submitting" | "done" | "error"
 
@@ -652,47 +653,7 @@ export function QuizRunner({
           </div>
         </section>
 
-        {/* Desktop navigator sidebar (lg+) */}
-        <aside className="hidden w-64 shrink-0 xl:block">
-          <Card className="sticky top-24">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ListChecks className="size-4 text-emerald-600" /> Navigator
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Answered</span>
-                <Badge variant="secondary">{answeredCount}/{questions.length}</Badge>
-              </div>
-              <Separator />
-              <QuestionNavigator
-                total={questions.length}
-                current={currentIdx}
-                answered={answeredArr}
-                flagged={flaggedArr}
-                onJump={jumpTo}
-              />
-            </CardContent>
-          </Card>
-        </aside>
-
-        {/* Security sidebar (xl+) */}
-        <SecuritySidebar
-          metrics={combinedMetrics}
-          config={security}
-          isOpen={securityOpen}
-          onToggle={() => setSecurityOpen((v) => !v)}
-          proctor={
-            security.aiProctor && !cameraGateOpen && !proctorBypassed
-              ? {
-                  isReady: aiProctor.isReady,
-                  error: aiProctor.error,
-                }
-              : null
-          }
-          videoRef={aiProctor.videoRef}
-        />
+        <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen && !proctorBypassed ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
       </main>
 
       {/* Mobile floating buttons: question navigator + security monitor */}

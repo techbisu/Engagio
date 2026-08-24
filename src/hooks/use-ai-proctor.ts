@@ -291,18 +291,28 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const t2 = setTimeout(() => attachStreamToVideo(), 500)
     const t3 = setTimeout(() => attachStreamToVideo(), 1000)
 
-    // MutationObserver: watch for video element changes.
-    // Scoped to videoRef's parent to avoid expensive full-DOM observation.
+    // MutationObserver: watch for video element or stream changes.
+    // Re-checks target every second in case video mounts after observer setup.
+    // No attributeFilter — srcObject is a DOM property, not an attribute.
     const observer = new MutationObserver(() => {
       attachStreamToVideo()
     })
-    const target = videoRef.current?.parentElement || document.body
-    observer.observe(target, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["src", "srcobject"],
-    })
+    const observeTarget = () => {
+      const target = videoRef.current?.parentElement || document.body
+      observer.observe(target, {
+        childList: true,
+        subtree: true,
+      })
+    }
+    observeTarget()
+    // Re-observe if target changes (video mounts later)
+    const retargetInterval = setInterval(() => {
+      const target = videoRef.current?.parentElement || document.body
+      if (observer.takeRecords().length === 0 && target !== observer) {
+        observer.disconnect()
+        observeTarget()
+      }
+    }, 1000)
 
     return () => {
       if (attachIntervalRef.current) {
@@ -312,6 +322,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
       clearTimeout(t1)
       clearTimeout(t2)
       clearTimeout(t3)
+      clearInterval(retargetInterval)
       observer.disconnect()
     }
   }, [enabled, attachStreamToVideo, isReady])
