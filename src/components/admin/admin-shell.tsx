@@ -507,7 +507,7 @@ export function AdminShell({
 
             {tab === "results" && <ResultsCertDashboard />}
 
-            {resolvedTab === "gatepasses" && (
+            {tab === "gatepasses" && (
               <GatePassManager eventId={linkPreselectedEventId || ""} />
             )}
 
