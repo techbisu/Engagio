@@ -1,5 +1,9 @@
 "use client"
 
+// Prevent static prerendering — this page uses useSearchParams() which
+// requires a Suspense boundary during static generation.
+export const dynamic = "force-dynamic"
+
 /**
  * /dashboard
  *
