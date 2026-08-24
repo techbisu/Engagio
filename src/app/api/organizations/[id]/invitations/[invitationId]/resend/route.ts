@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { resolveOrgMembership, auditLog } from "@/lib/tenant";
+import { requireOrgRole, auditLog } from "@/lib/tenant";
 
 type RouteContext = { params: Promise<{ id: string; invitationId: string }> };
 
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id, invitationId } = await ctx.params;
-    const result = await resolveOrgMembership(id, "ADMIN");
+    const result = await requireOrgRole(req, "ADMIN");
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
