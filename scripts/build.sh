@@ -7,20 +7,30 @@ DB_URL="${DATABASE_URL:-}"
 
 echo "[build] DATABASE_URL starts with: ${DB_URL:0:30}..."
 
-# Production hardening: warn (not fail) if using SQLite in production
+# Production hardening: fail if using SQLite in production (data durability)
 if [[ "$NODE_ENV" == "production" && "$DB_URL" == file:* ]]; then
-  echo "[build] WARNING: SQLite detected in production. For best results, use PostgreSQL."
-  echo "[build] Continuing with SQLite — some features may not work correctly."
+  echo "[build] ERROR: SQLite is not allowed in production. Use PostgreSQL."
+  exit 1
 fi
 
-# Production hardening: warn if secrets are missing (don't fail the build)
+# Production hardening: fail if secrets are missing
 if [[ "$NODE_ENV" == "production" ]]; then
   if [[ -z "$NEXTAUTH_SECRET" || "$NEXTAUTH_SECRET" == "generate-with-openssl-rand-base64-32" ]]; then
-    echo "[build] WARNING: NEXTAUTH_SECRET is not set or uses example value. Set it in Vercel project settings."
+    echo "[build] ERROR: NEXTAUTH_SECRET is not set or uses example value."
+    exit 1
   fi
   if [[ -z "$SUPERADMIN_EMAIL" ]]; then
-    echo "[build] WARNING: SUPERADMIN_EMAIL is not set. Using default: superadmin@engagio.app"
-    export SUPERADMIN_EMAIL="superadmin@engagio.app"
+    echo "[build] ERROR: SUPERADMIN_EMAIL is not set."
+    exit 1
+  fi
+fi
+
+# Production hardening: require Upstash Redis for rate limiting
+if [[ "$NODE_ENV" == "production" ]]; then
+  if [[ -z "$UPSTASH_REDIS_REST_URL" || -z "$UPSTASH_REDIS_REST_TOKEN" ]]; then
+    echo "[build] ERROR: Upstash Redis is required in production for rate limiting."
+    echo "[build] Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
+    exit 1
   fi
 fi
 
@@ -38,9 +48,14 @@ fi
 echo "[build] Running prisma generate..."
 npx prisma generate
 
-# Push schema to database (creates all tables)
-echo "[build] Running prisma db push..."
-npx prisma db push --accept-data-loss
+# Production: run migrations, not db push
+if [[ "$NODE_ENV" == "production" ]]; then
+  echo "[build] Running prisma migrate deploy..."
+  npx prisma migrate deploy
+else
+  echo "[build] Running prisma db push (dev)..."
+  npx prisma db push --accept-data-loss
+fi
 
 # Seed demo data (plans, org, event, questions, quiz, users)
 echo "[build] Running seed..."

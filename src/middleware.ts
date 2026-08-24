@@ -17,12 +17,12 @@ import { NextResponse, type NextRequest } from "next/server"
 const BASE_DOMAIN = process.env.BASE_DOMAIN || "engagio.app"
 
 // Security headers applied to all responses
+// Match next.config.ts headers for consistency
 const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "SAMEORIGIN",
+  "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy":
-    "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
+  "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
 }
 

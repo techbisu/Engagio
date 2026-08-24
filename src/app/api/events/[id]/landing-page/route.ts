@@ -52,8 +52,11 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
-    if (!event || !ownsResource(event, auth.ctx)) {
+    const event = await db.event.findUnique({
+      where: { id, organizationId: auth.ctx.orgId },
+      select: { id: true, organizationId: true },
+    });
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const sections = await db.eventLandingSection.findMany({
@@ -84,8 +87,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id } = await ctx.params;
-    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
-    if (!event || !ownsResource(event, auth.ctx)) {
+    const event = await db.event.findUnique({
+      where: { id, organizationId: auth.ctx.orgId },
+      select: { id: true, organizationId: true },
+    });
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 

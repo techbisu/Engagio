@@ -186,6 +186,10 @@ export const authOptions: NextAuthOptions = {
             if (!password) return null // password required but not provided
             const valid = await bcrypt.compare(password, existing.passwordHash)
             if (!valid) return null // wrong password
+          } else {
+            // No password hash: credentials provider requires password or OAuth-only
+            // Email-only auth is only allowed via Google OAuth provider
+            return null
           }
 
           // ─── TOTP (2FA) check for super admin accounts ──────────────
@@ -214,7 +218,7 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
-          // If no password hash → email-only auth (participant/demo), allow
+          // User has password and authenticated, or has no password hash (OAuth-only)
           return {
             id: existing.id,
             email: existing.email,

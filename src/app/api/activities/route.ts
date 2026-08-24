@@ -27,10 +27,10 @@ export async function GET(req: NextRequest) {
       );
     }
     const event = await db.event.findUnique({
-      where: { id: eventId },
-      select: { id: true },
+      where: { id: eventId, organizationId: auth.ctx.orgId },
+      select: { id: true, organizationId: true },
     });
-    if (!event || !ownsResource(event, auth.ctx)) {
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const activities = await db.activity.findMany({
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     }
     const event = await db.event.findUnique({
       where: { id: eventId },
-      select: { id: true },
+      select: { id: true, organizationId: true },
     });
     if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });

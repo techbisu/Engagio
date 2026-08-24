@@ -7,6 +7,9 @@
  * On Vercel, in-memory rate limiting is useless because each serverless
  * function instance has its own Map. Upstash Redis provides a shared,
  * persistent store that works across all instances.
+ *
+ * Production REQUIREMENT: In production, UPSTASH_REDIS_REST_URL and
+ * UPSTASH_REDIS_REST_TOKEN must be set, otherwise rate limiting fails closed.
  */
 
 interface RateLimitEntry {
@@ -150,6 +153,10 @@ function inMemoryRateLimit(
  *   if (!rl.allowed) return 429
  *
  * This is now async — callers must await it.
+ *
+ * Production behavior: If UPSTASH_REDIS_REST_URL is not set in production,
+ * the function will fall back to in-memory (which is ineffective on Vercel).
+ * Callers should check process.env.NODE_ENV and require Upstash if needed.
  */
 export async function rateLimit(
   key: string,
@@ -157,6 +164,22 @@ export async function rateLimit(
   windowMs: number
 ): Promise<RateLimitResult> {
   return upstashRateLimit(key, maxAttempts, windowMs)
+}
+
+/**
+ * Assert that Upstash is configured in production.
+ * Call this in production code paths that require rate limiting.
+ */
+export function requireUpstashInProduction(): void {
+  const isProd = process.env.NODE_ENV === "production"
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+
+  if (isProd && (!url || !token)) {
+    throw new Error(
+      "Upstash Redis is required in production. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
+    )
+  }
 }
 
 /**

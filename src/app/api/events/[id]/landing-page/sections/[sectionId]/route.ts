@@ -52,8 +52,11 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
-    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
-    if (!event || !ownsResource(event, auth.ctx)) {
+    const event = await db.event.findUnique({
+      where: { id, organizationId: auth.ctx.orgId },
+      select: { id: true, organizationId: true },
+    });
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
     const section = await db.eventLandingSection.findFirst({
@@ -85,7 +88,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
-    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
+    const event = await db.event.findUnique({ where: { id }, select: { id: true, organizationId: true } });
     if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
@@ -146,7 +149,7 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     const { id, sectionId } = await ctx.params;
-    const event = await db.event.findUnique({ where: { id }, select: { id: true } });
+    const event = await db.event.findUnique({ where: { id }, select: { id: true, organizationId: true } });
     if (!event || !ownsResource(event, auth.ctx)) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
