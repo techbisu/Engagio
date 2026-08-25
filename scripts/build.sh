@@ -49,7 +49,7 @@ fi
 echo "[build] Running seed..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require("bcryptjs");
+const bcrypt = require('bcryptjs');
 const db = new PrismaClient();
 
 async function main() {
