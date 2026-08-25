@@ -19,9 +19,6 @@ if [[ "$NODE_ENV" == "production" ]]; then
     echo "[build] ERROR: NEXTAUTH_SECRET is not set or uses example value."
     exit 1
   fi
-  if [[ -z "$SUPERADMIN_EMAIL" ]]; then
-    echo "[build] WARNING: SUPERADMIN_EMAIL not set, using default (superadmin@engagio.app)"
-  fi
 fi
 
 
@@ -100,9 +97,9 @@ async function main() {
   } else { console.log('[seed] Default Organization exists'); }
 
   // 4. Super Admin (with platformRole=SUPERADMIN)
-  const saEmail = process.env.SUPERADMIN_EMAIL || 'superadmin@engagio.app';
-  const saPass = process.env.SUPERADMIN_PASSWORD || 'Engagio@2026';
-  const saHash = await bcrypt.hash(saPass, 10);
+  // Hardcoded super admin — immutable, no env vars needed
+  const saEmail = 'superadmin@engagio.app';
+  const saHash = await bcrypt.hash('Engagio@2026', 10);
   const sa = await db.user.upsert({ where: { email: saEmail }, update: { role: 'ADMIN', platformRole: 'SUPERADMIN', name: 'Super Admin', passwordHash: saHash }, create: { email: saEmail, name: 'Super Admin', role: 'ADMIN', platformRole: 'SUPERADMIN', passwordHash: saHash } });
   await db.organizationMember.upsert({ where: { organizationId_userId: { organizationId: defaultOrg.id, userId: sa.id } }, update: {}, create: { organizationId: defaultOrg.id, userId: sa.id, role: 'OWNER', status: 'ACTIVE' } }).catch(() => {});
   console.log('[seed] Super Admin ready: ' + saEmail);
