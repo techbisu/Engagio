@@ -10,6 +10,7 @@
  */
 
 import * as React from "react"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCurrentUser } from "@/components/shared/use-current-user"
 import { EventRegistrationForm } from "@/components/public/event-registration-form"
@@ -17,7 +18,7 @@ import { MarketingPageShell } from "@/components/shared/marketing-page-shell"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BrandLogo } from "@/components/shared/brand-logo"
 
-export default function RegisterPage() {
+function RegisterPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useCurrentUser()
@@ -63,5 +64,19 @@ export default function RegisterPage() {
         </Card>
       </div>
     </MarketingPageShell>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <MarketingPageShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      </MarketingPageShell>
+    }>
+      <RegisterPageInner />
+    </Suspense>
   )
 }
