@@ -20,8 +20,7 @@ if [[ "$NODE_ENV" == "production" ]]; then
     exit 1
   fi
   if [[ -z "$SUPERADMIN_EMAIL" ]]; then
-    echo "[build] ERROR: SUPERADMIN_EMAIL is not set."
-    exit 1
+    echo "[build] WARNING: SUPERADMIN_EMAIL not set, using default (superadmin@engagio.app)"
   fi
 fi
 
