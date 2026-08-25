@@ -53,6 +53,7 @@ fi
 echo "[build] Running seed..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require("bcryptjs");
 const db = new PrismaClient();
 
 async function main() {
@@ -100,9 +101,12 @@ async function main() {
   } else { console.log('[seed] Default Organization exists'); }
 
   // 4. Super Admin (with platformRole=SUPERADMIN)
-  const sa = await db.user.upsert({ where: { email: 'superadmin@engagio.app' }, update: { role: 'ADMIN', platformRole: 'SUPERADMIN', name: 'Super Admin' }, create: { email: 'superadmin@engagio.app', name: 'Super Admin', role: 'ADMIN', platformRole: 'SUPERADMIN' } });
+  const saEmail = process.env.SUPERADMIN_EMAIL || 'superadmin@engagio.app';
+  const saPass = process.env.SUPERADMIN_PASSWORD || 'Engagio@2026';
+  const saHash = await bcrypt.hash(saPass, 10);
+  const sa = await db.user.upsert({ where: { email: saEmail }, update: { role: 'ADMIN', platformRole: 'SUPERADMIN', name: 'Super Admin', passwordHash: saHash }, create: { email: saEmail, name: 'Super Admin', role: 'ADMIN', platformRole: 'SUPERADMIN', passwordHash: saHash } });
   await db.organizationMember.upsert({ where: { organizationId_userId: { organizationId: defaultOrg.id, userId: sa.id } }, update: {}, create: { organizationId: defaultOrg.id, userId: sa.id, role: 'OWNER', status: 'ACTIVE' } }).catch(() => {});
-  console.log('[seed] Super Admin ready');
+  console.log('[seed] Super Admin ready: ' + saEmail);
 
   // 5. Demo Organization
   let demoOrg = await db.organization.findUnique({ where: { slug: 'demo-medical' } });
