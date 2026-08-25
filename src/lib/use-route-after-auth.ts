@@ -13,7 +13,7 @@
  *   3. Activity deep-link (?activity=slug) → student dashboard activity
  *   4. Event deep-link (/event/[slug]) → event landing page
  *   5. Role-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER in an ACTIVE org,
- *      or platform admin) → /admin, STUDENT → /dashboard, legacy ADMIN without
+ *      or platform admin) → /admin, PARTICIPANT → /dashboard, legacy ADMIN without
  *      an org → /org-register (via NoOrgRedirect)
  *
  * Added during the Phase 1 routing migration.
@@ -47,7 +47,7 @@ export function useRouteAfterAuth() {
         return
       }
 
-      if (me.role === "STUDENT") {
+      if (me.role === "PARTICIPANT") {
         router.push("/dashboard")
         return
       }

@@ -430,6 +430,92 @@ export async function sendInvitationEmail(params: {
   })
 }
 
+export async function sendVerificationEmail(params: {
+  to: string
+  name?: string | null
+  verificationUrl: string
+  expiresInHours?: number
+}): Promise<SendEmailResult> {
+  const { to, name, verificationUrl, expiresInHours = 24 } = params
+  const displayName = name || to.split("@")[0]
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Hi <strong style="color:${BRAND.text};">${escapeHtml(displayName)}</strong>,
+    </p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Thanks for signing up for Engagio! Please verify your email address by clicking the button below.
+    </p>
+    <p style="margin:0 0 16px 0;font-size:14px;line-height:1.6;color:${BRAND.subtle};">
+      This verification link will expire in <strong>${expiresInHours} hours</strong>.
+    </p>
+  `
+
+  const html = renderEmailLayout({
+    preheader: "Verify your email address for Engagio",
+    title: "Verify your email ✉️",
+    intro: "Click the button below to verify your email and activate your account.",
+    bodyHtml,
+    cta: { label: "Verify Email →", url: verificationUrl },
+  })
+
+  return sendEmail({
+    to,
+    subject: "Verify your email — Engagio",
+    html,
+    text: `Hi ${displayName},
+
+Please verify your email address by visiting: ${verificationUrl}
+
+This link expires in ${expiresInHours} hours.
+
+— The Engagio Team`,
+    tag: "email-verification",
+  })
+}
+
+export async function sendPasswordResetEmail(params: {
+  to: string
+  name?: string | null
+  resetUrl: string
+  expiresInHours?: number
+}): Promise<SendEmailResult> {
+  const { to, name, resetUrl, expiresInHours = 1 } = params
+  const displayName = name || to.split("@")[0]
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Hi <strong style="color:${BRAND.text};">${escapeHtml(displayName)}</strong>,
+    </p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      We received a request to reset your password. Click the button below to set a new password.
+    </p>
+    <p style="margin:0 0 16px 0;font-size:14px;line-height:1.6;color:${BRAND.subtle};">
+      This reset link will expire in <strong>${expiresInHours} hour</strong>.
+    </p>
+    <p style="margin:0 0 16px 0;font-size:14px;line-height:1.6;color:${BRAND.subtle};">
+      If you didn't request this, you can safely ignore this email.
+    </p>
+  `
+
+  const html = renderEmailLayout({
+    preheader: "Reset your Engagio password",
+    title: "Reset your password 🔑",
+    intro: "Click the button below to set a new password for your account.",
+    bodyHtml,
+    cta: { label: "Reset Password →", url: resetUrl },
+  })
+
+  return sendEmail({
+    to,
+    subject: "Reset your password — Engagio",
+    html,
+    text: `Hi ${displayName},\n\nReset your password by visiting: ${resetUrl}\n\nThis link expires in ${expiresInHours} hour.\n\nIf you didn't request this, ignore this email.\n\n— The Engagio Team`,
+    tag: "password-reset",
+  })
+}
+
+
 /* ────────────────────────────────────────────────────────────────────────
    Utilities & status helpers
    ──────────────────────────────────────────────────────────────────────── */

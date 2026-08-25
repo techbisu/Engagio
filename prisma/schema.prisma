@@ -18,7 +18,7 @@ model User {
   email         String   @unique
   name          String?
   image         String?
-  role          String   @default("STUDENT") // ADMIN | STUDENT (legacy org-level)
+  role          String   @default("PARTICIPANT") // ADMIN | PARTICIPANT (legacy org-level)
   // Platform-level role: SUPERADMIN (platform admin) | USER (default)
   // Replaces the SUPERADMIN_EMAIL env-var check with a DB field.
   platformRole  String   @default("USER") // SUPERADMIN | USER
@@ -27,6 +27,7 @@ model User {
   // TOTP (Google Authenticator) secret + enabled flag — for super admin 2FA
   totpSecret    String?
   totpEnabled   Boolean  @default(false)
+  emailVerified DateTime? // null = not verified, set on email link click
   // i18n: user's preferred locale (falls back to org locale, then 'en')
   locale        String?
   createdAt     DateTime @default(now())

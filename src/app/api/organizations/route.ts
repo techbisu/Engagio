@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
         ownerName = newUser.name;
       }
     } else if (session?.user?.id && session.user.email) {
-      // Using existing session (e.g., Google OAuth user creating org)
+      // Using existing session (user creating org)
       ownerId = session.user.id;
       ownerEmail = session.user.email;
       ownerName = session.user.name ?? null;

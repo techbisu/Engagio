@@ -15,7 +15,7 @@ async function requirePlatformAdmin(): Promise<boolean> {
  *
  * Query params:
  *   - `search` (optional): search by email or name
- *   - `role` (optional): filter by role (ALL, ADMIN, STUDENT)
+ *   - `role` (optional): filter by role (ALL, ADMIN, PARTICIPANT)
  *   - `cursor` (optional): pagination cursor (id of last item)
  *   - `limit` (optional): page size, default 50, max 100
  */

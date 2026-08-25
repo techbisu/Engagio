@@ -36,7 +36,7 @@ export interface TenantContext {
   userId: string
   userEmail: string
   userName: string | null
-  userRole: Role // the global role (ADMIN | STUDENT)
+  userRole: Role // the global role (ADMIN | PARTICIPANT)
   orgId: string
   orgSlug: string
   orgName: string

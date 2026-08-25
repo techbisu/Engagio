@@ -134,7 +134,7 @@ const SECTION_TYPES: SectionTypeMeta[] = [
   { type: "CTA", label: "Call To Action", description: "Centered card with gradient background + button.", icon: Megaphone },
   { type: "STATS", label: "Stats", description: "4-column stat row (label + value + icon).", icon: BarChart3 },
   { type: "ACTIVITIES", label: "Activities", description: "Auto-loads event activities (exams, polls, quizzes) as clickable carousel cards.", icon: PlayCircle },
-  { type: "REGISTRATION", label: "Registration", description: "2-grid design with event registration form + benefits. Participants register with Google.", icon: ClipboardList },
+  { type: "REGISTRATION", label: "Registration", description: "2-grid design with event registration form + benefits. Participants register with email and password.", icon: ClipboardList },
   { type: "CUSTOM", label: "Custom", description: "Free-form markdown body.", icon: LayoutIcon },
 ]
 
@@ -1574,7 +1574,7 @@ function RegistrationEditor({ data, onChange }: { data: RegistrationSectionData;
     <div className="space-y-3">
       <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
         <ClipboardList className="mb-1 size-4" />
-        Shows the event registration form in a 2-grid layout (benefits on left, form on right). Participants register with Google auth, then get access to the dashboard.
+        Shows the event registration form in a 2-grid layout (benefits on left, form on right). Participants register with email and password, then get access to the dashboard.
       </div>
       <div className="space-y-1.5">
         <Label>Heading</Label>

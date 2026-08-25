@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs"
 // Seed script: run with `bun run db:seed`
 import { db } from "../src/lib/db"
 import { generateQuizSlug } from "../src/lib/utils"
@@ -24,7 +25,7 @@ async function main() {
     create: {
       email: "student@quizmaster.pro",
       name: "Demo Student",
-      role: "STUDENT",
+      role: "PARTICIPANT",
     },
   })
   console.log(`  ✓ Student: ${student.email}`)

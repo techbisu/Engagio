@@ -28,7 +28,7 @@ const FAQS: FaqItem[] = [
   {
     question: 'Do participants need an account?',
     answer:
-      'They sign in with Gmail (Google OAuth) for production, or email for the demo. One click, no signup friction. First-time users are created automatically with the participant role.',
+      'They sign in with email and password. First-time users register with their email, verify their account, and are assigned the participant role automatically.',
   },
   {
     question: 'Is the question order really random?',

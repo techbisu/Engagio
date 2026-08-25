@@ -29,7 +29,7 @@ export default function LoginPage() {
   const setInviteToken = useAppStore((s) => s.setInviteToken)
   const didAutoRouteRef = React.useRef<string | null>(null)
 
-  // Auto-route when a user becomes authenticated via Google OAuth (the Google
+  // Auto-route when a user becomes authenticated (the
   // callback redirects back to /login, then this effect detects the new
   // session and routes the user to the right place).
   React.useEffect(() => {

@@ -41,7 +41,7 @@ export type AdminTab =
   | "results"
   | "gatepasses"
 
-export type Role = "ADMIN" | "STUDENT"
+export type Role = "ADMIN" | "PARTICIPANT"
 
 export type AttemptStatus =
   | "IN_PROGRESS"

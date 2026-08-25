@@ -18,7 +18,7 @@ model User {
   email         String   @unique
   name          String?
   image         String?
-  role          String   @default("STUDENT") // ADMIN | STUDENT
+  role          String   @default("PARTICIPANT") // ADMIN | PARTICIPANT
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -214,7 +214,7 @@ async function main() {
   const demoParticipant = await db.user.upsert({
     where: { email: "demo.participant@engagio.app" },
     update: { name: "Demo Participant" },
-    create: { email: "demo.participant@engagio.app", name: "Demo Participant", role: "STUDENT" },
+    create: { email: "demo.participant@engagio.app", name: "Demo Participant", role: "PARTICIPANT", passwordHash: await bcrypt.hash("demo123", 10), emailVerified: new Date() },
   })
   console.log(`  ✓ Demo Participant: ${demoParticipant.email}`)
 
@@ -230,11 +230,11 @@ async function main() {
   console.log("\n📋 Demo Accounts:")
   console.log("  ┌────────────────────────────────────────────────────────────────────────┐")
   console.log("  │ Super Admin  │ superadmin@engagio.app      │ Engagio@2026 │")
-  console.log("  │ Org Admin    │ demo.admin@engagio.app       │ (any pw) │")
-  console.log("  │ Participant  │ demo.participant@engagio.app │ (any pw) │")
+  console.log("  │ Org Admin    │ demo.admin@engagio.app       │ demo123  │")
+  console.log("  │ Participant  │ demo.participant@engagio.app │ demo123  │")
   console.log("  └────────────────────────────────────────────────────────────────────────┘")
   console.log("\n  Super Admin login: /?view=superadmin (email + password + TOTP 2FA)")
-  console.log("  Org Admin login:   /?view=login (Google or email)")
+  console.log("  Org Admin login:   /login (email + password)")
   console.log(`\n🔗 Public URLs:`)
   console.log(`   Org page:     /?org=demo-medical`)
   console.log(`   Event page:   /?event=medical-summit-2026`)

@@ -33,7 +33,7 @@ interface NoOrgRedirectProps {
 }
 
 /**
- * Intermediate page shown after a Google OAuth login when the user has NO
+ * Intermediate page shown after login when the user has NO
  * organization membership. Explains the situation clearly and routes the user
  * toward registration (or sign-out so they can try a different account).
  */

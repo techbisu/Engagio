@@ -434,7 +434,7 @@ function UsersManager() {
           <SelectContent>
             <SelectItem value="ALL">All roles</SelectItem>
             <SelectItem value="ADMIN">Admins</SelectItem>
-            <SelectItem value="STUDENT">Participants</SelectItem>
+            <SelectItem value="PARTICIPANT">Participants</SelectItem>
           </SelectContent>
         </Select>
       </div>

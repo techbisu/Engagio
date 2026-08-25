@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       db.organization.count({ where: { status: "SUSPENDED" } }),
       db.user.count(),
       db.user.count({ where: { role: "ADMIN" } }),
-      db.user.count({ where: { role: "STUDENT" } }),
+      db.user.count({ where: { role: "PARTICIPANT" } }),
       db.event.count(),
       db.event.count({ where: { isActive: true } }),
       db.activity.count(),

@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -172,99 +173,165 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
         />
       </div>
 
-      {/* Current & Upcoming Activities (for registered events only) */}
-      {registeredEvents.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-lg bg-teal-100 text-teal-600 dark:bg-teal-950/60 dark:text-teal-300">
-                <Calendar className="size-4" />
-              </span>
-              <div>
-                <CardTitle>Current & Upcoming Activities</CardTitle>
-                <CardDescription>
-                  Live and upcoming activities from events you&apos;ve registered for.
-                </CardDescription>
+            {/* Current & Upcoming Activities (for registered events only) */}
+      {registeredEvents.length > 0 && (() => {
+        // Find the most active event (most LIVE activities, or first one)
+        const featuredIdx = registeredEvents.findIndex(({ activities }) =>
+          activities.some(a => a.status === "LIVE")
+        )
+        const featured = featuredIdx >= 0 ? registeredEvents[featuredIdx] : registeredEvents[0]
+        const rest = registeredEvents.filter((_, i) => i !== (featuredIdx >= 0 ? featuredIdx : 0))
+        const hasLive = featured.activities.some(a => a.status === "LIVE")
+
+        return (
+          <>
+            {/* Featured event - large prominent card */}
+            <div className="relative overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-teal-50/50 p-6 dark:from-emerald-950/30 dark:to-teal-950/20 dark:border-emerald-500/10">
+              {hasLive && (
+                <div className="absolute right-4 top-4">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-white shadow-lg shadow-emerald-500/30">
+                    <span className="size-1.5 animate-pulse rounded-full bg-white" />
+                    LIVE NOW
+                  </span>
+                </div>
+              )}
+              <div className="mb-4 flex items-center gap-3">
+                {featured.event.organization?.logoUrl ? (
+                  <img src={featured.event.organization.logoUrl} alt="" className="size-8 rounded-lg" />
+                ) : (
+                  <div className="grid size-8 place-items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+                    <Building2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">{featured.event.title}</h3>
+                  <p className="text-sm text-muted-foreground">{featured.event.organization?.name}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {featured.activities.map((act) => {
+                  const meta = ACTIVITY_TYPE_META[act.type] ?? { label: act.type, icon: FileQuestion, color: "text-emerald-600" }
+                  const Icon = meta.icon
+                  const isLive = act.status === "LIVE"
+                  return (
+                    <button
+                      key={act.id}
+                      onClick={() => {
+                        if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
+                        else if (act.slug) window.location.href = "/dashboard?sub=activity&activity=" + act.slug
+                      }}
+                      className="group flex flex-col rounded-lg border border-white/60 bg-white/80 p-4 text-left shadow-sm transition hover:border-emerald-500/40 hover:bg-white hover:shadow-md dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={"grid size-8 place-items-center rounded-lg " + (isLive ? "bg-emerald-100 dark:bg-emerald-900/40" : "bg-muted")}>
+                            <Icon className={"size-4 " + meta.color} />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{meta.label}</span>
+                            <p className="text-sm font-semibold leading-tight">{act.title}</p>
+                          </div>
+                        </div>
+                        {isLive ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                            <span className="size-1 animate-pulse rounded-full bg-emerald-500" />
+                            LIVE
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400">
+                            <Clock className="size-2.5" />
+                            SOON
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                        {act.questionCount > 0 && <span>{act.questionCount} Questions</span>}
+                        {act.quizLink?.timeLimit && act.quizLink.timeLimit > 0 && (
+                          <span>{act.quizLink.timeLimit} min</span>
+                        )}
+                        <span className="ml-auto flex items-center gap-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                          {isLive ? "Start Now" : "View"}
+                          <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
+                        </span>
+<button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const link = act.quizLink?.slug 
+                              ? window.location.origin + "/quiz/" + act.quizLink.slug
+                              : act.slug 
+                                ? window.location.origin + "/activity/" + act.slug
+                                : null;
+                            if (link) {
+                              navigator.clipboard.writeText(link);
+                              toast.success("Link copied to clipboard!");
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition"
+                          title="Copy activity link"
+                        >
+                          <Share2 className="size-3" />
+                        </button>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {registeredEvents.map(({ event, activities }) => (
-                <div key={event.id} className="rounded-lg border p-4">
-                  {/* Event header */}
-                  <div className="mb-3 flex items-center gap-2">
-                    {event.organization?.logoUrl ? (
-                      <img src={event.organization.logoUrl} alt="" className="size-5 rounded" />
-                    ) : (
-                      <div className="grid size-5 place-items-center rounded bg-muted">
-                        <Building2 className="size-3 text-muted-foreground" />
-                      </div>
-                    )}
-                    <span className="text-sm font-semibold">{event.title}</span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs text-muted-foreground">{event.organization?.name}</span>
+
+            {/* Other registered events - compact list */}
+            {rest.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-7 place-items-center rounded-lg bg-teal-100 text-teal-600 dark:bg-teal-950/60 dark:text-teal-300">
+                      <Calendar className="size-3.5" />
+                    </span>
+                    <div>
+                      <CardTitle className="text-base">Your Other Events</CardTitle>
+                      <CardDescription className="text-xs">
+                        {rest.length} more registered {rest.length === 1 ? "event" : "events"}
+                      </CardDescription>
+                    </div>
                   </div>
-                  {/* Activity cards */}
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {activities.map((act) => {
-                      const meta = ACTIVITY_TYPE_META[act.type] ?? { label: act.type, icon: FileQuestion, color: "text-emerald-600" }
-                      const Icon = meta.icon
-                      const isLive = act.status === "LIVE"
-                      const href = act.quizLink?.slug
-                        ? `/quiz/${act.quizLink.slug}`
-                        : act.slug
-                          ? `/dashboard?sub=activity&activity=${act.slug}`
-                          : null
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2">
+                    {rest.map(({ event, activities }) => {
+                      const liveCount = activities.filter(a => a.status === "LIVE").length
                       return (
-                        <button
-                          key={act.id}
-                          onClick={() => {
-                            if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
-                            else if (act.slug) window.location.href = `/dashboard?sub=activity&activity=${act.slug}`
-                          }}
-                          className="group flex flex-col rounded-lg border p-3 text-left transition hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
-                        >
-                          <div className="mb-2 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <Icon className={`size-4 ${meta.color}`} />
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                {meta.label}
-                              </span>
+                        <div key={event.id} className="flex items-center gap-3 rounded-lg border p-3 transition hover:bg-muted/50">
+                          {event.organization?.logoUrl ? (
+                            <img src={event.organization.logoUrl} alt="" className="size-6 rounded" />
+                          ) : (
+                            <div className="grid size-6 place-items-center rounded bg-muted">
+                              <Building2 className="size-3 text-muted-foreground" />
                             </div>
-                            {isLive ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{event.title}</p>
+                            <p className="text-xs text-muted-foreground">{event.organization?.name}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {liveCount > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
                                 <span className="size-1 animate-pulse rounded-full bg-emerald-500" />
-                                LIVE
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                                <Clock className="size-2.5" />
-                                UPCOMING
+                                {liveCount} LIVE
                               </span>
                             )}
+                            <span className="text-xs text-muted-foreground">{activities.length} {activities.length === 1 ? "activity" : "activities"}</span>
+                            <ArrowRight className="size-4 text-muted-foreground" />
                           </div>
-                          <p className="mb-1 line-clamp-1 text-sm font-medium">{act.title}</p>
-                          <div className="mt-auto flex items-center gap-2 text-[10px] text-muted-foreground">
-                            {act.questionCount > 0 && <span>{act.questionCount} Qs</span>}
-                            {act.quizLink?.timeLimit && act.quizLink.timeLimit > 0 && (
-                              <span>{act.quizLink.timeLimit} min</span>
-                            )}
-                            <span className="ml-auto flex items-center gap-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
-                              {isLive ? "Start" : "View"}
-                              <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
-                            </span>
-                          </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )
+      })()}
+
 
       {/* Take a quiz */}
       <Card>

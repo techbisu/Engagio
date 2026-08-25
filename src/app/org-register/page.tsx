@@ -3,7 +3,7 @@
 /**
  * /org-register
  *
- * Organization onboarding page (Google login + org details form).
+ * Organization onboarding page (email + password registration + org details form).
  *
  * Replaces the old `/?view=org-register` and `/?view=org-onboarding`
  * query-param routes.

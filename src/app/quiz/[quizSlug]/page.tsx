@@ -17,7 +17,7 @@
 import * as React from "react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
-import { ParticipantLogin } from "@/components/auth/participant-login"
+import { ParticipantGoogleLogin } from "@/components/auth/participant-google-login"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
 import { StudentShell } from "@/components/student/student-shell"
@@ -112,30 +112,15 @@ export default function QuizRoutePage() {
     <div className="min-h-screen flex flex-col">
       <SiteHeader session={null} onNavigate={navigate} onSignOut={handleSignOut} />
       <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <ParticipantLogin
-          slug={quizSlug}
-          onSuccess={async () => {
-            // After participant login:
-            // 1. Fetch the user
-            // 2. Auto-register them as a PARTICIPANT in the event's org
-            // 3. Stay on this page — user state will update and re-render
-            //    the QuizStart component above.
-            await refetch()
-
-            // Auto-register as participant in the org that owns this event.
-            // Idempotent — safe if already a member.
-            try {
-              await fetch("/api/events/register-participant", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ quizSlug }),
-              })
-            } catch {
-              // Non-blocking — the quiz still works even if registration fails
-              toast.error("Could not auto-register you as a participant.")
-            }
-          }}
-        />
+        <div className="space-y-6">
+              <ParticipantGoogleLogin
+                callbackUrl={"/quiz/" + quizSlug}
+                className="w-full"
+              />
+              <p className="text-center text-sm text-white/60">
+                Sign in with Google to take this quiz.
+              </p>
+            </div>
       </main>
       <SiteFooter onNavigate={navigate} />
     </div>

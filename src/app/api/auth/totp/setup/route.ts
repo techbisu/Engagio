@@ -49,7 +49,7 @@ export async function GET() {
     const otpauthUri = buildTotpUri({
       secret,
       email: user.email,
-      issuer: "Engagio Super Admin",
+      issuer: "Engagio",
     });
     const qrCodeDataUrl = await generateTotpQrCode(otpauthUri);
 
