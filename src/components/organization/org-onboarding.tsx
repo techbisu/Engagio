@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import {
   ArrowRight,
   Building2,
+  Mail,
   Check,
   CheckCircle2,
   Loader2,
@@ -90,6 +91,11 @@ export function OrgOnboarding({ onCreated, onCancel, forced = true }: OrgOnboard
   const [slugTouched, setSlugTouched] = React.useState(false)
   const [description, setDescription] = React.useState("")
   const [industry, setIndustry] = React.useState<string>("")
+
+  // Step 1: Inline login
+  const [loginEmail, setLoginEmail] = React.useState("")
+  const [loginPassword, setLoginPassword] = React.useState("")
+  const [loginLoading, setLoginLoading] = React.useState(false)
 
   // Auto-advance to Step 2 as soon as we have a session.
   React.useEffect(() => {
@@ -266,26 +272,117 @@ export function OrgOnboarding({ onCreated, onCancel, forced = true }: OrgOnboard
                     className="space-y-6"
                   >
                     <div className="space-y-3">
-                      <Button
-                        type="button"
-                        size="lg"
-                        className="w-full gap-3 bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50 hover:ring-slate-300 dark:bg-white dark:text-slate-900"
-                        onClick={() => window.location.href = "/login"}
-                      >
-                        
-                        <span className="font-medium">Continue</span>
-                      </Button>
-
-                      <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300">
-                        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        <span>
-                          Your account is used to verify your identity.
-                          
-                        </span>
+                      <form
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        if (!loginEmail) {
+                          toast.error("Please enter your email.")
+                          return
+                        }
+                        if (!loginPassword) {
+                          toast.error("Please enter your password.")
+                          return
+                        }
+                        setLoginLoading(true)
+                        signIn("credentials", {
+                          email: loginEmail,
+                          password: loginPassword,
+                          redirect: false,
+                        })
+                          .then((res) => {
+                            if (!res || res.error) {
+                              if (res?.error === "EMAIL_NOT_VERIFIED") {
+                                toast.error("Please verify your email first. Check your inbox.")
+                              } else {
+                                toast.error("Invalid email or password.")
+                              }
+                              return
+                            }
+                            toast.success("Signed in!")
+                            window.location.reload()
+                          })
+                          .catch(() => {
+                            toast.error("Something went wrong. Please try again.")
+                          })
+                          .finally(() => {
+                            setLoginLoading(false)
+                          })
+                      }}
+                      className="space-y-3.5"
+                    >
+                      <div className="space-y-1.5">
+                        <Label htmlFor="onboard-email" className="text-sm font-medium">
+                          Email
+                        </Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                          <Input
+                            id="onboard-email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={loginEmail}
+                            onChange={(e) => setLoginEmail(e.target.value)}
+                            autoComplete="email"
+                            required
+                            disabled={loginLoading}
+                            className="pl-9"
+                            autoFocus
+                          />
+                        </div>
                       </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="onboard-password" className="text-sm font-medium">
+                          Password
+                        </Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                          <Input
+                            id="onboard-password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            autoComplete="current-password"
+                            required
+                            disabled={loginLoading}
+                            className="pl-9"
+                          />
+                        </div>
+                        <div className="text-right">
+                          <a href="/forgot-password" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">
+                            Forgot password?
+                          </a>
+                        </div>
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/20 hover:from-emerald-700 hover:to-teal-700"
+                        disabled={loginLoading}
+                      >
+                        {loginLoading ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin" /> Signing in...
+                          </>
+                        ) : (
+                          <>
+                            Sign In <ArrowRight className="size-4" />
+                          </>
+                        )}
+                      </Button>
+                    </form>
+
+                    <div className="text-center text-xs text-slate-500 dark:text-slate-400">
+                      Don&apos;t have an account?{" "}
+                      <a href="/register?mode=admin" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+                        Register here
+                      </a>
                     </div>
 
-                    {/* Helper footer */}
+                    <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300">
+                      <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span>Your account is used to verify your identity.</span>
+                    </div>
+
                     <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
                       <div className="flex items-start gap-3">
                         <Sparkles className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -297,6 +394,7 @@ export function OrgOnboarding({ onCreated, onCancel, forced = true }: OrgOnboard
                         </div>
                       </div>
                     </div>
+</div>
                   </motion.div>
                 ) : (
                   <motion.form
