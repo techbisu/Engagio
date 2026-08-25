@@ -74,7 +74,6 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
           <div className="rounded-lg border border-dashed border-border p-3 text-center">
             <p className="text-xs text-muted-foreground">
               🎓 Participant? Use the event link shared by your organizer.<br />
-              🔒 Super Admin? Use <code className="font-mono">/superadmin/login</code>
             </p>
           </div>
         </CardContent>
