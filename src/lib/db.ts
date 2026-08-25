@@ -107,10 +107,50 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = db
 }
 
-// --- Graceful shutdown (dev only) ---
-// In production, Vercel kills the process after 10s — no need to drain.
-if (process.env.NODE_ENV !== 'production') {
+// --- Graceful shutdown ---------------------------------------------------
+// We attempt to disconnect Prisma cleanly when Node receives a kill signal
+// or the process is exiting. On Vercel serverless this rarely runs (the
+// platform kills after 10s) but it's essential for long-running deployments
+// (Docker, K8s, dedicated Node).
+//
+// We attach handlers idempotently so importing this module multiple times
+// doesn't multiply listeners. A 3s hard timeout escapes us cleanly if Prisma
+// refuses to disconnect (e.g. a hung query holds a connection open).
+let shutdownHandlersInstalled = false
+
+function installShutdownHandlers() {
+  if (shutdownHandlersInstalled) return
+  shutdownHandlersInstalled = true
+
+  const disconnect = async () => {
+    try {
+      // .catch because anything thrown from the handler takes down Node
+      // before our outer shutdown logic can run.
+      await Promise.race([
+        db.$disconnect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('disconnect timeout')), 3_000),
+        ),
+      ])
+    } catch (err) {
+      console.error('[db] graceful disconnect failed:', err)
+    }
+  }
+
+  const shutdown = async (signal: NodeJS.Signals) => {
+    await disconnect()
+    process.kill(process.pid, signal)
+  }
+
+  process.once('SIGTERM', () => void shutdown('SIGTERM'))
+  process.once('SIGINT', () => void shutdown('SIGINT'))
   process.on('beforeExit', async () => {
-    await db.$disconnect()
+    try {
+      await db.$disconnect()
+    } catch (err) {
+      console.error('[db] beforeExit disconnect failed:', err)
+    }
   })
 }
+
+installShutdownHandlers()

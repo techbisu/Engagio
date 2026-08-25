@@ -1,82 +1,159 @@
 /**
- * Email abstraction layer.
+ * Email service for Engagio.
  *
- * All emails go through this module so the provider can be swapped
- * (Resend → SendGrid → Postmark → SES) without changing application code.
- *
- * Current provider: Resend (via direct API, no SDK).
+ * - All emails go through this module so the provider can be swapped without
+ *   changing application code. Current provider: Resend (direct REST API).
+ * - Email is NEVER a hard dependency for business logic — when RESEND_API_KEY
+ *   is missing or a send fails, `sendEmail` returns `{ sent: false, ... }`
+ *   and the caller can continue.
+ * - Sends are non-blocking (fire-and-forget encouraged) but the underlying
+ *   fetch uses AbortController + per-attempt timeout + light retry so a
+ *   slow / flapping provider doesn't hang any caller.
  *
  * Env vars:
- *   RESEND_API_KEY   — Resend API key (optional)
- *   EMAIL_FROM       — From address (default: noreply@engagio.app)
- *
- * If RESEND_API_KEY is not configured, `sendEmail` returns a success
- * status with `sent: false` and logs a warning — email is NEVER a hard
- * dependency for business logic (result publishing, certificate issuance).
+ *   RESEND_API_KEY  — Resend API key (optional, but recommended in prod)
+ *   EMAIL_FROM      — From address (default: noreply@engagio.app)
+ *   EMAIL_REPLY_TO  — Optional Reply-To header
+ *   EMAIL_TIMEOUT_MS — Per-attempt HTTP timeout (default 8000)
+ *   EMAIL_RETRY     — Retry attempts on network / 5xx (default 1)
  */
 
+export interface SendEmailAttachment {
+  filename: string
+  content: string // base64
+  type?: string
+  disposition?: "attachment" | "inline"
+}
+
 export interface SendEmailInput {
-  to: string
+  to: string | string[]
   subject: string
   html: string
-  /** Optional plain-text fallback. */
+  /** Plain-text fallback. Auto-generated from html if not provided. */
   text?: string
+  /** Optional Reply-To header. Falls back to EMAIL_REPLY_TO env. */
+  replyTo?: string
+  /** Optional attachments (base64-encoded). */
+  attachments?: SendEmailAttachment[]
+  /** Tag used for analytics in the Resend dashboard. */
+  tag?: string
 }
+
+export type EmailFailureReason =
+  | "EMAIL_NOT_CONFIGURED"
+  | "TIMEOUT"
+  | "NETWORK_ERROR"
+  | "PROVIDER_ERROR"
+  | "RATE_LIMITED"
+  | "INVALID_RECIPIENT"
+  | "UNKNOWN"
 
 export interface SendEmailResult {
   sent: boolean
-  /** When false, the reason (e.g. "email not configured"). */
-  reason?: string
-  /** Provider message ID (when sent). */
+  reason?: EmailFailureReason | string
   messageId?: string
+  /** When true, caller may safely retry (transient failure). */
+  retryable?: boolean
 }
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@engagio.app"
+const EMAIL_FROM = process.env.EMAIL_FROM || "Engagio <noreply@engagio.app>"
+const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO
+const EMAIL_TIMEOUT_MS = Number(process.env.EMAIL_TIMEOUT_MS || 8000)
+const EMAIL_RETRY = Math.max(0, Number(process.env.EMAIL_RETRY ?? 1))
+const EMAIL_API_BASE = "https://api.resend.com"
+
+/** Hard cap so a misconfigured env can't make the request hang. */
+const MAX_TIMEOUT_MS = 15_000
 
 export function isEmailConfigured(): boolean {
   return !!RESEND_API_KEY
 }
 
 /**
- * Send an email via Resend.
- *
- * If RESEND_API_KEY is not set, returns `{ sent: false, reason: "..." }`
- * without throwing — callers can continue their flow.
+ * Send an email via Resend. Async, with timeout + retry. Always resolves
+ * with a structured `SendEmailResult` — never throws.
  */
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   if (!isEmailConfigured()) {
     console.warn(
-      `[email] RESEND_API_KEY not configured — skipping email to ${input.to} (subject: "${input.subject}")`
+      `[email] RESEND_API_KEY not configured — skipping email to ${formatRecipients(input.to)} (subject: "${input.subject}")`
     )
     return {
       sent: false,
-      reason: "Email provider not configured (set RESEND_API_KEY)",
+      reason: "EMAIL_NOT_CONFIGURED",
+      retryable: false,
     }
   }
 
+  const recipients = normalizeRecipients(input.to)
+  if (recipients.length === 0) {
+    return {
+      sent: false,
+      reason: "INVALID_RECIPIENT",
+      retryable: false,
+    }
+  }
+
+  const payload = {
+    from: EMAIL_FROM,
+    to: recipients,
+    subject: input.subject,
+    html: input.html,
+    text: input.text ?? htmlToPlainText(input.html),
+    ...(input.replyTo || EMAIL_REPLY_TO ? { reply_to: input.replyTo || EMAIL_REPLY_TO } : {}),
+    ...(input.attachments && input.attachments.length > 0
+      ? { attachments: input.attachments }
+      : {}),
+    ...(input.tag ? { tags: [{ name: input.tag }] } : {}),
+  }
+
+  const attempts = EMAIL_RETRY + 1
+  let lastError: SendEmailResult | null = null
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const result = await sendOnce(payload)
+    if (result.sent) return result
+    lastError = result
+    if (result.retryable === false) return result
+    if (attempt < attempts) {
+      const backoff = Math.min(2_000, 250 * 2 ** (attempt - 1))
+      await sleep(backoff)
+    }
+  }
+
+  return (
+    lastError ?? { sent: false, reason: "UNKNOWN" as EmailFailureReason, retryable: false }
+  )
+}
+
+async function sendOnce(payload: unknown): Promise<SendEmailResult> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), Math.min(MAX_TIMEOUT_MS, EMAIL_TIMEOUT_MS))
+
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch(`${EMAIL_API_BASE}/emails`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": "Engagio/1.0 (email-service)",
       },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: input.to,
-        subject: input.subject,
-        html: input.html,
-        text: input.text,
-      }),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      // Disable Next.js fetch cache — we always want a live send.
+      cache: "no-store",
     })
 
     if (!res.ok) {
-      const text = await res.text()
-      console.error(`[email] Resend API error (${res.status}):`, text)
+      const bodyText = await safeReadText(res)
+      console.error(`[email] Resend API error (${res.status}):`, bodyText)
+      const retryable = res.status >= 500 || res.status === 429 || res.status === 408
       return {
         sent: false,
-        reason: `Resend API error: ${res.status}`,
+        reason: res.status === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
+        retryable,
       }
     }
 
@@ -85,19 +162,153 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       sent: true,
       messageId: data.id,
     }
-  } catch (error) {
-    console.error("[email] sendEmail error:", error)
+  } catch (err) {
+    const isAbort = (err as { name?: string })?.name === "AbortError"
+    console.error("[email] sendEmail transport error:", err)
     return {
       sent: false,
-      reason: String(error),
+      reason: isAbort ? "TIMEOUT" : "NETWORK_ERROR",
+      retryable: true,
     }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
+async function safeReadText(res: Response): Promise<string> {
+  try {
+    return (await res.text()).slice(0, 2_000)
+  } catch {
+    return ""
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   High-level helpers — each renders a professional HTML template
+   ──────────────────────────────────────────────────────────────────────── */
+
 /**
- * Send a "result published" notification email to a participant.
- * Non-blocking — returns `{ sent: false }` if email isn't configured.
+ * Brand palette tokens reused across templates. Centralised so themes can be
+ * adjusted in one place. Keep this in sync with the marketing site.
  */
+const BRAND = {
+  primary: "#6366f1", // indigo-500
+  primaryDark: "#4f46e5", // indigo-600
+  accent: "#10b981", // emerald-500
+  text: "#0f172a",
+  muted: "#475569",
+  subtle: "#94a3b8",
+  surface: "#ffffff",
+  border: "#e2e8f0",
+  bg: "#f8fafc",
+  radius: "12px",
+} as const
+
+export interface EmailLayoutProps {
+  preheader?: string
+  title: string
+  intro?: string
+  /** Optional primary call to action rendered as a gradient button. */
+  cta?: { label: string; url: string }
+  bodyHtml: string
+  /** Footer note overrides the default "Powered by Engagio" line. */
+  footerNote?: string
+}
+
+export function renderEmailLayout(props: EmailLayoutProps): string {
+  const { preheader = "", title, intro, cta, bodyHtml, footerNote } = props
+  const safePreheader = escapeHtml(preheader)
+  const safeTitle = escapeHtml(title)
+
+  return `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${safeTitle}</title>
+  </head>
+  <body style="margin:0;padding:0;background:${BRAND.bg};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${BRAND.text};">
+    <!-- Preheader (hidden preview text) -->
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;color:${BRAND.bg};line-height:1px;">
+      ${safePreheader}
+      ${safePreheader ? "‌" : ""}
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.bg};padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+            <!-- Brand mark -->
+            <tr>
+              <td align="center" style="padding:0 0 16px 0;">
+                <div style="display:inline-block;padding:8px 16px;background:white;border-radius:999px;border:1px solid ${BRAND.border};">
+                  <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;background:linear-gradient(135deg,${BRAND.primary},${BRAND.accent});-webkit-background-clip:text;background-clip:text;color:transparent;">Engagio</span>
+                </div>
+              </td>
+            </tr>
+            <!-- Card -->
+            <tr>
+              <td style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};overflow:hidden;">
+                <!-- Gradient header -->
+                <div style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});padding:28px 32px;color:white;">
+                  <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">${safeTitle}</h1>
+                </div>
+
+                <div style="padding:28px 32px 8px 32px;">
+                  ${intro ? `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">${escapeHtml(intro)}</p>` : ""}
+                  ${bodyHtml}
+                  ${
+                    cta
+                      ? `<div style="padding:24px 0 8px 0;text-align:center;">
+                          <a href="${escapeHtml(cta.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;letter-spacing:-0.01em;box-shadow:0 4px 14px rgba(99,102,241,0.35);">
+                            ${escapeHtml(cta.label)}
+                          </a>
+                        </div>
+                        <p style="margin:8px 0 24px 0;font-size:12px;line-height:1.5;color:${BRAND.subtle};text-align:center;word-break:break-all;">
+                          Or copy and paste this link:<br />
+                          <a href="${escapeHtml(cta.url)}" style="color:${BRAND.primary};text-decoration:underline;">${escapeHtml(cta.url)}</a>
+                        </p>`
+                      : ""
+                  }
+                </div>
+
+                <!-- Footer -->
+                <div style="background:${BRAND.bg};padding:16px 32px;border-top:1px solid ${BRAND.border};font-size:12px;line-height:1.5;color:${BRAND.subtle};text-align:center;">
+                  ${escapeHtml(footerNote || "Powered by Engagio — events that engage.")}
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:16px 0 0 0;text-align:center;font-size:11px;color:${BRAND.subtle};">
+                You are receiving this because someone used Engagio with this email address.<br />
+                If this wasn't you, you can safely ignore this email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+/** A small reusable "stat tile" rendered inside the card body. */
+export function statTileHtml(label: string, value: string, color: string = BRAND.primary): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px 0;border-collapse:separate;border-spacing:0;">
+    <tr>
+      <td style="padding:18px;background:${BRAND.bg};border:1px solid ${BRAND.border};border-radius:10px;text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:${BRAND.subtle};font-weight:600;">${escapeHtml(label)}</div>
+        <div style="margin-top:6px;font-size:28px;font-weight:700;color:${color};line-height:1.2;">${escapeHtml(value)}</div>
+      </td>
+    </tr>
+  </table>`
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   Specific email helpers
+   ──────────────────────────────────────────────────────────────────────── */
+
 export async function sendResultPublishedEmail(params: {
   to: string
   participantName: string
@@ -106,38 +317,32 @@ export async function sendResultPublishedEmail(params: {
   percentage?: number | null
   resultUrl: string
 }): Promise<SendEmailResult> {
-  const { participantName, eventTitle, percentage, resultUrl } = params
-  const scoreText =
-    percentage != null ? `<p style="margin:0;font-size:32px;font-weight:700;color:#10b981;">${percentage}%</p>` : ""
+  const { participantName, eventTitle, percentage, score, resultUrl } = params
+  const scoreText = percentage != null ? statTileHtml("Your Score", `${percentage}%`, BRAND.accent) : ""
+  const subText =
+    score != null
+      ? `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">You scored <strong style="color:${BRAND.text};">${score}</strong> correct answers. Well done!</p>`
+      : ""
 
-  const html = `<!DOCTYPE html>
-<html>
-  <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;">
-    <div style="background:linear-gradient(135deg,#10b981,#14b8a6);padding:24px;border-radius:12px 12px 0 0;color:white;">
-      <h1 style="margin:0;font-size:22px;">Result Published ✓</h1>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
-      <p style="margin:0 0 16px;color:#475569;">Hello ${escapeHtml(participantName)},</p>
-      <p style="margin:0 0 16px;color:#475569;">Your result for <strong style="color:#0f172a;">${escapeHtml(eventTitle)}</strong> is now available.</p>
-      ${scoreText}
-      <a href="${escapeHtml(resultUrl)}" style="display:inline-block;margin:24px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View My Result</a>
-      <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;">If the button doesn't work, copy this URL: ${escapeHtml(resultUrl)}</p>
-    </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by Engagio</p>
-  </body>
-</html>`
+  const html = renderEmailLayout({
+    preheader: `Your result for ${eventTitle} is now available`,
+    title: "Your results are ready ✨",
+    intro: `Hi ${participantName}, your result for <strong style="color:${BRAND.text};">${escapeHtml(
+      eventTitle
+    )}</strong> has been published. Review your performance below.`,
+    bodyHtml: `${scoreText}${subText}`,
+    cta: { label: "View My Result →", url: resultUrl },
+  })
 
   return sendEmail({
     to: params.to,
     subject: `Your result for ${eventTitle} is now available`,
     html,
     text: `Hello ${participantName}, your result for ${eventTitle} is now available. View it at ${resultUrl}`,
+    tag: "result-published",
   })
 }
 
-/**
- * Send a certificate issued notification email.
- */
 export async function sendCertificateIssuedEmail(params: {
   to: string
   participantName: string
@@ -147,46 +352,95 @@ export async function sendCertificateIssuedEmail(params: {
 }): Promise<SendEmailResult> {
   const { participantName, eventTitle, certificateNumber, verifyUrl } = params
 
-  const html = `<!DOCTYPE html>
-<html>
-  <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;">
-    <div style="background:linear-gradient(135deg,#10b981,#14b8a6);padding:24px;border-radius:12px 12px 0 0;color:white;">
-      <h1 style="margin:0;font-size:22px;">Certificate Issued 🎓</h1>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;">
-      <p style="margin:0 0 16px;color:#475569;">Hello ${escapeHtml(participantName)},</p>
-      <p style="margin:0 0 16px;color:#475569;">Congratulations! You've been issued a certificate for completing <strong style="color:#0f172a;">${escapeHtml(eventTitle)}</strong>.</p>
-      <p style="margin:16px 0 4px;font-size:12px;color:#94a3b8;">Certificate Number</p>
-      <p style="margin:0 0 16px;font-family:monospace;font-size:16px;color:#0f172a;">${escapeHtml(certificateNumber)}</p>
-      <a href="${escapeHtml(verifyUrl)}" style="display:inline-block;margin:8px 0 0;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">View Certificate</a>
-    </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center;">Powered by Engagio</p>
-  </body>
-</html>`
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Congratulations on completing <strong style="color:${BRAND.text};">${escapeHtml(
+        eventTitle
+      )}</strong>. Your official certificate has been issued and is ready to download or share.
+    </p>
+    ${statTileHtml("Certificate Number", certificateNumber, BRAND.primary)}
+  `
+
+  const html = renderEmailLayout({
+    preheader: `Your certificate for ${eventTitle} is ready`,
+    title: "Certificate Issued 🎓",
+    intro: `Hi ${participantName}, great work — you've earned it.`,
+    bodyHtml,
+    cta: { label: "View Certificate →", url: verifyUrl },
+  })
 
   return sendEmail({
     to: params.to,
     subject: `Your certificate for ${eventTitle} is ready`,
     html,
     text: `Hello ${participantName}, your certificate for ${eventTitle} (number: ${certificateNumber}) has been issued. Verify at ${verifyUrl}`,
+    tag: "certificate-issued",
   })
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
+/**
+ * Send an organization invitation email.
+ * Replace the inline HTML previously embedded in the resend route.
+ */
+export async function sendInvitationEmail(params: {
+  to: string
+  organizationName: string
+  role: string
+  inviteUrl: string
+  invitedBy?: string
+  expiresInDays?: number
+}): Promise<SendEmailResult> {
+  const { to, organizationName, role, inviteUrl, invitedBy, expiresInDays = 7 } = params
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      ${invitedBy ? `<strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> has invited you` : "You've been invited"} to join
+      <strong style="color:${BRAND.text};">${escapeHtml(organizationName)}</strong> on Engagio as
+      <strong style="color:${BRAND.text};">${escapeHtml(role)}</strong>.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px 0;border-collapse:separate;border-spacing:0;">
+      <tr>
+        <td style="padding:16px 18px;background:${BRAND.bg};border:1px solid ${BRAND.border};border-radius:10px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:${BRAND.subtle};font-weight:600;">Organization</div>
+          <div style="margin-top:4px;font-size:16px;font-weight:600;color:${BRAND.text};">${escapeHtml(organizationName)}</div>
+          <div style="margin-top:12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:${BRAND.subtle};font-weight:600;">Role</div>
+          <div style="margin-top:4px;font-size:16px;font-weight:600;color:${BRAND.primary};">${escapeHtml(role)}</div>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 8px 0;font-size:14px;line-height:1.6;color:${BRAND.subtle};">
+      This invitation will expire in <strong>${expiresInDays} days</strong>.
+    </p>
+  `
+
+  const html = renderEmailLayout({
+    preheader: `You've been invited to ${organizationName} on Engagio`,
+    title: "You're invited 🤝",
+    intro: `Join your team on Engagio to start running events, quizzes, and live sessions.`,
+    bodyHtml,
+    cta: { label: "Accept Invitation →", url: inviteUrl },
+  })
+
+  return sendEmail({
+    to,
+    subject: `Invitation to join ${organizationName} on Engagio`,
+    html,
+    text: `You've been invited to join ${organizationName} on Engagio as ${role}. Accept the invitation at ${inviteUrl}. This invitation expires in ${expiresInDays} days.`,
+    tag: "org-invitation",
+  })
 }
 
-// ─── Compatibility for the admin storage-status endpoint ────────────────────
+/* ────────────────────────────────────────────────────────────────────────
+   Utilities & status helpers
+   ──────────────────────────────────────────────────────────────────────── */
 
 export interface EmailStatus {
   configured: boolean
   provider: "resend" | "none"
   fromAddress: string
+  replyTo: string | null
+  timeoutMs: number
+  retry: number
 }
 
 export function getEmailStatus(): EmailStatus {
@@ -194,5 +448,63 @@ export function getEmailStatus(): EmailStatus {
     configured: isEmailConfigured(),
     provider: isEmailConfigured() ? "resend" : "none",
     fromAddress: EMAIL_FROM,
+    replyTo: EMAIL_REPLY_TO ?? null,
+    timeoutMs: Math.min(MAX_TIMEOUT_MS, EMAIL_TIMEOUT_MS),
+    retry: EMAIL_RETRY,
   }
 }
+
+function normalizeRecipients(to: string | string[]): string[] {
+  const raw = Array.isArray(to) ? to : [to]
+  return raw
+    .map((r) => r.trim())
+    .filter((r) => r.length > 0 && isLikelyEmail(r))
+}
+
+function isLikelyEmail(s: string): boolean {
+  // Lightweight check — Resend will do the strict validation.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
+}
+
+function formatRecipients(to: string | string[]): string {
+  const arr = Array.isArray(to) ? to : [to]
+  return arr.length <= 3 ? arr.join(", ") : `${arr.slice(0, 2).join(", ")} +${arr.length - 2}`
+}
+
+function escapeHtml(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function htmlToPlainText(html: string): string {
+  if (!html) return ""
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Keep the legacy helper available for older code paths.
+export { escapeHtml as _escapeHtml }
+
+// Re-export `tag` typing for consumers.
+export type EmailTag = string
