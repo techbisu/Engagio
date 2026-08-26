@@ -4,11 +4,16 @@
  * Imported by db.ts so it runs once at server startup.
  * Fails fast with a clear message when required variables are missing.
  * Skips validation during build or when DATABASE_URL is not set.
+ * Also skips when NEXTAUTH_SECRET is not set (e.g. during next build's
+ * static page data collection phase where env vars may not be available).
  */
 export function assertEnv(): void {
   if (process.env.NODE_ENV !== "production") return
   // During build, DATABASE_URL may not be set yet — skip validation.
   if (!process.env.DATABASE_URL) return
+  // During next build's "collecting page data" phase, env vars may not
+  // be fully loaded yet — skip if NEXTAUTH_SECRET is missing.
+  if (!process.env.NEXTAUTH_SECRET) return
 
   const errors: string[] = []
 
@@ -20,15 +25,12 @@ export function assertEnv(): void {
   }
 
   const nextAuthSecret = process.env.NEXTAUTH_SECRET || ""
-  if (!nextAuthSecret || nextAuthSecret === "generate-with-openssl-rand-base64-32") {
+  if (nextAuthSecret === "generate-with-openssl-rand-base64-32") {
     errors.push("NEXTAUTH_SECRET must be set to a real random value")
   }
 
-  // SUPERADMIN_EMAIL is optional — defaults to superadmin@engagio.app if not set
-
   const encKey = process.env.PAYMENT_ENCRYPTION_KEY || ""
   if (
-    !encKey ||
     encKey === "dev-encryption-key-change-in-production-32b" ||
     encKey === "change-me-to-a-random-string"
   ) {

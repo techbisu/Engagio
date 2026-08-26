@@ -107,9 +107,10 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
   React.useEffect(() => {
     if (showJoinModal && !showLogin && (!requireRegistration || isRegistered)) {
       setShowJoinModal(false)
-      window.location.href = org ? "/org/" + org.slug + "/participant/dashboard" : "/dashboard"
+      const orgSlug = data?.event?.organization?.slug
+      window.location.href = orgSlug ? "/org/" + orgSlug + "/participant/dashboard" : "/dashboard"
     }
-  }, [showJoinModal, showLogin, requireRegistration, isRegistered])
+  }, [showJoinModal, showLogin, requireRegistration, isRegistered, data])
 
   if (isLoading) {
     return (

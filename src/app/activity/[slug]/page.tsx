@@ -40,7 +40,7 @@ export default function ActivityRoutePage() {
 
   const handleNavigateHome = React.useCallback(() => {
     router.push("/")
-  }, [])
+  }, [router])
 
   // Authed → render ActivityJoin inside StudentShell
   if (user) {
