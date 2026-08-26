@@ -18,14 +18,16 @@ import { useCurrentUser } from "@/components/shared/use-current-user"
 
 export default function OrgRegisterPage() {
   const router = useRouter()
-  const { user } = useCurrentUser()
+  const { user, refetch } = useCurrentUser()
 
-  const handleOrgCreated = React.useCallback(
+  const handleOrgCreated = React.useCallback(async 
     (_orgId: string) => {
+      // Refetch user data to get updated canManageOrg flag after org creation.
+      await refetch()
       // Route the user to the admin shell (which is org-aware via the switcher).
       router.push("/admin")
     },
-    [router],
+    [router, refetch],
   )
 
   const handleCancel = React.useCallback(() => {

@@ -4,19 +4,19 @@
  * useRouteAfterAuth
  *
  * Hook that encapsulates the post-login routing logic, shared by /login,
- * /superadmin/login, and the OAuth callback landing flow. Mirrors the
- * original `routeAfterAuth` function from the old monolithic page.tsx.
+ * /superadmin/login, and the OAuth callback landing flow.
  *
  * Behavior:
  *   1. Invitation deep-link (/invite/[token]) → accept invitation view
  *   2. Quiz deep-link (/quiz/[slug]) → student quiz-start
  *   3. Activity deep-link (?activity=slug) → student dashboard activity
  *   4. Event deep-link (/event/[slug]) → event landing page
- *   5. Role-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER in an ACTIVE org,
- *      or platform admin) → /admin, PARTICIPANT → /dashboard, legacy ADMIN without
- *      an org → /org-register (via NoOrgRedirect)
- *
- * Added during the Phase 1 routing migration.
+ *   5. Role-based:
+ *      - canManageOrg (OWNER/ADMIN/EVENT_MANAGER in an ACTIVE org,
+ *        or platform admin) → /admin
+ *      - PARTICIPANT with org membership → /org/{slug} (org landing page)
+ *      - PARTICIPANT without org → /dashboard
+ *      - Legacy ADMIN without org membership → /org-register
  */
 
 import { useRouter } from "next/navigation"
@@ -35,18 +35,23 @@ export function useRouteAfterAuth() {
         return
       }
 
-      // 5. Role-based routing (the only remaining logic after deep-link checks
-      //    were moved to dedicated routes — /quiz, /event, /activity are now
-      //    separate files that the user lands on directly).
+      // 5. Role-based routing
       //
       // Org access is membership-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER
       // in an ACTIVE org, or platform admin) goes straight to the admin panel.
-      // The flag is server-computed from memberships, so no extra fetch needed.
       if (me.canManageOrg) {
         router.push("/admin")
         return
       }
 
+      // Participants with org membership → go to the org's landing page
+      if (me.role === "PARTICIPANT" && me.orgMemberships && me.orgMemberships.length > 0) {
+        const firstOrg = me.orgMemberships[0]
+        router.push(`/org/${firstOrg.slug}`)
+        return
+      }
+
+      // Participants without org membership → generic dashboard
       if (me.role === "PARTICIPANT") {
         router.push("/dashboard")
         return
