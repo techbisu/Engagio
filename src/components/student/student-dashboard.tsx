@@ -539,10 +539,10 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                   <StatusBadge status={a.status} />
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-medium">
-                  {a.percentage != null ? `${a.percentage}%` : "—"}
+                  {a.published === false ? <span className="text-muted-foreground">Hidden</span> : a.percentage != null ? `${a.percentage}%` : "—"}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {a.passed === true ? (
+                  {a.published === false ? <span className="text-muted-foreground">—</span> : a.passed === true ? (
                     <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300">
                       <Award className="size-3" /> Pass
                     </Badge>
@@ -615,7 +615,7 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
               <span className="text-muted-foreground">
                 Score:{" "}
                 <span className="font-medium text-foreground tabular-nums">
-                  {a.percentage != null ? `${a.percentage}%` : "—"}
+                  {a.published === false ? "Hidden" : a.percentage != null ? `${a.percentage}%` : "—"}
                 </span>
               </span>
               {a.passed === true && (
