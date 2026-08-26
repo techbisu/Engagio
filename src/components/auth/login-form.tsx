@@ -194,7 +194,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <a href="/privacy" className="underline hover:text-foreground">Privacy</a>.
           </p>
           <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-400">
-            <Sparkles className="size-3" /> Start free. No payment required.
+          <p className="text-center text-sm text-muted-foreground">
+            Don't have an organization? <a href="/org-register" className="text-emerald-600 hover:underline dark:text-emerald-400">Register here</a>
+          </p>
           </div>
         </CardFooter>
       </Card>

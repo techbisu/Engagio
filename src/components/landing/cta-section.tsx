@@ -43,7 +43,7 @@ export function CtaSection({ onNavigate }: CtaSectionProps) {
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
               size="lg"
-              onClick={() => onNavigate('login')}
+              onClick={() => onNavigate('org-register')}
               className="bg-white text-emerald-700 shadow-lg hover:bg-emerald-50"
             >
               Create your first event
@@ -52,7 +52,7 @@ export function CtaSection({ onNavigate }: CtaSectionProps) {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => onNavigate('login')}
+              onClick={() => onNavigate('org-register')}
               className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
             >
               <LogIn className="size-4" />

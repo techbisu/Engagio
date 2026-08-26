@@ -87,7 +87,7 @@ export function Hero({ onNavigate }: HeroProps) {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button
               size="lg"
-              onClick={() => onNavigate('login')}
+              onClick={() => onNavigate('org-register')}
               className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-600/20 hover:from-emerald-600/95 hover:to-teal-500/95"
             >
               Get started free
