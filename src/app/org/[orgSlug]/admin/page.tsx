@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { AdminShell } from "@/components/admin/admin-shell"
 import { useCurrentUser } from "@/components/shared/use-current-user"
 import { useAppStore } from "@/store/app-store"
@@ -10,12 +10,12 @@ import { setOrgSlug, ORG_CHANGED_EVENT_NAME } from "@/components/organization/ap
 import type { AdminTab } from "@/types"
 
 /**
- * /admin — Organization admin panel (backward-compat route).
+ * /org/[orgSlug]/admin — Organization admin panel (org-scoped URL).
  *
- * Redirects to /org/[orgSlug]/admin when the user has an org membership.
- * Falls back to showing the admin shell for legacy users without an org slug.
+ * Sets the active org slug from the URL param so all API calls
+ * resolve to the correct tenant context.
  */
-export default function AdminPage() {
+export default function OrgAdminPage() {
   return (
     <Suspense
       fallback={
@@ -24,49 +24,52 @@ export default function AdminPage() {
         </div>
       }
     >
-      <AdminPageInner />
+      <OrgAdminPageInner />
     </Suspense>
   )
 }
 
-function AdminPageInner() {
+function OrgAdminPageInner() {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const params = useParams<{ orgSlug: string }>()
+  const orgSlug = params.orgSlug
   const { user, isLoading, signOutEverything } = useCurrentUser()
   const adminTab = useAppStore((s) => s.adminTab)
   const setAdminTab = useAppStore((s) => s.setAdminTab)
   const setCurrentOrgSlug = useAppStore((s) => s.setCurrentOrgSlug)
 
-  const tabParam = searchParams.get("tab") as AdminTab | null
-  const initialTab = tabParam ?? adminTab
-
-  // If the user has an org membership, redirect to the org-scoped URL.
+  // Sync the URL org slug into localStorage + store on mount and when slug changes.
   React.useEffect(() => {
-    if (isLoading || !user) return
-    if (!user.canManageOrg) {
-      router.replace("/dashboard")
-      return
+    if (orgSlug) {
+      setOrgSlug(orgSlug)
+      setCurrentOrgSlug(orgSlug)
     }
-    // Redirect to org-scoped admin URL if we have a slug and aren't already there.
-    const slug = user.orgMemberships?.[0]?.slug
-    if (slug && !window.location.pathname.startsWith("/org/")) {
-      router.replace("/org/" + slug + "/admin")
+  }, [orgSlug, setCurrentOrgSlug])
+
+  const initialTab = adminTab
+
+  React.useEffect(() => {
+    if (isLoading) return
+    if (!user) {
+      router.replace("/login")
+    } else if (!user.canManageOrg) {
+      router.replace("/dashboard")
     }
   }, [user, isLoading, router])
 
+  // Listen for org-changed events (from OrgSwitcher) and update URL.
   React.useEffect(() => {
     if (typeof window === "undefined") return
-    const stored = window.localStorage.getItem("engagio-org-slug")
-    if (stored && stored !== useAppStore.getState().currentOrgSlug) {
-      setCurrentOrgSlug(stored)
-    }
     function handleOrgChange(e: Event) {
       const detail = (e as CustomEvent<{ slug: string | null }>).detail
-      setCurrentOrgSlug(detail?.slug ?? null)
+      if (detail?.slug && detail.slug !== orgSlug) {
+        setCurrentOrgSlug(detail.slug)
+        router.replace(`/org/${detail.slug}/admin`)
+      }
     }
     window.addEventListener(ORG_CHANGED_EVENT_NAME, handleOrgChange)
     return () => window.removeEventListener(ORG_CHANGED_EVENT_NAME, handleOrgChange)
-  }, [setCurrentOrgSlug])
+  }, [orgSlug, router, setCurrentOrgSlug])
 
   const handleSignOut = React.useCallback(async () => {
     await signOutEverything()
@@ -96,10 +99,9 @@ function AdminPageInner() {
   const handleOrgSwitch = React.useCallback(
     (slug: string) => {
       setCurrentOrgSlug(slug)
-      // Navigate to the new org's admin page.
-      router.replace("/org/" + slug + "/admin")
+      // URL will update via the ORG_CHANGED_EVENT listener above.
     },
-    [setCurrentOrgSlug, router],
+    [setCurrentOrgSlug],
   )
 
   const handleOpenOrgSettings = React.useCallback(() => {}, [])

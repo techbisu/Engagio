@@ -9,10 +9,13 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const isForm =
     typeof FormData !== "undefined" && init?.body instanceof FormData
 
+  // Read the active org slug so the server resolves the correct tenant context.
+  const orgSlug = typeof window !== "undefined" ? localStorage.getItem("engagio-org-slug") : null;
   const res = await fetch(url, {
     ...init,
     headers: {
       ...(isForm ? {} : { "Content-Type": "application/json" }),
+      ...(orgSlug ? { "x-org-slug": orgSlug } : {}),
       ...(init?.headers || {}),
     },
   })

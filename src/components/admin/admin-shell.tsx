@@ -57,6 +57,7 @@ import { ActivitiesPanel } from "./activities/activities-panel"
 import { LandingPageBuilder } from "./landing-page-builder"
 import { OrgSwitcher } from "@/components/organization/org-switcher"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { getOrgSlug, ROLE_LABEL, type OrgRole } from "@/components/organization/api"
 
 interface AdminShellProps {
   initialTab?: AdminTab
@@ -340,7 +341,7 @@ export function AdminShell({
             className="hidden sm:inline-flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400"
           >
             <ShieldCheck className="size-3" />
-            {(() => { const r = user.orgMemberships?.[0]?.role; return r ? r.charAt(0) + r.slice(1).toLowerCase().replace(/_/g, " ") : (user.role === "ADMIN" ? "Admin" : "Participant"); })()}
+            {(() => { const slug = getOrgSlug(); const active = slug ? user.orgMemberships?.find(m => m.slug === slug) : user.orgMemberships?.[0]; const r = active?.role; return r ? (ROLE_LABEL[r as OrgRole] ?? r.charAt(0) + r.slice(1).toLowerCase().replace(/_/g, " ")) : (user.role === "ADMIN" ? "Admin" : "Participant"); })()}
           </Badge>
 
           <ThemeToggle />

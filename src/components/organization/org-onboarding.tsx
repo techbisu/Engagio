@@ -41,7 +41,7 @@ import { BrandLogo } from "@/components/shared/brand-logo"
 import { api, setOrgSlug, type OrganizationDto, type OrgRole } from "./api"
 
 interface OrgOnboardingProps {
-  onCreated: (orgId: string) => void
+  onCreated: (orgId: string, orgSlug?: string) => void
   /** Called when the user clicks the small "back to home" link. Disabled by default. */
   onCancel?: () => void
   /** When the onboarding is forced (must complete), the user can't leave. */
@@ -138,7 +138,7 @@ export function OrgOnboarding({ onCreated, onCancel, forced = true }: OrgOnboard
       toast.success("Organization created!", {
         description: `${data.organization.name} is ready. You're the owner.`,
       })
-      onCreated(data.organization.id)
+      onCreated(data.organization.id, data.organization.slug)
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to create organization"

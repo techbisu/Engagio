@@ -13,7 +13,7 @@
  *   4. Event deep-link (/event/[slug]) → event landing page
  *   5. Role-based:
  *      - canManageOrg (OWNER/ADMIN/EVENT_MANAGER in an ACTIVE org,
- *        or platform admin) → /admin
+ *        or platform admin) → /org/{slug}/admin
  *      - PARTICIPANT with org membership → /org/{slug} (org landing page)
  *      - PARTICIPANT without org → /dashboard
  *      - Legacy ADMIN without org membership → /org-register
@@ -40,14 +40,20 @@ export function useRouteAfterAuth() {
       // Org access is membership-based: canManageOrg (OWNER/ADMIN/EVENT_MANAGER
       // in an ACTIVE org, or platform admin) goes straight to the admin panel.
       if (me.canManageOrg) {
-        router.push("/admin")
+        // Redirect to org-scoped admin URL if we know the org slug.
+        const firstSlug = me.orgMemberships?.[0]?.slug
+        if (firstSlug) {
+          router.push("/org/" + firstSlug + "/admin")
+        } else {
+          router.push("/admin")
+        }
         return
       }
 
       // Participants with org membership → go to the org's landing page
       if (me.role === "PARTICIPANT" && me.orgMemberships && me.orgMemberships.length > 0) {
         const firstOrg = me.orgMemberships[0]
-        router.push(`/org/${firstOrg.slug}`)
+        router.push("/org/" + firstOrg.slug)
         return
       }
 
@@ -63,7 +69,12 @@ export function useRouteAfterAuth() {
         const orgRes = await fetch("/api/organizations")
         const orgData = await orgRes.json()
         if (orgData.organizations && orgData.organizations.length > 0) {
-          router.push("/admin")
+          const slug = orgData.organizations[0]?.slug
+          if (slug) {
+            router.push("/org/" + slug + "/admin")
+          } else {
+            router.push("/admin")
+          }
         } else {
           // No org → show toast + intermediate redirect page.
           toast.error("No organization found for this email.", {
