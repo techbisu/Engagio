@@ -312,7 +312,7 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
             <SummaryItem
               icon={HelpCircle}
               label="Questions"
-              value={String(meta.questionCount)}
+              value={String(meta.quizLinkQuestionCount && meta.quizLinkQuestionCount > 0 ? meta.quizLinkQuestionCount : meta.questionCount)}
             />
             <SummaryItem
               icon={Clock}
