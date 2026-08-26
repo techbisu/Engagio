@@ -53,7 +53,7 @@ export function useRouteAfterAuth() {
       // Participants with org membership → go to the org's landing page
       if (me.role === "PARTICIPANT" && me.orgMemberships && me.orgMemberships.length > 0) {
         const firstOrg = me.orgMemberships[0]
-        router.push("/org/" + firstOrg.slug)
+        router.push("/org/" + firstOrg.slug + "/participant/dashboard")
         return
       }
 

@@ -45,6 +45,7 @@ import { ShareAchievementButton } from "@/components/achievements/share-achievem
 import { api } from "./api"
 import type { AttemptListResponse, AttemptListItem } from "./api"
 import { cn, formatDuration } from "@/lib/utils"
+import { getOrgSlug } from "@/components/organization/api"
 import type { SafeUser } from "@/types"
 
 // Demo quiz removed for production
@@ -218,7 +219,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                       key={act.id}
                       onClick={() => {
                         if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
-                        else if (act.slug) window.location.href = "/dashboard?sub=activity&activity=" + act.slug
+                        else if (act.slug) { const s = getOrgSlug(); window.location.href = s ? "/org/" + s + "/participant/dashboard?sub=activity&activity=" + act.slug : "/dashboard?sub=activity&activity=" + act.slug }
                       }}
                       className="group flex flex-col rounded-lg border border-white/60 bg-white/80 p-4 text-left shadow-sm transition hover:border-emerald-500/40 hover:bg-white hover:shadow-md dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
                     >

@@ -107,7 +107,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
   React.useEffect(() => {
     if (showJoinModal && !showLogin && (!requireRegistration || isRegistered)) {
       setShowJoinModal(false)
-      window.location.href = org ? "/org/" + org.slug : "/dashboard"
+      window.location.href = org ? "/org/" + org.slug + "/participant/dashboard" : "/dashboard"
     }
   }, [showJoinModal, showLogin, requireRegistration, isRegistered])
 
@@ -242,7 +242,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
                   Register Now <ArrowRight className="size-4" />
                 </Button>
               ) : (
-                <Button size="lg" className="bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-400" onClick={() => { window.location.href = org ? "/org/" + org.slug : "/dashboard" }}>
+                <Button size="lg" className="bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-400" onClick={() => { window.location.href = org ? "/org/" + org.slug + "/participant/dashboard" : "/dashboard" }}>
                   Go to Dashboard <ArrowRight className="size-4" />
                 </Button>
               )}
@@ -359,7 +359,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
           {showLogin ? (
             <div className="space-y-4 py-4">
               <ParticipantGoogleLogin
-                callbackUrl={event.requireRegistration ? "/register?event=" + event.id : (org ? "/org/" + org.slug : "/dashboard")}
+                callbackUrl={event.requireRegistration ? "/register?event=" + event.id : (org ? "/org/" + org.slug + "/participant/dashboard" : "/dashboard")}
                 className="w-full"
               />
               <p className="text-center text-xs text-muted-foreground">
@@ -372,7 +372,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
                 eventId={event.id}
                 onSuccess={() => {
                   setShowJoinModal(false)
-                  window.location.href = org ? "/org/" + org.slug : "/dashboard"
+                  window.location.href = org ? "/org/" + org.slug + "/participant/dashboard" : "/dashboard"
                 }}
               />
             </div>

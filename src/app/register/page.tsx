@@ -34,7 +34,7 @@ function RegisterPageInner() {
     // Redirect to the user's org page if they have an org membership.
     const orgSlug = user?.orgMemberships?.[0]?.slug
     if (orgSlug) {
-      router.push("/org/" + orgSlug)
+      router.push("/org/" + orgSlug + "/participant/dashboard")
     } else {
       router.push("/dashboard")
     }
