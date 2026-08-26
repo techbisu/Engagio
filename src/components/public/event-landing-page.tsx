@@ -120,6 +120,14 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
   const [showJoinModal, setShowJoinModal] = React.useState(false)
   const showLogin = !user
 
+  // Auto-redirect logged-in users who don't need registration (or are already registered)
+  React.useEffect(() => {
+    if (showJoinModal && !showLogin && (!event.requireRegistration || isRegistered)) {
+      setShowJoinModal(false)
+      window.location.href = '/dashboard'
+    }
+  }, [showJoinModal, showLogin, event?.requireRegistration, isRegistered])
+
   const startDate = new Date(event.startDate)
   const endDate = new Date(event.endDate)
   const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -363,11 +371,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
             </div>
           ) : (
             <div className="space-y-4 py-4 text-center">
-              <div className="flex justify-center">
-                <div className="size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-              </div>
               <p className="text-sm text-muted-foreground">Redirecting to dashboard...</p>
-              {(() => { window.location.href = '/dashboard'; return null })()}
             </div>
           )}
         </DialogContent>

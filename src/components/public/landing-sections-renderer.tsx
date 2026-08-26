@@ -902,24 +902,24 @@ function ActivityCard({ activity, index }: { activity: ActivityCardItem; index: 
         <div className="mt-3 flex items-center gap-1 text-sm font-semibold text-emerald-400 transition group-hover:gap-2">
           {isLive ? "Start now" : "View details"}
           <ArrowRight className="size-4" />
-
-        {/* Share button */}
-        {href && (
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              navigator.clipboard.writeText(window.location.origin + href);
-              toast.success("Link copied to clipboard!");
-            }}
-            className="mt-2 inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-emerald-400 transition"
-          >
-            <Share2 className="size-3" />
-            Share
-          </button>
-        )}
         </div>
       </a>
+
+      {/* Share button — outside <a> to avoid invalid nesting */}
+      {href && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigator.clipboard.writeText(window.location.origin + href);
+            toast.success("Link copied to clipboard!");
+          }}
+          className="mt-2 inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-emerald-400 transition"
+        >
+          <Share2 className="size-3" />
+          Share
+        </button>
+      )}
     </motion.div>
   )
 }

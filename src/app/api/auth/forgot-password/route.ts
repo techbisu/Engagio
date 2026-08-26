@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { email } = body as { email?: string }
 
-    if (!email || !/^[^s@]+@[^s@]+.[^s@]+$/.test(email.trim())) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       // Always return success to prevent enumeration
       return NextResponse.json({ message: "If an account exists, a reset link has been sent." })
     }
