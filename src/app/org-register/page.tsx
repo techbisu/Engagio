@@ -20,19 +20,16 @@ export default function OrgRegisterPage() {
   const router = useRouter()
   const { user, refetch } = useCurrentUser()
 
-  const handleOrgCreated = React.useCallback(async
-    (_orgId: string, orgSlug?: string) => {
-      // Refetch user data to get updated canManageOrg flag after org creation.
-      await refetch()
-      // Route the user to the org-scoped admin panel.
-      if (orgSlug) {
-        router.push("/org/" + orgSlug + "/admin")
-      } else {
-        router.push("/admin")
-      }
-    },
-    [router, refetch],
-  )
+  const handleOrgCreated = React.useCallback(async (_orgId: string, orgSlug?: string) => {
+    // Refetch user data to get updated canManageOrg flag after org creation.
+    await refetch()
+    // Route the user to the org-scoped admin panel.
+    if (orgSlug) {
+      router.push("/org/" + orgSlug + "/admin")
+    } else {
+      router.push("/admin")
+    }
+  }, [router, refetch])
 
   const handleCancel = React.useCallback(() => {
     if (user) {
