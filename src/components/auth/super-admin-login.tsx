@@ -74,7 +74,7 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
       const res = await signIn('credentials', {
         email,
         password,
-        asAdmin: 'true',
+        loginType: 'superadmin',
         redirect: false,
         callbackUrl: '/',
       })
@@ -111,7 +111,7 @@ export function SuperAdminLogin({ onSuccess, onBack }: SuperAdminLoginProps) {
       const res = await signIn('credentials', {
         email,
         password,
-        asAdmin: 'true',
+        loginType: 'superadmin',
         totpCode,
         redirect: false,
         callbackUrl: '/',

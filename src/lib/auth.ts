@@ -139,6 +139,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         name: { label: "Name", type: "text", placeholder: "Your name" },
         totpCode: { label: "TOTP Code", type: "text" },
+        loginType: { label: "Login Type", type: "text" }, // "org" | "superadmin"
       },
       async authorize(credentials, req) {
         const email = credentials?.email?.trim().toLowerCase()
@@ -157,9 +158,16 @@ export const authOptions: NextAuthOptions = {
         const name = credentials?.name?.trim() || email.split("@")[0] || "Participant"
         const totpCode = credentials?.totpCode?.trim()
 
+        const loginType = credentials?.loginType?.trim()
+
         // ─── Lookup existing user ────────────────────────────────────
         // ─── Hardcoded Super Admin ────────────────────────────────
         const isSuperAdminEmail = email === SUPERADMIN_EMAIL
+
+        // Block super admin from logging in via org login page
+        if (isSuperAdminEmail && loginType === "org") {
+          throw new Error("SUPERADMIN_BLOCKED")
+        }
 
         if (isSuperAdminEmail) {
           if (!password) return null

@@ -45,6 +45,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       const res = await signIn('credentials', {
         email,
         password,
+        loginType: 'org',
         redirect: false,
       })
       if (!res || res.error) {
@@ -53,6 +54,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           toast.error('Please verify your email first. Check your inbox.')
         } else if (res?.error === 'TOTP_REQUIRED') {
           toast.error('Two-factor authentication required. Please enter your TOTP code.')
+        } else if (res?.error === 'SUPERADMIN_BLOCKED') {
+          toast.error('Super admin accounts must use the Super Admin login page.')
         } else {
           toast.error('Invalid email or password.')
         }
