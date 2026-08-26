@@ -6,7 +6,7 @@
  * Full-page registration form for participants.
  * After Google login, if the event requires registration,
  * participants are redirected here to fill out custom fields.
- * On success, redirects to /dashboard.
+ * On success, redirects to the org-specific page.
  */
 
 import * as React from "react"
@@ -16,7 +16,6 @@ import { useCurrentUser } from "@/components/shared/use-current-user"
 import { EventRegistrationForm } from "@/components/public/event-registration-form"
 import { MarketingPageShell } from "@/components/shared/marketing-page-shell"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BrandLogo } from "@/components/shared/brand-logo"
 
 function RegisterPageInner() {
   const router = useRouter()
@@ -32,8 +31,14 @@ function RegisterPageInner() {
   }, [user, router])
 
   const handleSuccess = React.useCallback(() => {
-    router.push("/dashboard")
-  }, [router])
+    // Redirect to the user's org page if they have an org membership.
+    const orgSlug = user?.orgMemberships?.[0]?.slug
+    if (orgSlug) {
+      router.push("/org/" + orgSlug)
+    } else {
+      router.push("/dashboard")
+    }
+  }, [router, user])
 
   if (!user || !eventId) {
     return (
