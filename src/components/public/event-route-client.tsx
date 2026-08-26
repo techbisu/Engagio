@@ -8,7 +8,8 @@
  */
 
 import * as React from "react"
-import { useRouter, Suspense } from "next/navigation"
+import { useRouter } from "next/navigation"
+import { Suspense } from "react"
 import { EventLandingPage } from "@/components/public/event-landing-page"
 import { useCurrentUser } from "@/components/shared/use-current-user"
 import { useAppNavigate } from "@/lib/nav"
