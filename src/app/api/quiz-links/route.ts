@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     }
     const links = await db.quizLink.findMany({
       where: { event: { organizationId: auth.ctx.orgId } },
-      include: { event: { select: { id: true, title: true, description: true, image: true } } },
+      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true } } },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(links.map(toQuizLinkDto));
@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     const created = await db.quizLink.create({
       data: data as any,
-      include: { event: { select: { id: true, title: true, description: true, image: true } } },
+      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true } } },
     });
     return NextResponse.json(toQuizLinkDto(created), { status: 201 });
   } catch (e) {

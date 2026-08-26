@@ -108,6 +108,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn, truncate } from "@/lib/utils"
 
 import { api } from "./api"
+import { getOrgSlug } from "@/components/organization/api"
 import type { EventDto, QuizLinkDto } from "@/types"
 
 type QuizLinkRow = QuizLinkDto & { attemptCount?: number }
@@ -521,7 +522,7 @@ export function LinksManager({
                                   variant="ghost"
                                   size="icon"
                                   className="size-7"
-                                  onClick={() => copyLink(l.slug)}
+                                  onClick={() => copyLink(l.slug, l.event?.slug)}
                                 >
                                   <Copy className="size-3.5" />
                                 </Button>
@@ -578,7 +579,7 @@ export function LinksManager({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => copyLink(l.slug)}>
+                            <DropdownMenuItem onClick={() => copyLink(l.slug, l.event?.slug)}>
                               <Copy className="size-4" /> Copy link
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => onViewAttempts?.(l.slug)}>

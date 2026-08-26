@@ -26,9 +26,11 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
           select: {
             id: true,
             title: true,
+            slug: true,
             description: true,
             image: true,
             requireRegistration: true,
+            organization: { select: { slug: true } },
             // Payment config — surfaced so the participant's PaymentScreen
             // can render UPI ID / QR / amount without an extra round-trip.
             paymentMethod: true,
@@ -62,6 +64,8 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 
     return NextResponse.json({
       quizLink: toQuizLinkDto(link),
+      eventSlug: link.event?.slug || null,
+      orgSlug: link.event?.organization?.slug || null,
       event: link.event
         ? {
             id: link.event.id,

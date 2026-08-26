@@ -257,8 +257,9 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
 <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            const s = getOrgSlug();
                             const link = act.quizLink?.slug 
-                              ? window.location.origin + "/quiz/" + act.quizLink.slug
+                              ? window.location.origin + (s ? "/org/" + s + "/" + (act.eventSlug || "event") + "/quiz/" : "/quiz/") + act.quizLink.slug
                               : act.slug 
                                 ? window.location.origin + "/activity/" + act.slug
                                 : null;

@@ -1,16 +1,16 @@
 "use client"
 
 /**
- * /quiz/[quizSlug]
+ * /org/[orgSlug]/[eventSlug]/quiz/[quizSlug]
  *
- * Backward-compat quiz deep-link. Fetches the quiz metadata to get
- * org/event slugs, then redirects to /org/{orgSlug}/{eventSlug}/quiz/{slug}.
- * Falls back to inline rendering if the redirect fails (e.g., missing org data).
+ * Org-scoped quiz deep-link. Same behavior as /quiz/[quizSlug] but with
+ * org/event context in the URL for SEO and user clarity.
  */
 
 import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { toast } from "sonner"
 import { ParticipantGoogleLogin } from "@/components/auth/participant-google-login"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
@@ -21,7 +21,7 @@ import { useCurrentUser } from "@/components/shared/use-current-user"
 import { useAppNavigate } from "@/lib/nav"
 import { useAppStore, type QuizMeta } from "@/store/app-store"
 
-export default function QuizRoutePage() {
+export default function OrgQuizRoutePage() {
   return (
     <Suspense
       fallback={
@@ -30,33 +30,24 @@ export default function QuizRoutePage() {
         </div>
       }
     >
-      <QuizRoutePageInner />
+      <OrgQuizRoutePageInner />
     </Suspense>
   )
 }
 
-function QuizRoutePageInner() {
+function OrgQuizRoutePageInner() {
   const router = useRouter()
-  const params = useParams<{ quizSlug: string }>()
+  const params = useParams<{ orgSlug: string; eventSlug: string; quizSlug: string }>()
   const navigate = useAppNavigate()
   const { user, refetch, signOutEverything } = useCurrentUser()
   const quizSlug = params?.quizSlug ?? ""
+  const orgSlug = params?.orgSlug ?? ""
+  const eventSlug = params?.eventSlug ?? ""
 
   const quizMeta = useAppStore((s) => s.quizMeta)
   const setQuizMeta = useAppStore((s) => s.setQuizMeta)
 
-  // Fetch quiz metadata to get org/event slugs, then redirect.
-  React.useEffect(() => {
-    if (!quizSlug || quizMeta) return
-    fetch("/api/quiz-links/by-slug/" + encodeURIComponent(quizSlug))
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.orgSlug && data?.eventSlug) {
-          router.replace("/org/" + data.orgSlug + "/" + data.eventSlug + "/quiz/" + quizSlug)
-        }
-      })
-      .catch(() => {})
-  }, [quizSlug, quizMeta, router])
+  const orgDashboard = "/org/" + orgSlug + "/participant/dashboard"
 
   const handleBegin = React.useCallback(
     (meta: {
@@ -79,13 +70,13 @@ function QuizRoutePageInner() {
 
   const handleQuizExit = React.useCallback(() => {
     setQuizMeta(null)
-    router.push("/dashboard")
-  }, [setQuizMeta, router])
+    router.push(orgDashboard)
+  }, [setQuizMeta, router, orgDashboard])
 
   const handleBack = React.useCallback(() => {
     setQuizMeta(null)
-    router.push("/dashboard")
-  }, [setQuizMeta, router])
+    router.push(orgDashboard)
+  }, [setQuizMeta, router, orgDashboard])
 
   const handleSignOut = React.useCallback(async () => {
     await signOutEverything()
@@ -93,8 +84,8 @@ function QuizRoutePageInner() {
   }, [signOutEverything, router])
 
   const handleNavigateHome = React.useCallback(() => {
-    router.push("/")
-  }, [router])
+    router.push("/org/" + orgSlug)
+  }, [router, orgSlug])
 
   // Quiz runner takes over the whole screen.
   if (user && quizMeta) {
@@ -110,7 +101,7 @@ function QuizRoutePageInner() {
     )
   }
 
-  // Authed → render QuizStart (will redirect to org-scoped URL)
+  // Authed → render QuizStart inside StudentShell
   if (user) {
     return (
       <StudentShell
@@ -135,7 +126,7 @@ function QuizRoutePageInner() {
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="space-y-6">
           <ParticipantGoogleLogin
-            callbackUrl={"/quiz/" + quizSlug}
+            callbackUrl={"/org/" + orgSlug + "/" + eventSlug + "/quiz/" + quizSlug}
             className="w-full"
           />
           <p className="text-center text-sm text-white/60">
