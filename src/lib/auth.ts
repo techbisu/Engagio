@@ -273,11 +273,12 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // Google OAuth: auto-create PARTICIPANT account if new user
+      // Google OAuth: link Google account to existing user or create new one.
       if (account?.provider === "google" && user.email) {
         const existing = await db.user.findUnique({ where: { email: user.email } })
         if (!existing) {
-          await db.user.create({
+          // New user — create User + Account in one go.
+          const newUser = await db.user.create({
             data: {
               email: user.email,
               name: user.name,
@@ -286,11 +287,57 @@ export const authOptions: NextAuthOptions = {
               emailVerified: new Date(),
             },
           })
-        } else if (!existing.emailVerified) {
-          // Google users get auto-verified since Google already verified their email
+          // Link the Google account to the new user.
+          await db.account.create({
+            data: {
+              userId: newUser.id,
+              type: account.type,
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token,
+              token_type: account.token_type,
+              expires_at: account.expires_at,
+              scope: account.scope,
+              id_token: account.id_token,
+            },
+          })
+        } else {
+          // Existing user — ensure email is verified.
+          if (!existing.emailVerified) {
+            await db.user.update({
+              where: { id: existing.id },
+              data: { emailVerified: new Date() },
+            })
+          }
+          // Link Google account if not already linked.
+          const existingAccount = await db.account.findFirst({
+            where: {
+              userId: existing.id,
+              provider: "google",
+            },
+          })
+          if (!existingAccount) {
+            await db.account.create({
+              data: {
+                userId: existing.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                token_type: account.token_type,
+                expires_at: account.expires_at,
+                scope: account.scope,
+                id_token: account.id_token,
+              },
+            })
+          }
+          // Update user fields from Google profile.
           await db.user.update({
             where: { id: existing.id },
-            data: { emailVerified: new Date() },
+            data: {
+              name: existing.name || user.name,
+              image: existing.image || user.image,
+            },
           })
         }
       }
