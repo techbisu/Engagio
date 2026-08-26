@@ -5,7 +5,7 @@
  *
  * 1. Creates a "Default Organization" if it doesn't exist.
  * 2. For every ADMIN user, creates an OWNER membership in the Default Org.
- * 3. For every STUDENT user, creates a PARTICIPANT membership in the Default Org.
+ * 3. For every PARTICIPANT user, creates a PARTICIPANT membership in the Default Org.
  * 4. Backfills all Events with organizationId = Default Org (only those currently null).
  * 5. Backfills all Questions with organizationId = Default Org (only those currently null).
  *

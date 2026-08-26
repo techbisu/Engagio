@@ -4,7 +4,7 @@ import * as React from 'react'
 import { motion } from 'framer-motion'
 import { signIn } from 'next-auth/react'
 import { toast } from 'sonner'
-import { Sparkles, Mail, Lock, ArrowRight, Loader2, GraduationCap } from 'lucide-react'
+import { Sparkles, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,10 +20,9 @@ import { BrandLogo } from '@/components/shared/brand-logo'
 
 interface LoginFormProps {
   onSuccess: (role: string) => void
-  onRegisterOrg?: () => void
 }
 
-export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
+export function LoginForm({ onSuccess }: LoginFormProps) {
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [loading, setLoading] = React.useState(false)
@@ -184,39 +183,6 @@ export function LoginForm({ onSuccess, onRegisterOrg }: LoginFormProps) {
             </div>
           )}
 
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">or</span>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-dashed border-emerald-200 bg-emerald-50 p-3 text-center dark:border-emerald-900 dark:bg-emerald-950/20">
-            <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
-              <GraduationCap className="size-4" />
-              <span className="font-medium">Participant?</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Join an event using your Google account.
-            </p>
-          </div>
-
-          {onRegisterOrg && (
-            <button
-              onClick={onRegisterOrg}
-              className="w-full text-center text-sm text-emerald-600 hover:underline dark:text-emerald-400"
-            >
-              Don&apos;t have an organization? Register one →
-            </button>
-          )}
-
-          <div className="rounded-lg border border-dashed border-border p-3 text-center">
-            <p className="text-xs text-muted-foreground">
-              🎓 Participant? Use the event link shared by your organizer.
-            </p>
-          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
           <p className="text-center text-xs text-muted-foreground">

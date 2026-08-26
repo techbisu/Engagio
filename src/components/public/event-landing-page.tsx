@@ -82,6 +82,35 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
     staleTime: 60_000,
   })
 
+  // ── Hooks below must run on EVERY render (React Rules of Hooks). ──
+  // They previously lived after the isLoading/isError early returns, which
+  // changed hook counts between renders and crashed the page in production
+  // ("Rendered fewer hooks than expected" → client-side exception).
+  const eventIdForReg = data?.event?.id ?? ''
+  const { data: regCheckData } = useQuery<{ registered: boolean }>({
+    queryKey: ['registration-check', eventIdForReg],
+    queryFn: async () => {
+      const res = await fetch('/api/registrations/check?eventId=' + encodeURIComponent(eventIdForReg))
+      if (!res.ok) return { registered: false }
+      return res.json()
+    },
+    enabled: !!user && !!eventIdForReg,
+    retry: false,
+  })
+  const isRegistered = regCheckData?.registered === true
+
+  const [showJoinModal, setShowJoinModal] = React.useState(false)
+  const showLogin = !user
+  const requireRegistration = data?.event?.requireRegistration ?? false
+
+  // Auto-redirect logged-in users who don't need registration (or are already registered)
+  React.useEffect(() => {
+    if (showJoinModal && !showLogin && (!requireRegistration || isRegistered)) {
+      setShowJoinModal(false)
+      window.location.href = '/dashboard'
+    }
+  }, [showJoinModal, showLogin, requireRegistration, isRegistered])
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -105,28 +134,6 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
   const customSections = sections ?? []
   const activitiesCount = data.activitiesCount || (quizLink ? 1 : 0)
 
-  const { data: regCheckData } = useQuery<{ registered: boolean }>({
-    queryKey: ['registration-check', event?.id],
-    queryFn: async () => {
-      const res = await fetch('/api/registrations/check?eventId=' + event!.id)
-      if (!res.ok) return { registered: false }
-      return res.json()
-    },
-    enabled: !!user && !!event?.id,
-    retry: false,
-  })
-  const isRegistered = regCheckData?.registered === true
-
-  const [showJoinModal, setShowJoinModal] = React.useState(false)
-  const showLogin = !user
-
-  // Auto-redirect logged-in users who don't need registration (or are already registered)
-  React.useEffect(() => {
-    if (showJoinModal && !showLogin && (!event.requireRegistration || isRegistered)) {
-      setShowJoinModal(false)
-      window.location.href = '/dashboard'
-    }
-  }, [showJoinModal, showLogin, event?.requireRegistration, isRegistered])
 
   const startDate = new Date(event.startDate)
   const endDate = new Date(event.endDate)

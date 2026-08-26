@@ -1,48 +1,60 @@
-"use client"
+import { redirect } from "next/navigation"
+import { EventRouteClient } from "@/components/public/event-route-client"
+import { db } from "@/lib/db"
 
 /**
  * /event/[eventSlug]
  *
- * Public event landing page — event details + quiz start CTA.
+ * LEGACY path — 301-redirects to the canonical org-scoped URL
+ * /org/[orgSlug]/event/[eventSlug]. Kept for backward compatibility with
+ * existing shared links, QR codes, and emails.
  *
- * Replaces the old `/?event=SLUG` query-param route.
- *
- * Added during the Phase 1 routing migration.
+ * Resilience: if the DB lookup fails for ANY reason (transient connection
+ * error, migration gap, etc.), we fall back to rendering the client-side
+ * event page instead of crashing — the client fetches via the public API,
+ * so the visitor still gets a working page or a graceful "not found".
  */
+export default async function EventLegacyRedirect({
+  params,
+}: {
+  params: Promise<{ eventSlug: string }>
+}) {
+  const { eventSlug } = await params
 
-import * as React from "react"
-import { useRouter, useParams } from "next/navigation"
-import { EventLandingPage } from "@/components/public/event-landing-page"
-import { useCurrentUser } from "@/components/shared/use-current-user"
-import { useAppNavigate } from "@/lib/nav"
+  try {
+    const event = await db.event.findUnique({
+      where: { slug: eventSlug },
+      select: {
+        slug: true,
+        organization: {
+          select: { slug: true },
+        },
+      },
+    })
 
-export default function EventRoutePage() {
-  const router = useRouter()
-  const params = useParams<{ eventSlug: string }>()
-  const navigate = useAppNavigate()
-  const { user, refetch } = useCurrentUser()
-  const eventSlug = params?.eventSlug ?? ""
+    // Only redirect when both slugs are present and URL-safe.
+    if (
+      event?.slug &&
+      event.organization?.slug &&
+      /^[a-z0-9-]+$/i.test(event.organization.slug)
+    ) {
+      redirect(`/org/${event.organization.slug}/event/${event.slug}`)
+    }
+  } catch (e) {
+    // redirect() throws NEXT_REDIRECT internally — rethrow it so the
+    // redirect still happens; only swallow real errors.
+    if (
+      e &&
+      typeof e === "object" &&
+      "digest" in e &&
+      typeof (e as { digest?: string }).digest === "string" &&
+      (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw e
+    }
+    console.error("[/event/[eventSlug]] lookup failed, falling back to client page:", e)
+  }
 
-  const handleStartQuiz = React.useCallback(
-    (quizSlug: string) => {
-      router.push(`/quiz/${encodeURIComponent(quizSlug)}`)
-    },
-    [router],
-  )
-
-  const handleSignIn = React.useCallback(async () => {
-    // Re-fetch /api/me to pick up the freshly-signed-in user.
-    await refetch()
-    // Stay on the event landing page (user will see "Start Test").
-  }, [refetch])
-
-  return (
-    <EventLandingPage
-      eventSlug={eventSlug}
-      user={user}
-      onNavigate={navigate}
-      onStartQuiz={handleStartQuiz}
-      onSignIn={handleSignIn}
-    />
-  )
+  // Fallback: render the original client-side event landing experience.
+  return <EventRouteClient eventSlug={eventSlug} />
 }

@@ -3,7 +3,7 @@
 /**
  * /login
  *
- * Organization admin + participant login page.
+ * Organization admin login page.
  *
  * Replaces the old `/?view=login` query-param route. Renders the LoginForm
  * inside the standard marketing chrome (site header + footer) and routes
@@ -70,10 +70,7 @@ export default function LoginPage() {
     <MarketingPageShell>
       <div className="flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          <LoginForm
-            onSuccess={handleLoginSuccess}
-            onRegisterOrg={handleRegisterOrg}
-          />
+          <LoginForm onSuccess={handleLoginSuccess} />
         </div>
       </div>
     </MarketingPageShell>

@@ -7,12 +7,39 @@ import { Calendar, Clock, FileQuestion, ArrowRight, Building2, Globe } from 'luc
 import { BrandLogo } from '@/components/shared/brand-logo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import type { ViewName } from '@/types'
+import type { ViewName, SafeUser } from '@/types'
 
 interface OrgLandingPageProps {
   orgSlug: string
+  /** Signed-in visitor (participant or admin) - enables the dashboard CTA
+   *  and per-event "Registered" badges. Null for anonymous visitors. */
+  user?: SafeUser | null
   onNavigate: (view: ViewName) => void
   onOpenEvent: (eventSlug: string) => void
+}
+
+/**
+ * Per-event registration badge for signed-in participants. Shows whether
+ * the current user is registered for THIS org's event.
+ */
+function RegistrationBadge({ eventId, isSignedIn }: { eventId: string; isSignedIn: boolean }) {
+  const { data } = useQuery<{ registered: boolean }>({
+    queryKey: ['org-registration-check', eventId],
+    queryFn: async () => {
+      const res = await fetch('/api/registrations/check?eventId=' + encodeURIComponent(eventId))
+      if (!res.ok) return { registered: false }
+      return res.json()
+    },
+    enabled: isSignedIn && !!eventId,
+    retry: false,
+    staleTime: 30_000,
+  })
+  if (!isSignedIn || data?.registered !== true) return null
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+      Registered
+    </span>
+  )
 }
 
 interface OrgData {
@@ -42,7 +69,7 @@ interface OrgData {
   }>
 }
 
-export function OrgLandingPage({ orgSlug, onNavigate, onOpenEvent }: OrgLandingPageProps) {
+export function OrgLandingPage({ orgSlug, user, onNavigate, onOpenEvent }: OrgLandingPageProps) {
   const { data, isLoading, isError } = useQuery<OrgData>({
     queryKey: ['public-org', orgSlug],
     queryFn: () => fetch(`/api/public/org/${encodeURIComponent(orgSlug)}`).then(r => {
@@ -93,7 +120,16 @@ export function OrgLandingPage({ orgSlug, onNavigate, onOpenEvent }: OrgLandingP
               <h1 className="text-xl font-bold" style={{ color: org.primaryColor }}>{org.name}</h1>
               {org.industry && <p className="text-sm text-muted-foreground">{org.industry}</p>}
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              {user && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { window.location.href = '/dashboard' }}
+                >
+                  My Dashboard
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => onNavigate('landing')}>
                 <BrandLogo size="sm" />
               </Button>
@@ -130,7 +166,10 @@ export function OrgLandingPage({ orgSlug, onNavigate, onOpenEvent }: OrgLandingP
                     </div>
                   )}
                   <CardContent className="p-4">
-                    <h3 className="font-semibold text-lg">{event.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg">{event.title}</h3>
+                      <RegistrationBadge eventId={event.id} isSignedIn={!!user} />
+                    </div>
                     <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{event.description}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       {event.questionCount > 0 && (<span className="flex items-center gap-1"><FileQuestion className="size-3.5" />{event.questionCount} questions</span>)}

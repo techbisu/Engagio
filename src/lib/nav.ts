@@ -51,9 +51,13 @@ export function useAppNavigate() {
 
 /**
  * Build the path for an event landing page.
- *   buildEventPath("medical-summit-2026") → "/event/medical-summit-2026"
+ *   buildEventPath("medical-summit-2026", "demo-medical") → "/org/demo-medical/event/medical-summit-2026"
+ *   buildEventPath("medical-summit-2026") → "/event/medical-summit-2026" (legacy fallback)
  */
-export function buildEventPath(eventSlug: string): string {
+export function buildEventPath(eventSlug: string, orgSlug?: string): string {
+  if (orgSlug) {
+    return `/org/${encodeURIComponent(orgSlug)}/event/${encodeURIComponent(eventSlug)}`
+  }
   return `/event/${encodeURIComponent(eventSlug)}`
 }
 
