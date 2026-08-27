@@ -15,6 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import type { EventDto } from "@/types"
 
 interface GatePass {
   id: string
@@ -34,12 +35,23 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
   const [search, setSearch] = React.useState("")
   const [selectedEventId, setSelectedEventId] = React.useState(initialEventId || "")
 
-  // Fetch events for the dropdown selector
-  const { data: eventsData } = useQuery<{ events: { id: string; title: string }[] }>({
+  // Fetch events for the dropdown selector.
+  // The /api/events route returns an array directly (not { events: [...] }),
+  // so we normalize the result to an array of { id, title } for the dropdown.
+  const { data: eventsData } = useQuery<EventDto[]>({
     queryKey: ["events", "list"],
     queryFn: () => fetch("/api/events").then((r) => r.json()),
   })
-  const events = eventsData?.events ?? []
+  // Support both shapes defensively: array (current API) or { events: [...] } (older callers)
+  const events: { id: string; title: string }[] = React.useMemo(() => {
+    if (!eventsData) return []
+    if (Array.isArray(eventsData)) {
+      return eventsData.map((e) => ({ id: e.id, title: e.title }))
+    }
+    // Fallback for object shape { events: [...] } — legacy/defensive
+    const maybe = eventsData as unknown as { events?: { id: string; title: string }[] }
+    return maybe.events ?? []
+  }, [eventsData])
   const activeEventId = selectedEventId || initialEventId
 
   const { data, isLoading } = useQuery<{ gatePasses: GatePass[] }>({
