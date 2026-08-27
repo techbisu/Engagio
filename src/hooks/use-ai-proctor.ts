@@ -59,7 +59,15 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // videoRef is the PREVIEW element rendered in the security sidebar.
+  // It may not be in the DOM when the sidebar is collapsed/closed.
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  // analysisVideoRef is an INTERNAL video element used solely for frame
+  // analysis. It is created programmatically (NOT in the DOM) so it's
+  // ALWAYS available regardless of sidebar state. This is the critical
+  // fix for "AI proctor not counting" — counters now increment even when
+  // the security sidebar is collapsed or the mobile Sheet is closed.
+  const analysisVideoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -94,7 +102,9 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   )
 
   const analyzeFrame = useCallback((): SkinAnalysis | null => {
-    const video = videoRef.current
+    // Use the INTERNAL analysis video element (always available) instead of
+    // the sidebar preview videoRef which may not be in the DOM.
+    const video = analysisVideoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas || video.readyState < 2) return null
 
@@ -362,31 +372,39 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         }
         streamRef.current = stream
 
-        // Attach immediately
+        // Create the INTERNAL analysis video element. This element is NOT
+        // attached to the DOM — it exists purely so analyzeFrame() can read
+        // frames from it via canvas.drawImage(). It is always available
+        // regardless of whether the security sidebar is open/collapsed.
+        if (!analysisVideoRef.current) {
+          analysisVideoRef.current = document.createElement("video")
+          analysisVideoRef.current.muted = true
+          analysisVideoRef.current.playsInline = true
+          analysisVideoRef.current.autoPlay = true
+          analysisVideoRef.current.preload = "auto"
+        }
+        analysisVideoRef.current.srcObject = stream
+        // Wait for the analysis video to be ready before starting the loop.
+        await new Promise<void>((resolve) => {
+          const av = analysisVideoRef.current
+          if (!av) return resolve()
+          if (av.readyState >= 2) return resolve()
+          const onReady = () => {
+            av.removeEventListener("loadeddata", onReady)
+            av.removeEventListener("loadedmetadata", onReady)
+            resolve()
+          }
+          av.addEventListener("loadeddata", onReady)
+          av.addEventListener("loadedmetadata", onReady)
+          setTimeout(resolve, 3000)
+        })
+        analysisVideoRef.current?.play().catch(() => {})
+
+        // Also attach to the sidebar preview video element if it's in the DOM.
         attachStreamToVideo()
 
         if (!canvasRef.current) {
           canvasRef.current = document.createElement("canvas")
-        }
-
-        // Wait for the video element to be ready
-        const video = videoRef.current
-        if (video) {
-          await new Promise<void>((resolve) => {
-            if (video.readyState >= 2) {
-              resolve()
-              return
-            }
-            const onReady = () => {
-              video.removeEventListener("loadeddata", onReady)
-              video.removeEventListener("loadedmetadata", onReady)
-              resolve()
-            }
-            video.addEventListener("loadeddata", onReady)
-            video.addEventListener("loadedmetadata", onReady)
-            setTimeout(resolve, 3000)
-          })
-          video.play().catch(() => {})
         }
 
         if (cancelled) return
@@ -418,9 +436,19 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         streamRef.current.getTracks().forEach((t) => t.stop())
         streamRef.current = null
       }
+      // Detach the stream from the preview video element.
       if (videoRef.current) {
         try {
           videoRef.current.srcObject = null
+        } catch {
+          // ignore
+        }
+      }
+      // Detach and clean up the internal analysis video element.
+      if (analysisVideoRef.current) {
+        try {
+          analysisVideoRef.current.srcObject = null
+          analysisVideoRef.current = null
         } catch {
           // ignore
         }

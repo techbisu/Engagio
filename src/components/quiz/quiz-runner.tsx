@@ -356,6 +356,23 @@ export function QuizRunner({
     setSheetOpen(false)
   }
 
+  // ----- Submit confirmation -----
+  // CRITICAL: When the quiz is in fullscreen mode, the AlertDialog is portaled
+  // to document.body by Radix — which is NOT a descendant of the fullscreen
+  // element. The browser hides everything outside the fullscreen element, so
+  // the dialog would be invisible. We MUST exit fullscreen before opening the
+  // dialog so the user can see and interact with it.
+  const requestSubmit = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {})
+      // Wait for fullscreen to exit before showing the dialog so the
+      // the dialog animation doesn't get clipped during the transition.
+      setTimeout(() => setShowSubmitDialog(true), 150)
+    } else {
+      setShowSubmitDialog(true)
+    }
+  }, [])
+
   const handleAnswer = useCallback(
     (qId: string, value: QuestionAnswer) => {
       setAnswers((a) => ({ ...a, [qId]: value }))
@@ -567,7 +584,7 @@ export function QuizRunner({
           </span>
           <Button
             size="sm"
-            onClick={() => setShowSubmitDialog(true)}
+            onClick={requestSubmit}
             className="bg-emerald-600 text-white hover:bg-emerald-700"
           >
             <Send className="size-4" /> Submit
@@ -650,7 +667,7 @@ export function QuizRunner({
             </span>
             {currentIdx === questions.length - 1 ? (
               <Button
-                onClick={() => setShowSubmitDialog(true)}
+                onClick={requestSubmit}
                 className="bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <Send className="size-4" /> Submit Quiz
