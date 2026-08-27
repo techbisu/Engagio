@@ -16,7 +16,6 @@ import {
   ListChecks,
   Flag,
   Camera,
-  CameraOff,
   Eye,
 } from "lucide-react"
 
@@ -30,6 +29,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs"
 
 import { cn } from "@/lib/utils"
 import { useAntiCheat } from "@/hooks/use-anti-cheat"
@@ -117,15 +122,12 @@ export function QuizRunner({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fullscreenBlocked, setFullscreenBlocked] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [navOpen, setNavOpen] = useState(true)
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(true)
-  const [securitySheetOpen, setSecuritySheetOpen] = useState(false)
   const [submitResult, setSubmitResult] = useState<SubmitAttemptResponse | null>(null)
 
   // AI proctor permission gate state.
   const [cameraGateOpen, setCameraGateOpen] = useState(false)
-  const [proctorBypassed, setProctorBypassed] = useState(false)
 
   const totalSeconds = timeLimit * 60
 
@@ -177,12 +179,12 @@ export function QuizRunner({
   })
 
   // ----- AI proctor — only mounted when security.aiProctor is true AND the
-  //       participant has either granted camera permission or chosen to bypass.
-  //       We pass `enabled = aiProctor && !proctorBypassed` so the hook stops
-  //       the camera stream if the participant later chooses to bypass.
+  //       participant has granted camera permission (camera gate closed).
+  //       There is no bypass — if the user denies camera access, they are
+  //       returned to the dashboard, so we don't need a `proctorBypassed` flag.
   const aiProctor = useAiProctor({
     enabled:
-      security.aiProctor && !cameraGateOpen && !proctorBypassed && status === "active",
+      security.aiProctor && !cameraGateOpen && status === "active",
     faceDetection: security.aiProctorFaceDetection,
     multiFace: security.aiProctorMultiFace,
     lookAway: security.aiProctorLookAway,
@@ -344,8 +346,41 @@ export function QuizRunner({
   const jumpTo = (idx: number) => {
     setDirection(idx > currentIdx ? 1 : -1)
     setCurrentIdx(idx)
-    setSheetOpen(false)
+    setMobilePanelOpen(false)
   }
+
+  // ----- Touch swipe gesture (mobile only) -----
+  // Swipe left → next question, swipe right → previous question.
+  // Threshold: 50px horizontal movement, low vertical movement (to distinguish
+  // from vertical scrolling). Touch events are passive — we don't prevent
+  // default, so vertical scrolling still works.
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+  }, [])
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const start = touchStartRef.current
+      if (!start) return
+      touchStartRef.current = null
+      const t = e.changedTouches[0]
+      const dx = t.clientX - start.x
+      const dy = t.clientY - start.y
+      // Only register as a swipe if horizontal movement is dominant and > 50px
+      if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return
+      if (dx < 0 && currentIdx < questions.length - 1) {
+        // Swipe left → next
+        setDirection(1)
+        setCurrentIdx((i) => i + 1)
+      } else if (dx > 0 && currentIdx > 0) {
+        // Swipe right → previous
+        setDirection(-1)
+        setCurrentIdx((i) => i - 1)
+      }
+    },
+    [currentIdx, questions.length],
+  )
 
   // ----- Submit confirmation -----
   // The submit dialog is rendered INSIDE the fullscreen container (as a
@@ -423,6 +458,11 @@ export function QuizRunner({
   }
 
   // ----- Camera gate handlers (AI proctor permission flow) -----
+  // When AI proctor is enabled, the participant MUST grant camera permission.
+  // There is NO "Continue without AI proctor" bypass — if the user denies
+  // camera access or cancels, they are returned to the dashboard. This is a
+  // strict requirement: AI security cannot be optional when the quiz link
+  // has `aiProctor: true`.
   const handleCameraGranted = () => {
     setCameraGateOpen(false)
     toast.success("AI proctoring active", {
@@ -431,19 +471,14 @@ export function QuizRunner({
   }
 
   const handleCameraError = () => {
-    // The proctor hook will set `aiProctor.error` — surface a softer prompt.
-    toast.warning("Camera unavailable", {
-      description:
-        "AI proctoring is inactive. You can continue but the quiz will be flagged for manual review.",
-    })
+    // The proctor hook will set `aiProctor.error` — keep the gate open so the
+    // user can retry or choose to go back.
   }
 
-  const handleContinueWithoutProctor = () => {
-    setProctorBypassed(true)
-    setCameraGateOpen(false)
-    toast.warning("Continuing without AI proctor", {
-      description: "Your attempt will be flagged for manual review.",
-    })
+  const handleReturnToDashboard = () => {
+    // User chose NOT to grant camera permission — return them to the dashboard.
+    // This is the only exit path other than granting camera access.
+    onExit()
   }
 
   // ----- Render: loading -----
@@ -531,7 +566,7 @@ export function QuizRunner({
   return (
     <div
       ref={containerRef}
-      className="quiz-fullscreen relative flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
+      className="quiz-fullscreen relative flex h-screen flex-col overflow-hidden bg-slate-50 dark:bg-slate-950"
     >
       {/* Watermark overlay — always rendered as a sibling of the quiz content.
           Renders nothing when security.watermarkOverlay is false. */}
@@ -541,7 +576,14 @@ export function QuizRunner({
       />
 
       {/* Sticky top bar */}
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+      <header
+        className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingLeft: "max(env(safe-area-inset-left, 0px), 0px)",
+          paddingRight: "max(env(safe-area-inset-right, 0px), 0px)",
+        }}
+      >
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <ShieldAlert className="size-5 shrink-0 text-emerald-600" />
@@ -597,16 +639,22 @@ export function QuizRunner({
       {/* Main content — 3-column layout on xl: questions + navigator + security.
           Mobile: scrollable with safe area insets. Desktop: side-by-side. */}
       <main
-        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-3 sm:gap-6 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-[90rem]"
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto p-3 pb-24 sm:gap-6 sm:p-6 lg:flex-row lg:gap-8 lg:overflow-visible lg:p-8 lg:pb-8 xl:max-w-[90rem]"
         style={{
-          paddingBottom: "env(safe-area-inset-bottom, 16px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
           paddingTop: "env(safe-area-inset-top, 0px)",
           paddingLeft: "max(env(safe-area-inset-left, 0px), 12px)",
           paddingRight: "max(env(safe-area-inset-right, 0px), 12px)",
         }}
       >
-        {/* Question column */}
-        <section className="flex flex-1 flex-col">
+        {/* Question column — with touch swipe gesture for mobile navigation.
+            Swipe left → next question, swipe right → previous question.
+            Vertical scrolling still works (we only register horizontal swipes). */}
+        <section
+          className="flex flex-1 flex-col"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <Card className="flex-1">
             <CardContent className="p-5 sm:p-6">
               <AnimatePresence mode="wait" custom={direction}>
@@ -635,8 +683,10 @@ export function QuizRunner({
             </CardContent>
           </Card>
 
-          {/* Navigation buttons */}
-          <div className="mt-4 flex items-center justify-between gap-3">
+          {/* Navigation buttons — inline on desktop, sticky bottom bar on
+              mobile with larger touch targets. The "answered" counter moves
+              into the sticky bar on mobile to free up vertical space. */}
+          <div className="mt-4 hidden items-center justify-between gap-3 lg:flex">
             <Button
               variant="outline"
               onClick={goPrev}
@@ -662,90 +712,151 @@ export function QuizRunner({
           </div>
         </section>
 
-        <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen && !proctorBypassed ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
+        <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
       </main>
 
-      {/* Mobile floating buttons: question navigator + security monitor.
-          Positioned with safe area inset to avoid being cut off on notched screens. */}
+      {/* Mobile sticky bottom navigation bar — Previous / answered count /
+          Next|Submit. Larger touch targets (h-12 = 48px). Sits above the
+          Navigator toggle button. Includes safe-area-inset so it doesn't
+          collide with the iOS home indicator or Android nav bar. */}
       <div
-        className="fixed z-30 flex flex-col gap-2 lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:hidden"
         style={{
-          bottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
-          right: "max(env(safe-area-inset-right, 16px), 16px)",
+          paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)",
+          paddingTop: "8px",
+          paddingLeft: "max(env(safe-area-inset-left, 0px), 12px)",
+          paddingRight: "max(env(safe-area-inset-right, 0px), 12px)",
         }}
       >
-        <Button
-          onClick={() => setSecuritySheetOpen(true)}
-          className="rounded-full bg-slate-700 text-white shadow-lg hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
-          size="icon"
-          aria-label="Open security monitor"
-        >
-          <ShieldCheck className="size-5" />
-        </Button>
-        <Button
-          onClick={() => setSheetOpen(true)}
-          className="rounded-full bg-emerald-600 text-white shadow-lg hover:bg-emerald-700"
-          size="icon"
-          aria-label="Open question navigator"
-        >
-          <ListChecks className="size-5" />
-        </Button>
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            onClick={goPrev}
+            disabled={currentIdx === 0}
+            className="h-12 flex-1 gap-1.5"
+            aria-label="Previous question"
+          >
+            <ArrowLeft className="size-5" /> Prev
+          </Button>
+          <span className="shrink-0 text-center text-xs font-medium text-muted-foreground">
+            <span className="block font-semibold text-foreground tabular-nums">
+              {currentIdx + 1}/{questions.length}
+            </span>
+            <span className="block">{answeredCount} answered</span>
+          </span>
+          {currentIdx === questions.length - 1 ? (
+            <Button
+              onClick={() => setShowSubmitDialog(true)}
+              className="h-12 flex-1 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+              aria-label="Submit quiz"
+            >
+              <Send className="size-5" /> Submit
+            </Button>
+          ) : (
+            <Button
+              onClick={goNext}
+              className="h-12 flex-1 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+              aria-label="Next question"
+            >
+              Next <ArrowRight className="size-5" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Mobile question navigator sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <ListChecks className="size-4 text-emerald-600" /> Question Navigator
-            </SheetTitle>
-          </SheetHeader>
-          <div className="space-y-3 px-4 pb-6">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Answered</span>
-              <Badge variant="secondary">{answeredCount}/{questions.length}</Badge>
-            </div>
-            <Separator />
-            <QuestionNavigator
-              total={questions.length}
-              current={currentIdx}
-              answered={answeredArr}
-              flagged={flaggedArr}
-              onJump={jumpTo}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Mobile single toggle button — opens a combined panel with both
+          the Question Navigator and Security Monitor as tabs.
+          A single toggle (vs two FABs) is easier to tap on mobile and avoids
+          accidental clicks. The panel uses a bottom Sheet that the user
+          explicitly dismisses — it never auto-closes, so it doesn't disturb
+          the exam flow.
+          Positioned above the sticky bottom nav bar to avoid overlap. */}
+      <Button
+        onClick={() => setMobilePanelOpen(true)}
+        className="fixed z-30 gap-2 rounded-full bg-slate-800 px-4 text-white shadow-lg hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 lg:hidden"
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)",
+          right: "max(env(safe-area-inset-right, 16px), 16px)",
+        }}
+        size="sm"
+        aria-label="Open question navigator and security monitor"
+      >
+        <ListChecks className="size-4" />
+        <span className="hidden sm:inline">Navigator</span>
+        <Badge
+          variant="secondary"
+          className="bg-emerald-500 text-white"
+        >
+          {currentIdx + 1}/{questions.length}
+        </Badge>
+      </Button>
 
-      {/* Mobile security sheet — body mirrors the desktop sidebar */}
-      <Sheet open={securitySheetOpen} onOpenChange={setSecuritySheetOpen}>
+      {/* Mobile combined panel — Question Navigator + Security Monitor as
+          tabs. Uses a bottom Sheet that stays open until explicitly dismissed. */}
+      <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-4 text-emerald-600" /> Security Monitor
+              <ShieldCheck className="size-4 text-emerald-600" /> Quiz Tools
             </SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-6 pt-2">
-            <SecuritySidebarBodyInline
-              metrics={combinedMetrics}
-              config={security}
-              proctor={
-                security.aiProctor && !cameraGateOpen && !proctorBypassed
-                  ? {
-                      isReady: aiProctor.isReady,
-                      error: aiProctor.error,
-                    }
-                  : null
-              }
-              videoRef={aiProctor.videoRef}
-            />
+            <Tabs defaultValue="navigator" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="navigator" className="gap-1.5">
+                  <ListChecks className="size-3.5" /> Navigator
+                </TabsTrigger>
+                <TabsTrigger value="security" className="gap-1.5">
+                  <ShieldCheck className="size-3.5" /> Security
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="navigator" className="mt-4 space-y-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Answered</span>
+                  <Badge variant="secondary">
+                    {answeredCount}/{questions.length}
+                  </Badge>
+                </div>
+                <Separator />
+                <QuestionNavigator
+                  total={questions.length}
+                  current={currentIdx}
+                  answered={answeredArr}
+                  flagged={flaggedArr}
+                  onJump={jumpTo}
+                />
+              </TabsContent>
+              <TabsContent value="security" className="mt-4">
+                <SecuritySidebarBodyInline
+                  metrics={combinedMetrics}
+                  config={security}
+                  proctor={
+                    security.aiProctor && !cameraGateOpen
+                      ? {
+                          isReady: aiProctor.isReady,
+                          error: aiProctor.error,
+                        }
+                      : null
+                  }
+                  videoRef={aiProctor.videoRef}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </SheetContent>
       </Sheet>
 
       {/* Fullscreen prompt overlay */}
       {awaitingFullscreen && status === "active" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm"
+          style={{
+            paddingTop: "max(env(safe-area-inset-top, 0px), 16px)",
+            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
+            paddingLeft: "max(env(safe-area-inset-left, 0px), 16px)",
+            paddingRight: "max(env(safe-area-inset-right, 0px), 16px)",
+          }}
+        >
           <Card className="w-full max-w-md">
             <CardHeader className="text-center">
               <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
@@ -844,15 +955,15 @@ export function QuizRunner({
       )}
 
       {/* AI Proctor camera permission gate — shown when security.aiProctor is
-          on and the camera hasn't been authorized yet. The gate prevents the
-          quiz from being interactable until the participant either grants camera
-          access or chooses to continue without AI proctor (which logs the
-          bypass). */}
+          on and the camera hasn't been authorized yet. The gate is mandatory:
+          the participant must grant camera access to proceed, OR choose to go
+          back to the dashboard. There is no "continue without proctor" option
+          because AI security is a strict requirement when enabled. */}
       {cameraGateOpen && status === "active" && (
         <CameraPermissionGate
           onGranted={handleCameraGranted}
           onError={handleCameraError}
-          onContinueWithout={handleContinueWithoutProctor}
+          onBack={handleReturnToDashboard}
         />
       )}
 
@@ -954,16 +1065,17 @@ export function QuizRunner({
 // Camera permission gate — rendered as a sibling overlay when AI proctor
 // requires camera authorization. Tries getUserMedia directly; on success
 // notifies the parent via onGranted (the parent then unmounts the gate, and
-// the useAiProctor hook re-opens the stream).
+// the useAiProctor hook re-opens the stream). The participant MUST grant
+// camera access to proceed — the only alternative is to go back.
 // ---------------------------------------------------------------------------
 function CameraPermissionGate({
   onGranted,
   onError,
-  onContinueWithout,
+  onBack,
 }: {
   onGranted: () => void
   onError: () => void
-  onContinueWithout: () => void
+  onBack: () => void
 }) {
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -995,7 +1107,15 @@ function CameraPermissionGate({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm"
+      style={{
+        paddingTop: "max(env(safe-area-inset-top, 0px), 16px)",
+        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
+        paddingLeft: "max(env(safe-area-inset-left, 0px), 16px)",
+        paddingRight: "max(env(safe-area-inset-right, 0px), 16px)",
+      }}
+    >
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
@@ -1005,9 +1125,10 @@ function CameraPermissionGate({
         </CardHeader>
         <CardContent className="space-y-4 text-center">
           <p className="text-sm text-muted-foreground">
-            This quiz uses AI proctoring. Your camera will be used to verify your
-            identity and detect potential academic dishonesty. No video is
-            recorded or transmitted — all analysis runs locally in your browser.
+            This quiz uses <span className="font-semibold text-foreground">AI proctoring</span>.
+            Your camera will be used to verify your identity and detect potential
+            academic dishonesty. No video is recorded or transmitted — all
+            analysis runs locally in your browser.
           </p>
           <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
             <li className="flex items-start gap-2">
@@ -1028,6 +1149,10 @@ function CameraPermissionGate({
               {error}
             </p>
           )}
+          <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+            <strong>Required:</strong> You must grant camera access to take this
+            quiz. If you cancel, you will be returned to the dashboard.
+          </div>
           <div className="space-y-2">
             <Button
               onClick={requestCamera}
@@ -1042,11 +1167,11 @@ function CameraPermissionGate({
               {checking ? "Requesting…" : "Grant camera access"}
             </Button>
             <Button
-              onClick={onContinueWithout}
+              onClick={onBack}
               variant="outline"
               className="w-full gap-1.5"
             >
-              <CameraOff className="size-4" /> Continue without AI proctor
+              <ArrowLeft className="size-4" /> Back to Dashboard
             </Button>
           </div>
         </CardContent>
