@@ -190,13 +190,18 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     }
 
     // ─── Multi-face detection ────────────────────────────────────────────
-    // Multiple faces are detected when skin-tone pixels are significantly
+    // Multiple faces detected when skin-tone pixels are significantly
     // spread across multiple quadrants. We check if 2+ quadrants each have
-    // more than 20% of the total skin pixels (indicating separate clusters).
-    if (multiFace && result.totalSkin > 500) {
-      const threshold = result.totalSkin * 0.2 // 20% of total skin per quadrant
-      const significantQuadrants = result.quadrants.filter((q) => q > threshold && q > 200).length
-      if (significantQuadrants >= 2 && canFire("counter:multiFace")) {
+    // more than 25% of the total skin pixels (indicating separate clusters).
+    // Also requires minimum total skin pixels to avoid false positives
+    // from background noise or lighting changes.
+    if (multiFace && result.totalSkin > 800) {
+      const threshold = result.totalSkin * 0.25 // 25% of total skin per quadrant
+      const minPerQuadrant = 300 // minimum skin pixels per quadrant to count
+      const significantQuadrants = result.quadrants.filter(
+        (q) => q > threshold && q > minPerQuadrant
+      ).length
+      if (significantQuadrants >= 2 && canFire("counter:multiFace", 5000)) {
         setMultiFaceAlerts((n) => n + 1)
         onViolationRef.current?.("multiFace")
         fireToast(
@@ -234,8 +239,9 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           const dx = avgX - last.x
           const dy = avgY - last.y
           const delta = Math.sqrt(dx * dx + dy * dy)
-          // Lower threshold (8 instead of 15) for better sensitivity
-          if (delta > 18 && canFire("counter:lookAway", 8000)) {
+          // Threshold of 20px (reduced sensitivity from 8 to avoid false positives
+          // from normal head movement while studying). 8 second cooldown.
+          if (delta > 20 && canFire("counter:lookAway", 8000)) {
             setLookAwayAlerts((n) => n + 1)
             onViolationRef.current?.("lookAway")
             fireToast(

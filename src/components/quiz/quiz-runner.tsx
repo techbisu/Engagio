@@ -529,6 +529,7 @@ export function QuizRunner({
     : 0
 
   return (
+    <>
     <div
       ref={containerRef}
       className="quiz-fullscreen flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
@@ -594,8 +595,17 @@ export function QuizRunner({
         </div>
       )}
 
-      {/* Main content — 3-column layout on xl: questions + navigator + security */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-[90rem]">
+      {/* Main content — 3-column layout on xl: questions + navigator + security.
+          Mobile: scrollable with safe area insets. Desktop: side-by-side. */}
+      <main
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-3 sm:gap-6 sm:p-6 lg:flex-row lg:gap-8 lg:p-8 xl:max-w-[90rem]"
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom, 16px)",
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingLeft: "max(env(safe-area-inset-left, 0px), 12px)",
+          paddingRight: "max(env(safe-area-inset-right, 0px), 12px)",
+        }}
+      >
         {/* Question column */}
         <section className="flex flex-1 flex-col">
           <Card className="flex-1">
@@ -656,8 +666,15 @@ export function QuizRunner({
         <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen && !proctorBypassed ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
       </main>
 
-      {/* Mobile floating buttons: question navigator + security monitor */}
-      <div className="fixed bottom-4 right-4 z-20 flex flex-col gap-2 lg:hidden">
+      {/* Mobile floating buttons: question navigator + security monitor.
+          Positioned with safe area inset to avoid being cut off on notched screens. */}
+      <div
+        className="fixed z-30 flex flex-col gap-2 lg:hidden"
+        style={{
+          bottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
+          right: "max(env(safe-area-inset-right, 16px), 16px)",
+        }}
+      >
         <Button
           onClick={() => setSecuritySheetOpen(true)}
           className="rounded-full bg-slate-700 text-white shadow-lg hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
@@ -840,9 +857,12 @@ export function QuizRunner({
         />
       )}
 
-      {/* Submit confirmation dialog */}
+    </div>
+
+      {/* Submit confirmation dialog — rendered OUTSIDE the fullscreen container
+          so it appears above fullscreen mode. */}
       <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="z-[200]">
           <AlertDialogHeader>
             <AlertDialogTitle>Submit your quiz?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -869,9 +889,6 @@ export function QuizRunner({
             <Button
               type="button"
               onClick={() => {
-                // Close the dialog and submit directly.
-                // Use a direct call (not setTimeout) since doSubmit is stable
-                // via doSubmitRef and won't be affected by the dialog closing.
                 setShowSubmitDialog(false)
                 if (doSubmitRef.current && attemptId && !submittedRef.current) {
                   void doSubmitRef.current(false)
@@ -886,7 +903,7 @@ export function QuizRunner({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }
 
@@ -1021,7 +1038,7 @@ function SecuritySidebarBodyInline({
     : "off"
   return (
     <div className="space-y-3">
-      {config.aiProctor && proctor && (
+      {config.aiProctor && proctor && proctor.isReady && (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900 dark:border-slate-700">
           <div className="relative aspect-video w-full bg-black">
             <video
@@ -1046,14 +1063,20 @@ function SecuritySidebarBodyInline({
                 )}
               >
                 <Camera className="size-3" />
-                {proctor.error
-                  ? "OFFLINE"
-                  : proctor.isReady
-                    ? "LIVE"
-                    : "…"}
+                {proctor.error ? "OFFLINE" : "LIVE"}
               </Badge>
             </div>
           </div>
+        </div>
+      )}
+      {config.aiProctor && proctor && !proctor.isReady && !proctor.error && (
+        <div className="flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" style={{ minHeight: 120 }}>
+          <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        </div>
+      )}
+      {config.aiProctor && proctor && proctor.error && (
+        <div className="flex items-center justify-center rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20" style={{ minHeight: 120 }}>
+          <span className="text-xs text-red-600 dark:text-red-400">Camera: {proctor.error}</span>
         </div>
       )}
       <Separator />
