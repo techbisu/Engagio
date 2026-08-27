@@ -174,7 +174,81 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
         />
       </div>
 
-            {/* Current & Upcoming Activities (for registered events only) */}
+      {/* My Registered Events — simple list with action buttons */}
+      {registeredEvents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300">
+                <Calendar className="size-4" />
+              </span>
+              <div>
+                <CardTitle>My Registered Events</CardTitle>
+                <CardDescription>Events you're registered for. Click to view activities.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {registeredEvents.map(({ event, activities }) => {
+                const liveCount = activities.filter(a => a.status === "LIVE").length
+                const upcomingCount = activities.filter(a => a.status === "SCHEDULED").length
+                const orgSlug = event.organization?.slug
+                return (
+                  <div
+                    key={event.id}
+                    className="flex flex-col gap-2 rounded-lg border p-4 transition hover:border-emerald-500/40 hover:shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{event.title}</p>
+                        {event.organization && (
+                          <p className="truncate text-xs text-muted-foreground">{event.organization.name}</p>
+                        )}
+                      </div>
+                      {liveCount > 0 && (
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                          <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> {liveCount} LIVE
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{activities.length} activities</span>
+                      {upcomingCount > 0 && <span>· {upcomingCount} upcoming</span>}
+                      <span>· {new Date(event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      {orgSlug && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
+                          onClick={() => {
+                            window.location.href = `/org/${orgSlug}/participant/dashboard`
+                          }}
+                        >
+                          Go to Dashboard
+                        </Button>
+                      )}
+                      {liveCount > 0 && activities.find(a => a.status === "LIVE" && a.quizLink?.slug) && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                          onClick={() => onStartQuiz(activities.find(a => a.status === "LIVE" && a.quizLink?.slug)!.quizLink!.slug)}
+                        >
+                          Start Quiz
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Current & Upcoming Activities (for registered events only) */}
       {registeredEvents.length > 0 && (() => {
         // Find the most active event (most LIVE activities, or first one)
         const featuredIdx = registeredEvents.findIndex(({ activities }) =>
@@ -563,7 +637,7 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                     : "—"}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED" ? (
+                  {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && a.published !== false ? (
                     <ShareAchievementButton
                       achievementInput={{
                         type: "QUIZ_RESULT",
@@ -642,7 +716,7 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                     : "—"}
                 </span>
               </div>
-              {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && (
+              {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && a.published !== false && (
                 <ShareAchievementButton
                   achievementInput={{
                     type: "QUIZ_RESULT",

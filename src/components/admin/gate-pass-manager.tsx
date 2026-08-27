@@ -29,19 +29,28 @@ interface GatePass {
   event: { id: string; title: string; slug: string }
 }
 
-export function GatePassManager({ eventId }: { eventId: string }) {
+export function GatePassManager({ eventId: initialEventId }: { eventId: string }) {
   const queryClient = useQueryClient()
   const [search, setSearch] = React.useState("")
+  const [selectedEventId, setSelectedEventId] = React.useState(initialEventId || "")
+
+  // Fetch events for the dropdown selector
+  const { data: eventsData } = useQuery<{ events: { id: string; title: string }[] }>({
+    queryKey: ["events", "list"],
+    queryFn: () => fetch("/api/events").then((r) => r.json()),
+  })
+  const events = eventsData?.events ?? []
+  const activeEventId = selectedEventId || initialEventId
 
   const { data, isLoading } = useQuery<{ gatePasses: GatePass[] }>({
-    queryKey: ["gate-passes", eventId],
-    queryFn: () => fetch(`/api/gate-passes?eventId=${eventId}`).then((r) => r.json()),
+    queryKey: ["gate-passes", activeEventId],
+    queryFn: () => fetch(`/api/gate-passes?eventId=${activeEventId}`).then((r) => r.json()),
+    enabled: !!activeEventId,
   })
 
   const generateAllMutation = useMutation({
     mutationFn: async () => {
-      // Generate gate passes for all registered participants who don't have one
-      const regsRes = await fetch(`/api/events/${eventId}/registrations`)
+      const regsRes = await fetch(`/api/events/${activeEventId}/registrations`)
       const regs = await regsRes.json()
       const results = []
       for (const reg of (regs.registrations || [])) {
@@ -49,7 +58,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            eventId,
+            eventId: activeEventId,
             userId: reg.userId,
             registrationId: reg.id,
             participantName: reg.user?.name || reg.user?.email?.split("@")[0] || "Participant",
@@ -68,7 +77,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
       return results
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gate-passes", eventId] })
+      queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
       toast.success("Gate passes generated for all registered participants!")
     },
     onError: () => toast.error("Failed to generate gate passes"),
@@ -80,7 +89,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
       return res.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gate-passes", eventId] })
+      queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
       toast.success("ID card generated!")
     },
     onError: () => toast.error("Failed to generate ID card"),
@@ -92,7 +101,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
       return res.json()
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["gate-passes", eventId] })
+      queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
       toast.success(data.action === "checked_in" ? "Checked in!" : "Checked out!")
     },
     onError: () => toast.error("Check-in failed"),
@@ -108,7 +117,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
       return res.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gate-passes", eventId] })
+      queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
       toast.success("Gate pass revoked")
     },
     onError: () => toast.error("Failed to revoke"),
@@ -136,6 +145,7 @@ export function GatePassManager({ eventId }: { eventId: string }) {
               </CardTitle>
               <CardDescription>Generate ID cards, check in participants, and verify gate passes.</CardDescription>
             </div>
+            {activeEventId && (
             <Button
               onClick={() => generateAllMutation.mutate()}
               disabled={generateAllMutation.isPending}
@@ -147,9 +157,32 @@ export function GatePassManager({ eventId }: { eventId: string }) {
                 <><RefreshCw className="size-4" /> Generate for All</>
               )}
             </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
+          {/* Event selector */}
+          <div className="mb-4 flex items-center gap-3">
+            <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">Select Event:</label>
+            <select
+              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+              value={selectedEventId}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+            >
+              <option value="">— Choose an event —</option>
+              {events.map((e) => (
+                <option key={e.id} value={e.id}>{e.title}</option>
+              ))}
+            </select>
+          </div>
+
+          {!activeEventId ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <QrCode className="mx-auto mb-3 size-12 opacity-30" />
+              <p>Select an event to manage gate passes.</p>
+            </div>
+          ) : (
+            <>
           {/* Search */}
           <div className="mb-4 relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -312,6 +345,8 @@ export function GatePassManager({ eventId }: { eventId: string }) {
               </TableBody>
             </Table>
           </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

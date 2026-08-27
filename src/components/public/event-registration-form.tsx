@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent } from '@/components/ui/card'
+import { useCurrentUser } from '@/components/shared/use-current-user'
 
 interface EventRegistrationFormProps {
   eventId: string
@@ -26,6 +27,7 @@ interface RegistrationField {
 
 export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationFormProps) {
   const queryClient = useQueryClient()
+  const { user } = useCurrentUser()
   const [formData, setFormData] = React.useState<Record<string, string | number | boolean>>({})
   const [errors, setErrors] = React.useState<Record<string, string>>({})
 
@@ -38,6 +40,23 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
       return res.json() as Promise<RegistrationField[]>
     },
   })
+
+  // Auto-fill name and email from the logged-in user's profile
+  React.useEffect(() => {
+    if (!data || !user) return
+    const prefilled: Record<string, string | number | boolean> = {}
+    data.forEach((field) => {
+      if (field.type === 'email' && user.email) {
+        prefilled[field.id] = user.email
+      }
+      if ((field.label.toLowerCase().includes('name') || field.label.toLowerCase().includes('participant')) && user.name) {
+        prefilled[field.id] = user.name
+      }
+    })
+    if (Object.keys(prefilled).length > 0) {
+      setFormData((prev) => ({ ...prefilled, ...prev }))
+    }
+  }, [data, user])
 
   // Check if already registered
   const { data: checkData, isLoading: isCheckLoading } = useQuery({
@@ -228,6 +247,7 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
                   onChange={(e) => handleChange(field.id, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                   className="border-white/10 bg-white/5 text-white focus:border-emerald-500"
                   placeholder={`Enter your ${field.label.toLowerCase()}`}
+                  readOnly={field.type === 'email' && !!user?.email && formData[field.id] === user.email}
                 />
               )}
               
