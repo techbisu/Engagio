@@ -10,6 +10,7 @@ import { motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   AlertTriangle,
+  Ban,
   BarChart3,
   Check,
   CreditCard,
@@ -45,6 +46,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 import { api, type PlanName } from "./api"
 
@@ -95,6 +106,12 @@ interface UpgradeResponse {
   plan: PlanName
   subscription: { status: string; currentPeriodEnd: string | null }
   note: string
+}
+
+interface CancelResponse {
+  success: boolean
+  plan: PlanName
+  note?: string
 }
 
 interface BillingDashboardProps {
@@ -168,6 +185,7 @@ function usageTone(pct: number, unlimited: boolean): string {
 export function BillingDashboard({ orgId, hideHeader = false }: BillingDashboardProps) {
   const queryClient = useQueryClient()
   const [upgradeTarget, setUpgradeTarget] = React.useState<PlanSummaryDto | null>(null)
+  const [cancelOpen, setCancelOpen] = React.useState(false)
 
   const billingQuery = useQuery<BillingSummary>({
     queryKey: ["organizations", orgId, "billing"],
@@ -195,6 +213,29 @@ export function BillingDashboard({ orgId, hideHeader = false }: BillingDashboard
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to upgrade plan"
       toast.error("Could not upgrade plan", { description: msg })
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: () =>
+      api<CancelResponse>(`/api/organizations/${orgId}/billing/cancel`, {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["organizations", orgId, "billing"] })
+      queryClient.invalidateQueries({ queryKey: ["organizations", orgId, "domains"] })
+      queryClient.invalidateQueries({ queryKey: ["organizations", orgId, "audit-log"] })
+      queryClient.invalidateQueries({ queryKey: ["organizations", orgId] })
+      toast.success("Subscription cancelled", {
+        description:
+          data.note ??
+          "Your organization has been reverted to the Free plan.",
+      })
+      setCancelOpen(false)
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to cancel subscription"
+      toast.error("Could not cancel subscription", { description: msg })
     },
   })
 
@@ -279,7 +320,7 @@ export function BillingDashboard({ orgId, hideHeader = false }: BillingDashboard
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -296,6 +337,32 @@ export function BillingDashboard({ orgId, hideHeader = false }: BillingDashboard
               Demo mode — no real charges.
             </span>
           </div>
+
+          {currentPlanName === "FREE" ? (
+            <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <Sparkles className="mt-0.5 size-3.5 shrink-0" />
+              <p>
+                You&apos;re on the Free plan. Pick a plan above to reactivate your
+                subscription and unlock higher limits and premium features.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-rose-600 border-rose-200 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-900 dark:hover:bg-rose-950/40"
+                onClick={() => setCancelOpen(true)}
+              >
+                <Ban className="size-3.5" />
+                Cancel subscription
+              </Button>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                Cancelling reverts your organization to the Free plan.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -599,6 +666,57 @@ export function BillingDashboard({ orgId, hideHeader = false }: BillingDashboard
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Cancel subscription confirmation ──────────────────────────── */}
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-rose-600 dark:text-rose-400" />
+              Cancel subscription?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Cancelling your subscription will revert your organization to the
+              Free plan at the end of the current billing period. Features
+              above the Free plan limits will be disabled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="flex items-start gap-2">
+              <Ban className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">This action cannot be undone</p>
+                <p className="mt-0.5">
+                  You can re-subscribe anytime by choosing a plan above, but
+                  your current billing period will not be refunded.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelMutation.isPending}>
+              Keep plan
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="border-rose-600 bg-rose-600 text-white hover:bg-rose-700 dark:border-rose-500 dark:bg-rose-600 dark:hover:bg-rose-500"
+              disabled={cancelMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault()
+                cancelMutation.mutate()
+              }}
+            >
+              {cancelMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Ban className="size-3.5" />
+              )}
+              Yes, cancel subscription
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

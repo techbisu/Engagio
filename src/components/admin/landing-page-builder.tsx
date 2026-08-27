@@ -48,6 +48,8 @@ import {
   Save,
   ClipboardList,
   PlayCircle,
+  Globe,
+  Monitor,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -59,6 +61,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -85,6 +88,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
+import { LandingSectionsRenderer } from "@/components/public/landing-sections-renderer"
 import { api } from "./api"
 import type {
   LandingSectionDto,
@@ -367,48 +371,6 @@ export function LandingPageBuilder({
             &apos;s public landing page from prebuilt sections. Drag to reorder.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant="outline"
-            className="bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
-          >
-            {visibleCount}/{totalCount} visible
-          </Badge>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                <Plus className="size-4" /> Add section
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Choose a section type
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {SECTION_TYPES.map((m) => {
-                const Icon = m.icon
-                return (
-                  <DropdownMenuItem
-                    key={m.type}
-                    onClick={() => handleAddSection(m.type)}
-                    disabled={createMutation.isPending}
-                    className="gap-3 py-2"
-                  >
-                    <span className="flex size-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                      <Icon className="size-4" />
-                    </span>
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">{m.label}</span>
-                      <span className="text-xs text-muted-foreground leading-tight">
-                        {m.description}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       {/* State — error */}
@@ -420,63 +382,136 @@ export function LandingPageBuilder({
         </Card>
       )}
 
-      {/* State — loading */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 rounded-xl" />
-          ))}
-        </div>
-      ) : sections.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 flex flex-col items-center text-center">
-            <div className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
-              <PanelsTopLeft className="size-7" />
-            </div>
-            <p className="mt-4 text-lg font-semibold">No sections yet</p>
-            <p className="mt-1 text-sm text-muted-foreground max-w-md">
-              Add a Hero, About, Speakers, Schedule, or any of the other
-              prebuilt sections to compose this event&apos;s public landing page.
-            </p>
-            <Button
-              className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => handleAddSection("HERO")}
-            >
-              <Plus className="size-4" /> Add a Hero section
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={sections.map((s) => s.id)}
-            strategy={verticalListSortingStrategy}
+      {/* Editor / Preview tabs */}
+      <Tabs defaultValue="editor" className="w-full">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Badge
+            variant="outline"
+            className="bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
           >
+            {visibleCount}/{totalCount} visible
+          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <TabsList className="bg-slate-100 dark:bg-slate-800/60">
+              <TabsTrigger
+                value="editor"
+                className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+              >
+                Editor
+              </TabsTrigger>
+              <TabsTrigger
+                value="preview"
+                className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900"
+              >
+                <Eye className="size-3.5 mr-1" />
+                Preview
+              </TabsTrigger>
+            </TabsList>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  <Plus className="size-4" /> Add section
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Choose a section type
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {SECTION_TYPES.map((m) => {
+                  const Icon = m.icon
+                  return (
+                    <DropdownMenuItem
+                      key={m.type}
+                      onClick={() => handleAddSection(m.type)}
+                      disabled={createMutation.isPending}
+                      className="gap-3 py-2"
+                    >
+                      <span className="flex size-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">{m.label}</span>
+                        <span className="text-xs text-muted-foreground leading-tight">
+                          {m.description}
+                        </span>
+                      </span>
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        <TabsContent value="editor" className="mt-4 space-y-3">
+          {/* State — loading */}
+          {isLoading ? (
             <div className="space-y-3">
-              <AnimatePresence initial={false}>
-                {sections.map((section, idx) => (
-                  <SortableSectionCard
-                    key={section.id}
-                    section={section}
-                    index={idx}
-                    total={sections.length}
-                    onPatch={(patch) =>
-                      patchMutation.mutate({ sectionId: section.id, ...patch })
-                    }
-                    onMove={(dir) => moveSection(section.id, dir)}
-                    onDelete={() => setDeleteTarget(section)}
-                    isSaving={patchMutation.isPending && patchMutation.variables?.sectionId === section.id}
-                  />
-                ))}
-              </AnimatePresence>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-32 rounded-xl" />
+              ))}
             </div>
-          </SortableContext>
-        </DndContext>
-      )}
+          ) : sections.length === 0 ? (
+            <Card>
+              <CardContent className="py-16 flex flex-col items-center text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                  <PanelsTopLeft className="size-7" />
+                </div>
+                <p className="mt-4 text-lg font-semibold">No sections yet</p>
+                <p className="mt-1 text-sm text-muted-foreground max-w-md">
+                  Add a Hero, About, Speakers, Schedule, or any of the other
+                  prebuilt sections to compose this event&apos;s public landing page.
+                </p>
+                <Button
+                  className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => handleAddSection("HERO")}
+                >
+                  <Plus className="size-4" /> Add a Hero section
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  <AnimatePresence initial={false}>
+                    {sections.map((section, idx) => (
+                      <SortableSectionCard
+                        key={section.id}
+                        section={section}
+                        index={idx}
+                        total={sections.length}
+                        onPatch={(patch) =>
+                          patchMutation.mutate({ sectionId: section.id, ...patch })
+                        }
+                        onMove={(dir) => moveSection(section.id, dir)}
+                        onDelete={() => setDeleteTarget(section)}
+                        isSaving={patchMutation.isPending && patchMutation.variables?.sectionId === section.id}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
+        </TabsContent>
+
+        <TabsContent value="preview" className="mt-4">
+          <LandingPagePreview
+            sections={sections}
+            eventTitle={eventTitle}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Delete confirm */}
       <AlertDialog
@@ -508,6 +543,100 @@ export function LandingPageBuilder({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+// ─── Live preview of the assembled landing page ───────────────────────────
+//
+// Renders the visible sections through the public LandingSectionsRenderer
+// inside a desktop browser frame so admins can see exactly what participants
+// will see. Hidden sections (isVisible=false) are excluded — matching the
+// behaviour of the real public landing page.
+
+function LandingPagePreview({
+  sections,
+  eventTitle,
+  isLoading,
+}: {
+  sections: LandingSectionDto[]
+  eventTitle: string
+  isLoading: boolean
+}) {
+  const visibleSections = sections.filter((s) => s.isVisible)
+
+  if (isLoading) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="py-12 flex flex-col items-center text-center">
+          <Loader2 className="size-7 animate-spin text-emerald-600 dark:text-emerald-400" />
+          <p className="mt-3 text-sm text-muted-foreground">
+            Loading preview…
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (visibleSections.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="py-12 flex flex-col items-center text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800/60 dark:text-slate-500">
+            <Eye className="size-6" />
+          </div>
+          <p className="mt-3 font-semibold">Nothing to preview yet</p>
+          <p className="mt-1 text-sm text-muted-foreground max-w-md">
+            Add a section in the <span className="font-medium text-foreground">Editor</span> tab
+            (Hero, About, Speakers, Schedule, etc.) and make sure it&apos;s visible —
+            it will render here exactly as participants will see it on the live
+            landing page.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Derive a plausible slug for the fake browser URL bar.
+  const fakeSlug = eventTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "event"
+
+  return (
+    <div className="space-y-3">
+      {/* Preview mode banner */}
+      <div className="flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+        <Eye className="size-3.5" />
+        Preview mode — changes are auto-saved
+      </div>
+
+      {/* Desktop browser frame */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-950">
+        {/* Browser chrome */}
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex gap-1.5">
+            <span className="size-2.5 rounded-full bg-rose-400" />
+            <span className="size-2.5 rounded-full bg-amber-400" />
+            <span className="size-2.5 rounded-full bg-emerald-400" />
+          </div>
+          <div className="mx-auto flex items-center gap-2 rounded-md bg-white px-3 py-1 text-[11px] text-muted-foreground shadow-sm dark:bg-slate-800 dark:text-slate-400">
+            <Globe className="size-3 shrink-0" />
+            <span className="truncate">engagio.app/event/{fakeSlug}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <Monitor className="size-3.5" />
+            Desktop
+          </div>
+        </div>
+
+        {/* Page body — wrap in `dark` to match the live landing page rendering */}
+        <div className="dark max-h-[70vh] overflow-y-auto">
+          <div className="mx-auto max-w-5xl bg-slate-950 text-white">
+            <LandingSectionsRenderer sections={visibleSections} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
