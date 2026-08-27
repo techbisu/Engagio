@@ -10,16 +10,15 @@
 import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { toast } from "sonner"
-import { ParticipantGoogleLogin } from "@/components/auth/participant-google-login"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
 import { StudentShell } from "@/components/student/student-shell"
-import { SiteHeader } from "@/components/shared/site-header"
-import { SiteFooter } from "@/components/shared/site-footer"
 import { useCurrentUser } from "@/components/shared/use-current-user"
-import { useAppNavigate } from "@/lib/nav"
 import { useAppStore, type QuizMeta } from "@/store/app-store"
+import {
+  QuizLandingPublic,
+  type PublicQuizMeta,
+} from "@/components/student/quiz-landing-public"
 
 export default function OrgQuizRoutePage() {
   return (
@@ -38,14 +37,39 @@ export default function OrgQuizRoutePage() {
 function OrgQuizRoutePageInner() {
   const router = useRouter()
   const params = useParams<{ orgSlug: string; eventSlug: string; quizSlug: string }>()
-  const navigate = useAppNavigate()
-  const { user, refetch, signOutEverything } = useCurrentUser()
+  const { user, signOutEverything } = useCurrentUser()
   const quizSlug = params?.quizSlug ?? ""
   const orgSlug = params?.orgSlug ?? ""
   const eventSlug = params?.eventSlug ?? ""
 
   const quizMeta = useAppStore((s) => s.quizMeta)
   const setQuizMeta = useAppStore((s) => s.setQuizMeta)
+
+  // Fetch quiz metadata for the public landing page (shown when unauthenticated).
+  const [publicMeta, setPublicMeta] = React.useState<PublicQuizMeta | null>(null)
+  const [metaLoading, setMetaLoading] = React.useState(true)
+  const [notFound, setNotFound] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!quizSlug) return
+    setMetaLoading(true)
+    fetch("/api/quiz-links/by-slug/" + encodeURIComponent(quizSlug))
+      .then((r) => {
+        if (!r.ok) {
+          setNotFound(true)
+          return null
+        }
+        return r.json()
+      })
+      .then((data) => {
+        if (!data) return
+        setPublicMeta(data as PublicQuizMeta)
+      })
+      .catch(() => {
+        setNotFound(true)
+      })
+      .finally(() => setMetaLoading(false))
+  }, [quizSlug])
 
   const orgDashboard = "/org/" + orgSlug + "/participant/dashboard"
 
@@ -119,22 +143,15 @@ function OrgQuizRoutePageInner() {
     )
   }
 
-  // Not authed → show participant login
+  // Not authed → show public landing with event info + Google login.
+  // This replaces the old blank page with only a Google login button.
   return (
-    <div className="min-h-screen flex flex-col">
-      <SiteHeader session={null} onNavigate={navigate} onSignOut={handleSignOut} />
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="space-y-6">
-          <ParticipantGoogleLogin
-            callbackUrl={"/org/" + orgSlug + "/" + eventSlug + "/quiz/" + quizSlug}
-            className="w-full"
-          />
-          <p className="text-center text-sm text-white/60">
-            Sign in with Google to take this quiz.
-          </p>
-        </div>
-      </main>
-      <SiteFooter onNavigate={navigate} />
-    </div>
+    <QuizLandingPublic
+      meta={publicMeta}
+      loading={metaLoading}
+      notFound={notFound}
+      callbackUrl={"/org/" + orgSlug + "/" + eventSlug + "/quiz/" + quizSlug}
+      onBack={() => router.push("/org/" + orgSlug)}
+    />
   )
 }

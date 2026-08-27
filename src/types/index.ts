@@ -232,7 +232,10 @@ export interface QuizLinkDto {
   aiProctorLookAway: boolean
   createdAt: string
   expiresAt?: string | null
-  event?: Pick<EventDto, "id" | "title" | "description"> & { image?: string | null }
+  event?: Pick<EventDto, "id" | "title" | "slug" | "description"> & {
+    image?: string | null
+    orgSlug?: string | null
+  }
 }
 
 /** Question as seen by the participant (correctAnswer/correctText hidden). */

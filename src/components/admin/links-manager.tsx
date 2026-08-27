@@ -410,8 +410,16 @@ export function LinksManager({
     }
   }
 
-  async function copyLink(slug: string) {
-    const url = `${window.location.origin}/quiz/${slug}`
+  async function copyLink(slug: string, eventSlug?: string | null, orgSlug?: string | null) {
+    // Build the org-scoped URL: /org/{orgSlug}/{eventSlug}/quiz/{slug}
+    // Fall back to the legacy /quiz/{slug} URL if org/event slugs are missing
+    // (e.g. event has no slug set, or org slug not resolved).
+    let url: string
+    if (orgSlug && eventSlug) {
+      url = `${window.location.origin}/org/${orgSlug}/${eventSlug}/quiz/${slug}`
+    } else {
+      url = `${window.location.origin}/quiz/${slug}`
+    }
     try {
       await navigator.clipboard.writeText(url)
       toast.success("Link copied to clipboard", {
@@ -522,7 +530,7 @@ export function LinksManager({
                                   variant="ghost"
                                   size="icon"
                                   className="size-7"
-                                  onClick={() => copyLink(l.slug, l.event?.slug)}
+                                  onClick={() => copyLink(l.slug, l.event?.slug, l.event?.orgSlug)}
                                 >
                                   <Copy className="size-3.5" />
                                 </Button>
@@ -579,7 +587,7 @@ export function LinksManager({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => copyLink(l.slug, l.event?.slug)}>
+                            <DropdownMenuItem onClick={() => copyLink(l.slug, l.event?.slug, l.event?.orgSlug)}>
                               <Copy className="size-4" /> Copy link
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => onViewAttempts?.(l.slug)}>

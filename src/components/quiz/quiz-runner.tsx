@@ -29,12 +29,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs"
 
 import { cn } from "@/lib/utils"
 import { useAntiCheat } from "@/hooks/use-anti-cheat"
@@ -639,9 +633,9 @@ export function QuizRunner({
       {/* Main content — 3-column layout on xl: questions + navigator + security.
           Mobile: scrollable with safe area insets. Desktop: side-by-side. */}
       <main
-        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto p-3 pb-24 sm:gap-6 sm:p-6 lg:flex-row lg:gap-8 lg:overflow-visible lg:p-8 lg:pb-8 xl:max-w-[90rem]"
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 overflow-y-auto p-3 pb-6 sm:gap-6 sm:p-6 lg:flex-row lg:gap-8 lg:overflow-visible lg:p-8 xl:max-w-[90rem]"
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
           paddingTop: "env(safe-area-inset-top, 0px)",
           paddingLeft: "max(env(safe-area-inset-left, 0px), 12px)",
           paddingRight: "max(env(safe-area-inset-right, 0px), 12px)",
@@ -655,8 +649,8 @@ export function QuizRunner({
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <Card className="flex-1">
-            <CardContent className="p-5 sm:p-6">
+          <Card className="flex flex-1 flex-col overflow-hidden">
+            <CardContent className="flex-1 p-5 sm:p-6">
               <AnimatePresence mode="wait" custom={direction}>
                 {currentQ && (
                   <motion.div
@@ -681,88 +675,58 @@ export function QuizRunner({
                 )}
               </AnimatePresence>
             </CardContent>
-          </Card>
 
-          {/* Navigation buttons — inline on desktop, sticky bottom bar on
-              mobile with larger touch targets. The "answered" counter moves
-              into the sticky bar on mobile to free up vertical space. */}
-          <div className="mt-4 hidden items-center justify-between gap-3 lg:flex">
-            <Button
-              variant="outline"
-              onClick={goPrev}
-              disabled={currentIdx === 0}
+            {/* Navigation buttons — INSIDE the question card at the bottom.
+                This gives them a consistent position on both desktop and
+                mobile, with bottom padding for breathing room. The card
+                uses flex-col so these stick to the bottom of the card. */}
+            <div
+              className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 pb-5 pt-4 dark:border-slate-800 sm:px-6"
+              style={{
+                paddingBottom:
+                  "max(env(safe-area-inset-bottom, 0px), 20px)",
+              }}
             >
-              <ArrowLeft className="size-4" /> Previous
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {answeredCount} of {questions.length} answered
-            </span>
-            {currentIdx === questions.length - 1 ? (
               <Button
-                onClick={() => setShowSubmitDialog(true)}
-                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                variant="outline"
+                onClick={goPrev}
+                disabled={currentIdx === 0}
+                className="h-11 gap-1.5 sm:h-10"
+                aria-label="Previous question"
               >
-                <Send className="size-4" /> Submit Quiz
+                <ArrowLeft className="size-4 sm:size-4" /> Previous
               </Button>
-            ) : (
-              <Button onClick={goNext} className="bg-emerald-600 text-white hover:bg-emerald-700">
-                Next <ArrowRight className="size-4" />
-              </Button>
-            )}
-          </div>
+              <span className="shrink-0 text-center text-xs font-medium text-muted-foreground">
+                <span className="hidden sm:inline">
+                  {answeredCount} of {questions.length} answered
+                </span>
+                <span className="sm:hidden font-semibold text-foreground tabular-nums">
+                  {currentIdx + 1}/{questions.length}
+                </span>
+              </span>
+              {currentIdx === questions.length - 1 ? (
+                <Button
+                  onClick={() => setShowSubmitDialog(true)}
+                  className="h-11 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 sm:h-10"
+                  aria-label="Submit quiz"
+                >
+                  <Send className="size-4" /> Submit
+                </Button>
+              ) : (
+                <Button
+                  onClick={goNext}
+                  className="h-11 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 sm:h-10"
+                  aria-label="Next question"
+                >
+                  Next <ArrowRight className="size-4" />
+                </Button>
+              )}
+            </div>
+          </Card>
         </section>
 
         <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
       </main>
-
-      {/* Mobile sticky bottom navigation bar — Previous / answered count /
-          Next|Submit. Larger touch targets (h-12 = 48px). Sits above the
-          Navigator toggle button. Includes safe-area-inset so it doesn't
-          collide with the iOS home indicator or Android nav bar. */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:hidden"
-        style={{
-          paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)",
-          paddingTop: "8px",
-          paddingLeft: "max(env(safe-area-inset-left, 0px), 12px)",
-          paddingRight: "max(env(safe-area-inset-right, 0px), 12px)",
-        }}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            onClick={goPrev}
-            disabled={currentIdx === 0}
-            className="h-12 flex-1 gap-1.5"
-            aria-label="Previous question"
-          >
-            <ArrowLeft className="size-5" /> Prev
-          </Button>
-          <span className="shrink-0 text-center text-xs font-medium text-muted-foreground">
-            <span className="block font-semibold text-foreground tabular-nums">
-              {currentIdx + 1}/{questions.length}
-            </span>
-            <span className="block">{answeredCount} answered</span>
-          </span>
-          {currentIdx === questions.length - 1 ? (
-            <Button
-              onClick={() => setShowSubmitDialog(true)}
-              className="h-12 flex-1 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-              aria-label="Submit quiz"
-            >
-              <Send className="size-5" /> Submit
-            </Button>
-          ) : (
-            <Button
-              onClick={goNext}
-              className="h-12 flex-1 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-              aria-label="Next question"
-            >
-              Next <ArrowRight className="size-5" />
-            </Button>
-          )}
-        </div>
-      </div>
 
       {/* Mobile single toggle button — opens a combined panel with both
           the Question Navigator and Security Monitor as tabs.
@@ -770,12 +734,12 @@ export function QuizRunner({
           accidental clicks. The panel uses a bottom Sheet that the user
           explicitly dismisses — it never auto-closes, so it doesn't disturb
           the exam flow.
-          Positioned above the sticky bottom nav bar to avoid overlap. */}
+          Positioned at the bottom-right with safe-area inset. */}
       <Button
         onClick={() => setMobilePanelOpen(true)}
         className="fixed z-30 gap-2 rounded-full bg-slate-800 px-4 text-white shadow-lg hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 lg:hidden"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)",
+          bottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
           right: "max(env(safe-area-inset-right, 16px), 16px)",
         }}
         size="sm"
@@ -791,33 +755,32 @@ export function QuizRunner({
         </Badge>
       </Button>
 
-      {/* Mobile combined panel — Question Navigator + Security Monitor as
-          tabs. Uses a bottom Sheet that stays open until explicitly dismissed. */}
+      {/* Mobile combined panel — Question Navigator (60% height) + Security
+          Monitor (40% height), stacked vertically. Each section scrolls
+          independently so the user can see both at once. The Sheet stays
+          open until explicitly dismissed. */}
       <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-          <SheetHeader>
+        <SheetContent side="bottom" className="h-[80vh] max-h-[80vh] p-0">
+          <SheetHeader className="px-4 pb-2 pt-4">
             <SheetTitle className="flex items-center gap-2">
               <ShieldCheck className="size-4 text-emerald-600" /> Quiz Tools
             </SheetTitle>
           </SheetHeader>
-          <div className="px-4 pb-6 pt-2">
-            <Tabs defaultValue="navigator" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="navigator" className="gap-1.5">
-                  <ListChecks className="size-3.5" /> Navigator
-                </TabsTrigger>
-                <TabsTrigger value="security" className="gap-1.5">
-                  <ShieldCheck className="size-3.5" /> Security
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="navigator" className="mt-4 space-y-3">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Answered</span>
-                  <Badge variant="secondary">
-                    {answeredCount}/{questions.length}
-                  </Badge>
+          {/* Stacked layout: Navigator 60% + Security 40%, each with
+              independent scroll. Uses flex-col with explicit flex-basis
+              so the split is fixed regardless of content length. */}
+          <div className="flex h-[calc(80vh-60px)] flex-col gap-2 px-4 pb-4">
+            {/* Question Navigator — 60% height with internal scroll */}
+            <div className="flex min-h-0 flex-[6] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 text-sm font-semibold">
+                  <ListChecks className="size-4 text-emerald-600" /> Navigator
                 </div>
-                <Separator />
+                <Badge variant="secondary">
+                  {answeredCount}/{questions.length}
+                </Badge>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 <QuestionNavigator
                   total={questions.length}
                   current={currentIdx}
@@ -825,8 +788,15 @@ export function QuizRunner({
                   flagged={flaggedArr}
                   onJump={jumpTo}
                 />
-              </TabsContent>
-              <TabsContent value="security" className="mt-4">
+              </div>
+            </div>
+
+            {/* Security Monitor — 40% height with internal scroll */}
+            <div className="flex min-h-0 flex-[4] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 border-b border-slate-200 px-3 py-2 text-sm font-semibold dark:border-slate-800">
+                <ShieldCheck className="size-4 text-emerald-600" /> Security
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 <SecuritySidebarBodyInline
                   metrics={combinedMetrics}
                   config={security}
@@ -840,8 +810,8 @@ export function QuizRunner({
                   }
                   videoRef={aiProctor.videoRef}
                 />
-              </TabsContent>
-            </Tabs>
+              </div>
+            </div>
           </div>
         </SheetContent>
       </Sheet>

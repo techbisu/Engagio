@@ -120,15 +120,21 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const ctx = canvas.getContext("2d", { willReadFrequently: true })
     if (!ctx) return null
 
+    // Mirror the video horizontally (selfie cameras are mirrored, so we
+    // analyze the mirrored frame to match what the user sees).
     try {
+      ctx.save()
+      ctx.translate(CW, 0)
+      ctx.scale(-1, 1)
       ctx.drawImage(video, 0, 0, VW, VH, 0, 0, CW, CH)
+      ctx.restore()
     } catch {
       return null
     }
     const imageData = ctx.getImageData(0, 0, CW, CH)
     const data = imageData.data
 
-    // Use a larger center region (60×60 instead of 40×40) for better face detection
+    // Center region for face presence check (80×80 out of 160×120 = 53% width)
     const centerSize = 80
     const cx0 = Math.floor((CW - centerSize) / 2)
     const cy0 = Math.floor((CH - centerSize) / 2)
@@ -150,14 +156,18 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         const max = Math.max(r, g, b)
         const min = Math.min(r, g, b)
 
-        // Improved skin detection: RGB rule + uniformity check
+        // Improved skin detection: RGB rule + uniformity check.
+        // Tightened thresholds to reduce false positives from background
+        // skin-colored objects (wood, warm walls, etc.).
         const isSkin =
           r > 95 &&
           g > 40 &&
           b > 20 &&
-          r - g > 12 &&
-          r - b > 12 &&
-          max - min > 12 &&
+          r > g &&
+          r > b &&
+          r - g > 15 &&
+          r - b > 15 &&
+          max - min > 15 &&
           !(r > 220 && g > 210 && b > 170) // exclude near-white (backgrounds)
 
         if (!isSkin) continue
@@ -185,10 +195,11 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
     // ─── Face detection ──────────────────────────────────────────────────
     // Face is detected if the center region has enough skin-tone pixels.
-    // Threshold: 300+ skin pixels in the 60×60 center region (out of 3600 total)
+    // Threshold: 400+ skin pixels in the 80×80 center region (out of 6400 total).
+    // Raised from 250 to 400 to reduce false "face detected" from backgrounds.
     if (faceDetection) {
-      const hasFace = result.count >= 250
-      if (!hasFace && canFire("counter:face")) {
+      const hasFace = result.count >= 400
+      if (!hasFace && canFire("counter:face", 3000)) {
         setFaceNotDetected((n) => n + 1)
         onViolationRef.current?.("face")
         fireToast(
@@ -200,18 +211,32 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     }
 
     // ─── Multi-face detection ────────────────────────────────────────────
-    // Multiple faces detected when skin-tone pixels are significantly
-    // spread across multiple quadrants. We check if 2+ quadrants each have
-    // more than 25% of the total skin pixels (indicating separate clusters).
-    // Also requires minimum total skin pixels to avoid false positives
-    // from background noise or lighting changes.
-    if (multiFace && result.totalSkin > 800) {
-      const threshold = result.totalSkin * 0.25 // 25% of total skin per quadrant
-      const minPerQuadrant = 300 // minimum skin pixels per quadrant to count
-      const significantQuadrants = result.quadrants.filter(
-        (q) => q > threshold && q > minPerQuadrant
-      ).length
-      if (significantQuadrants >= 2 && canFire("counter:multiFace", 5000)) {
+    // Multiple faces are detected when skin-tone pixels form TWO DISTINCT
+    // CLUSTERS in the left and right halves of the frame (not quadrants —
+    // a single face straddling the center naturally spreads across 4
+    // quadrants). We check:
+    //   1. Total skin pixels are high enough (>1200) to suggest 2+ faces
+    //   2. BOTH the left half AND right half have significant skin presence
+    //   3. The left and right clusters are each >25% of total skin
+    //   4. EXCLUDE the center column (the face at center shouldn't count)
+    //      — we only count skin in the OUTER left and OUTER right regions.
+    // This prevents false positives where a single centered face fills all
+    // four quadrants.
+    if (multiFace && result.totalSkin > 1200) {
+      // A single face centered in the frame will naturally fill all four
+      // quadrants (since it straddles the center lines). To avoid false
+      // positives, we check that the center region does NOT dominate
+      // (centerDominance < 0.5) AND both left and right halves have
+      // significant skin presence (>500 each = enough for a separate face).
+      const centerDominance = result.count / result.totalSkin
+      const leftHalf = result.quadrants[0] + result.quadrants[2]
+      const rightHalf = result.quadrants[1] + result.quadrants[3]
+      if (
+        leftHalf > 500 &&
+        rightHalf > 500 &&
+        centerDominance < 0.5 &&
+        canFire("counter:multiFace", 5000)
+      ) {
         setMultiFaceAlerts((n) => n + 1)
         onViolationRef.current?.("multiFace")
         fireToast(
@@ -225,14 +250,24 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     // ─── Look-away detection ─────────────────────────────────────────────
     // Track the centroid of skin-tone pixels in the center region.
     // If the centroid moves significantly between frames (averaged over
-    // the last 3 frames to reduce noise), it indicates the person is
+    // the last 4 frames to reduce noise), it indicates the person is
     // looking away or moving their head.
+    //
+    // Detection logic:
+    //   - Keep a rolling history of the last 4 centroid positions.
+    //   - Compare the current average against the previous average.
+    //   - If the delta exceeds the threshold, count it as a look-away.
+    //
+    // Threshold: 10px on a 160×120 canvas. This is sensitive enough to
+    // detect a head turn (looking away) but not so sensitive that normal
+    // reading/studying movement triggers it. Cooldown: 4 seconds (reduced
+    // from 8s so repeated look-aways are counted).
     if (lookAway && result.cx >= 0 && result.cy >= 0) {
       const currentCentroid = { x: result.cx, y: result.cy }
 
-      // Add to history (keep last 3 frames)
+      // Add to history (keep last 6 frames for a smoother average)
       centroidHistoryRef.current.push(currentCentroid)
-      if (centroidHistoryRef.current.length > 5) {
+      if (centroidHistoryRef.current.length > 6) {
         centroidHistoryRef.current.shift()
       }
 
@@ -249,9 +284,10 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
           const dx = avgX - last.x
           const dy = avgY - last.y
           const delta = Math.sqrt(dx * dx + dy * dy)
-          // Threshold of 20px (reduced sensitivity from 8 to avoid false positives
-          // from normal head movement while studying). 8 second cooldown.
-          if (delta > 20 && canFire("counter:lookAway", 8000)) {
+          // Threshold of 10px on a 160×120 canvas detects head turns
+          // (looking left/right/away) without triggering on normal
+          // micro-movements while reading. 4 second cooldown.
+          if (delta > 10 && canFire("counter:lookAway", 4000)) {
             setLookAwayAlerts((n) => n + 1)
             onViolationRef.current?.("lookAway")
             fireToast(

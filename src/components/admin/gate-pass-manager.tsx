@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import type { EventDto } from "@/types"
+import { api } from "./api"
 
 interface GatePass {
   id: string
@@ -38,9 +39,12 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
   // Fetch events for the dropdown selector.
   // The /api/events route returns an array directly (not { events: [...] }),
   // so we normalize the result to an array of { id, title } for the dropdown.
+  // IMPORTANT: we use the shared `api` helper (not raw fetch) so the
+  // `x-org-slug` header is sent — without it the server can't resolve the
+  // tenant context and returns an empty array.
   const { data: eventsData } = useQuery<EventDto[]>({
     queryKey: ["events", "list"],
-    queryFn: () => fetch("/api/events").then((r) => r.json()),
+    queryFn: () => api<EventDto[]>("/api/events"),
   })
   // Support both shapes defensively: array (current API) or { events: [...] } (older callers)
   const events: { id: string; title: string }[] = React.useMemo(() => {
@@ -56,19 +60,17 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
 
   const { data, isLoading } = useQuery<{ gatePasses: GatePass[] }>({
     queryKey: ["gate-passes", activeEventId],
-    queryFn: () => fetch(`/api/gate-passes?eventId=${activeEventId}`).then((r) => r.json()),
+    queryFn: () => api<{ gatePasses: GatePass[] }>(`/api/gate-passes?eventId=${activeEventId}`),
     enabled: !!activeEventId,
   })
 
   const generateAllMutation = useMutation({
     mutationFn: async () => {
-      const regsRes = await fetch(`/api/events/${activeEventId}/registrations`)
-      const regs = await regsRes.json()
+      const regs = await api<{ registrations: Array<{ userId: string; id: string; user?: { name?: string | null; email?: string | null } }> }>(`/api/events/${activeEventId}/registrations`)
       const results = []
       for (const reg of (regs.registrations || [])) {
-        const res = await fetch("/api/gate-passes", {
+        const data = await api<{ alreadyExists?: boolean; gatePass?: { id: string } }>("/api/gate-passes", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             eventId: activeEventId,
             userId: reg.userId,
@@ -77,10 +79,9 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
             participantEmail: reg.user?.email || "",
           }),
         })
-        const data = await res.json()
         // Generate the ID card PNG for each new pass
         if (!data.alreadyExists && data.gatePass?.id) {
-          await fetch(`/api/gate-passes/${data.gatePass.id}/generate-card`, {
+          await api(`/api/gate-passes/${data.gatePass.id}/generate-card`, {
             method: "POST",
           })
         }
@@ -97,8 +98,7 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
 
   const generateCardMutation = useMutation({
     mutationFn: async (passId: string) => {
-      const res = await fetch(`/api/gate-passes/${passId}/generate-card`, { method: "POST" })
-      return res.json()
+      return api(`/api/gate-passes/${passId}/generate-card`, { method: "POST" })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
@@ -109,8 +109,7 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
 
   const checkinMutation = useMutation({
     mutationFn: async (passId: string) => {
-      const res = await fetch(`/api/gate-passes/${passId}/checkin`, { method: "POST" })
-      return res.json()
+      return api(`/api/gate-passes/${passId}/checkin`, { method: "POST" })
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })
@@ -121,12 +120,10 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
 
   const revokeMutation = useMutation({
     mutationFn: async (passId: string) => {
-      const res = await fetch(`/api/gate-passes/${passId}/revoke`, {
+      return api(`/api/gate-passes/${passId}/revoke`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "Revoked by admin" }),
       })
-      return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gate-passes", activeEventId] })

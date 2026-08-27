@@ -43,8 +43,13 @@ export function toQuizLinkDto(link: any): QuizLinkDto {
       ? {
           id: link.event.id,
           title: link.event.title,
+          slug: link.event.slug ?? null,
           description: link.event.description,
           image: link.event.image ?? null,
+          // Include org slug so the admin panel can build org-scoped URLs
+          // (e.g. /org/{orgSlug}/{eventSlug}/quiz/{slug}) without an extra
+          // round-trip.
+          orgSlug: link.event.organization?.slug ?? null,
         }
       : undefined,
   };
@@ -84,7 +89,7 @@ export async function GET(req: NextRequest) {
     }
     const links = await db.quizLink.findMany({
       where: { event: { organizationId: auth.ctx.orgId } },
-      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true } } },
+      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true, organization: { select: { slug: true } } } } },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(links.map(toQuizLinkDto));
@@ -220,7 +225,7 @@ export async function POST(req: NextRequest) {
 
     const created = await db.quizLink.create({
       data: data as any,
-      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true } } },
+      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true, organization: { select: { slug: true } } } } },
     });
     return NextResponse.json(toQuizLinkDto(created), { status: 201 });
   } catch (e) {

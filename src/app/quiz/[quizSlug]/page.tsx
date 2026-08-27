@@ -5,21 +5,23 @@
  *
  * Backward-compat quiz deep-link. Fetches the quiz metadata to get
  * org/event slugs, then redirects to /org/{orgSlug}/{eventSlug}/quiz/{slug}.
- * Falls back to inline rendering if the redirect fails (e.g., missing org data).
+ * If the user is unauthenticated, shows a public landing page with event
+ * info + Google login (instead of a blank page with only a Google button).
+ * Falls back to inline rendering if the redirect fails (e.g. missing org data).
  */
 
 import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ParticipantGoogleLogin } from "@/components/auth/participant-google-login"
 import { QuizStart } from "@/components/student/quiz-start"
 import { QuizRunner } from "@/components/quiz/quiz-runner"
 import { StudentShell } from "@/components/student/student-shell"
-import { SiteHeader } from "@/components/shared/site-header"
-import { SiteFooter } from "@/components/shared/site-footer"
 import { useCurrentUser } from "@/components/shared/use-current-user"
-import { useAppNavigate } from "@/lib/nav"
 import { useAppStore, type QuizMeta } from "@/store/app-store"
+import {
+  QuizLandingPublic,
+  type PublicQuizMeta,
+} from "@/components/student/quiz-landing-public"
 
 export default function QuizRoutePage() {
   return (
@@ -38,7 +40,6 @@ export default function QuizRoutePage() {
 function QuizRoutePageInner() {
   const router = useRouter()
   const params = useParams<{ quizSlug: string }>()
-  const navigate = useAppNavigate()
   const { user, refetch, signOutEverything } = useCurrentUser()
   const quizSlug = params?.quizSlug ?? ""
 
@@ -46,17 +47,41 @@ function QuizRoutePageInner() {
   const setQuizMeta = useAppStore((s) => s.setQuizMeta)
 
   // Fetch quiz metadata to get org/event slugs, then redirect.
+  // Also used by the public landing page to show event info.
+  const [publicMeta, setPublicMeta] = React.useState<PublicQuizMeta | null>(null)
+  const [metaLoading, setMetaLoading] = React.useState(true)
+  const [notFound, setNotFound] = React.useState(false)
+
   React.useEffect(() => {
-    if (!quizSlug || quizMeta) return
+    if (!quizSlug) return
+    setMetaLoading(true)
     fetch("/api/quiz-links/by-slug/" + encodeURIComponent(quizSlug))
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) {
+          setNotFound(true)
+          return null
+        }
+        return r.json()
+      })
       .then((data) => {
-        if (data?.orgSlug && data?.eventSlug) {
-          router.replace("/org/" + data.orgSlug + "/" + data.eventSlug + "/quiz/" + quizSlug)
+        if (!data) return
+        setPublicMeta(data as PublicQuizMeta)
+        // Redirect to the org-scoped URL if we have the slugs AND the user
+        // is authenticated (so the redirect target renders the quiz start).
+        // For unauthenticated users, we show the public landing here instead
+        // of redirecting — the org-scoped page would show the same landing
+        // anyway, and staying here avoids a confusing double-redirect.
+        if (data?.orgSlug && data?.eventSlug && user) {
+          router.replace(
+            "/org/" + data.orgSlug + "/" + data.eventSlug + "/quiz/" + quizSlug,
+          )
         }
       })
-      .catch(() => {})
-  }, [quizSlug, quizMeta, router])
+      .catch(() => {
+        setNotFound(true)
+      })
+      .finally(() => setMetaLoading(false))
+  }, [quizSlug, router, user])
 
   const handleBegin = React.useCallback(
     (meta: {
@@ -128,22 +153,15 @@ function QuizRoutePageInner() {
     )
   }
 
-  // Not authed → show participant login
+  // Not authed → show public landing with event info + Google login.
+  // This replaces the old blank page with only a Google login button.
   return (
-    <div className="min-h-screen flex flex-col">
-      <SiteHeader session={null} onNavigate={navigate} onSignOut={handleSignOut} />
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="space-y-6">
-          <ParticipantGoogleLogin
-            callbackUrl={"/quiz/" + quizSlug}
-            className="w-full"
-          />
-          <p className="text-center text-sm text-white/60">
-            Sign in with Google to take this quiz.
-          </p>
-        </div>
-      </main>
-      <SiteFooter onNavigate={navigate} />
-    </div>
+    <QuizLandingPublic
+      meta={publicMeta}
+      loading={metaLoading}
+      notFound={notFound}
+      callbackUrl={"/quiz/" + quizSlug}
+      onBack={() => router.push("/")}
+    />
   )
 }

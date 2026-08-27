@@ -149,7 +149,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     const updated = await db.quizLink.update({
       where: { id },
       data,
-      include: { event: { select: { id: true, title: true, description: true, image: true } } },
+      include: { event: { select: { id: true, title: true, slug: true, description: true, image: true, organization: { select: { slug: true } } } } },
     });
     return NextResponse.json(toQuizLinkDto(updated));
   } catch (e) {
