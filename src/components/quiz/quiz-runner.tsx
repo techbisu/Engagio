@@ -24,15 +24,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -357,22 +348,14 @@ export function QuizRunner({
   }
 
   // ----- Submit confirmation -----
-  // CRITICAL: When the quiz is in fullscreen mode, the AlertDialog is portaled
-  // to document.body by Radix — which is NOT a descendant of the fullscreen
-  // element. The browser hides everything outside the fullscreen element, so
-  // the dialog would be invisible. We MUST exit fullscreen before opening the
-  // dialog so the user can see and interact with it.
-  const requestSubmit = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {})
-      // Wait for fullscreen to exit before showing the dialog so the
-      // the dialog animation doesn't get clipped during the transition.
-      setTimeout(() => setShowSubmitDialog(true), 150)
-    } else {
-      setShowSubmitDialog(true)
-    }
-  }, [])
-
+  // The submit dialog is rendered INSIDE the fullscreen container (as a
+  // child of containerRef) using fixed positioning. This works in fullscreen
+  // mode because the fullscreen element acts as the rendering root — fixed
+  // elements within it are visible. We MUST NOT use Radix Portal here,
+  // because Portal teleports the dialog to document.body, which is OUTSIDE
+  // the fullscreen element and would be invisible during fullscreen.
+  // We also MUST NOT exit fullscreen before showing the dialog, because
+  // `autoSubmitOnExit` would trigger an automatic submission.
   const handleAnswer = useCallback(
     (qId: string, value: QuestionAnswer) => {
       setAnswers((a) => ({ ...a, [qId]: value }))
@@ -546,10 +529,9 @@ export function QuizRunner({
     : 0
 
   return (
-    <>
     <div
       ref={containerRef}
-      className="quiz-fullscreen flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
+      className="quiz-fullscreen relative flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950"
     >
       {/* Watermark overlay — always rendered as a sibling of the quiz content.
           Renders nothing when security.watermarkOverlay is false. */}
@@ -584,7 +566,7 @@ export function QuizRunner({
           </span>
           <Button
             size="sm"
-            onClick={requestSubmit}
+            onClick={() => setShowSubmitDialog(true)}
             className="bg-emerald-600 text-white hover:bg-emerald-700"
           >
             <Send className="size-4" /> Submit
@@ -667,7 +649,7 @@ export function QuizRunner({
             </span>
             {currentIdx === questions.length - 1 ? (
               <Button
-                onClick={requestSubmit}
+                onClick={() => setShowSubmitDialog(true)}
                 className="bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <Send className="size-4" /> Submit Quiz
@@ -874,53 +856,97 @@ export function QuizRunner({
         />
       )}
 
-    </div>
-
-      {/* Submit confirmation dialog — rendered OUTSIDE the fullscreen container
-          so it appears above fullscreen mode. */}
-      <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <AlertDialogContent className="z-[200]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Submit your quiz?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have answered{" "}
-              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                {answeredCount} of {questions.length}
-              </span>{" "}
-              questions.{" "}
-              {answeredCount < questions.length && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  {questions.length - answeredCount} unanswered.
-                </span>
-              )}{" "}
-              {flagged.length > 0 && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  {flagged.length} flagged for review.
-                </span>
-              )}{" "}
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep working</AlertDialogCancel>
-            <Button
-              type="button"
-              onClick={() => {
-                setShowSubmitDialog(false)
-                if (doSubmitRef.current && attemptId && !submittedRef.current) {
-                  void doSubmitRef.current(false)
-                } else if (!attemptId) {
-                  toast.error("Quiz is still loading. Please try again in a moment.")
-                }
-              }}
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
+      {/* Submit confirmation dialog — rendered INSIDE the fullscreen container
+          (as a child of containerRef) using fixed positioning. This works in
+          fullscreen mode because the fullscreen element becomes the rendering
+          root — fixed elements within it are visible. We deliberately do NOT
+          use Radix AlertDialog/Portal here because Portal would teleport the
+          dialog to document.body, which is OUTSIDE the fullscreen element
+          and therefore invisible. We also deliberately do NOT exit fullscreen
+          to show this dialog, because `autoSubmitOnExit` would auto-submit
+          the quiz immediately. */}
+      <AnimatePresence>
+        {showSubmitDialog && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+            onClick={() => setShowSubmitDialog(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="z-[201] w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="submit-dialog-title"
+              aria-describedby="submit-dialog-desc"
             >
-              <Send className="size-4" /> Submit now
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              <div className="flex flex-col gap-2 text-center sm:text-left">
+                <h2 id="submit-dialog-title" className="text-lg font-semibold leading-none">
+                  Submit your quiz?
+                </h2>
+                <p id="submit-dialog-desc" className="text-sm text-muted-foreground">
+                  You have answered{" "}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {answeredCount} of {questions.length}
+                  </span>{" "}
+                  questions.{" "}
+                  {answeredCount < questions.length && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {questions.length - answeredCount} unanswered.
+                    </span>
+                  )}{" "}
+                  {flagged.length > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {flagged.length} flagged for review.
+                    </span>
+                  )}{" "}
+                  This action cannot be undone.
+                </p>
+              </div>
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSubmitDialog(false)}
+                  disabled={status === "submitting"}
+                >
+                  Keep working
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowSubmitDialog(false)
+                    if (doSubmitRef.current && attemptId && !submittedRef.current) {
+                      void doSubmitRef.current(false)
+                    } else if (!attemptId) {
+                      toast.error("Quiz is still loading. Please try again in a moment.")
+                    }
+                  }}
+                  disabled={status === "submitting" || !attemptId}
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  {status === "submitting" ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="size-4" /> Submit now
+                    </>
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
