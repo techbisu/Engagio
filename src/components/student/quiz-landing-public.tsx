@@ -38,6 +38,8 @@ export interface PublicQuizMeta {
   eventSlug?: string | null
   orgSlug?: string | null
   questionCount: number
+  /** Number of questions the admin wants to pick per attempt (0 = all). */
+  quizLinkQuestionCount?: number
   timeLimit: number
   passThreshold: number
   maxAttempts: number
@@ -197,7 +199,11 @@ export function QuizLandingPublic({
               <SummaryItem
                 icon={HelpCircle}
                 label="Questions"
-                value={String(meta.questionCount)}
+                value={String(
+                  meta.quizLinkQuestionCount && meta.quizLinkQuestionCount > 0
+                    ? meta.quizLinkQuestionCount
+                    : meta.questionCount
+                )}
               />
               <SummaryItem
                 icon={Clock}
