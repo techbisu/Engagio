@@ -17,17 +17,12 @@ import {
   Flag,
   Camera,
   Eye,
+  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 
 import { cn } from "@/lib/utils"
@@ -757,64 +752,110 @@ export function QuizRunner({
 
       {/* Mobile combined panel — Question Navigator (60% height) + Security
           Monitor (40% height), stacked vertically. Each section scrolls
-          independently so the user can see both at once. The Sheet stays
-          open until explicitly dismissed. */}
-      <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
-        <SheetContent side="bottom" className="h-[80vh] max-h-[80vh] p-0">
-          <SheetHeader className="px-4 pb-2 pt-4">
-            <SheetTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-4 text-emerald-600" /> Quiz Tools
-            </SheetTitle>
-          </SheetHeader>
-          {/* Stacked layout: Navigator 60% + Security 40%, each with
-              independent scroll. Uses flex-col with explicit flex-basis
-              so the split is fixed regardless of content length. */}
-          <div className="flex h-[calc(80vh-60px)] flex-col gap-2 px-4 pb-4">
-            {/* Question Navigator — 60% height with internal scroll */}
-            <div className="flex min-h-0 flex-[6] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-                <div className="flex items-center gap-1.5 text-sm font-semibold">
-                  <ListChecks className="size-4 text-emerald-600" /> Navigator
-                </div>
-                <Badge variant="secondary">
-                  {answeredCount}/{questions.length}
-                </Badge>
+          independently so the user can see both at once. The panel stays
+          open until explicitly dismissed.
+
+          IMPORTANT: This is an INLINE overlay (not a Radix Sheet/Portal)
+          because Portal teleports content to document.body, which is
+          OUTSIDE the fullscreen element and therefore invisible during
+          fullscreen. By using a fixed-position div that's a child of
+          containerRef, it remains visible in fullscreen mode. */}
+      <AnimatePresence>
+        {mobilePanelOpen && (
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="fixed inset-x-0 bottom-0 z-[150] flex h-[80vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+            style={{
+              paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)",
+            }}
+          >
+            {/* Drag handle + title + close */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 pb-2 pt-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="mx-auto h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <QuestionNavigator
-                  total={questions.length}
-                  current={currentIdx}
-                  answered={answeredArr}
-                  flagged={flaggedArr}
-                  onJump={jumpTo}
-                />
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <ShieldCheck className="size-4 text-emerald-600" /> Quiz Tools
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setMobilePanelOpen(false)}
+                aria-label="Close panel"
+              >
+                <X className="size-4" />
+              </Button>
             </div>
 
-            {/* Security Monitor — 40% height with internal scroll */}
-            <div className="flex min-h-0 flex-[4] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-1.5 border-b border-slate-200 px-3 py-2 text-sm font-semibold dark:border-slate-800">
-                <ShieldCheck className="size-4 text-emerald-600" /> Security
+            {/* Stacked layout: Navigator 60% + Security 40%, each with
+                independent scroll. Uses flex-col with explicit flex-basis
+                so the split is fixed regardless of content length. */}
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+              {/* Question Navigator — 60% height with internal scroll */}
+              <div className="flex min-h-0 flex-[6] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold">
+                    <ListChecks className="size-4 text-emerald-600" /> Navigator
+                  </div>
+                  <Badge variant="secondary">
+                    {answeredCount}/{questions.length}
+                  </Badge>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <QuestionNavigator
+                    total={questions.length}
+                    current={currentIdx}
+                    answered={answeredArr}
+                    flagged={flaggedArr}
+                    onJump={jumpTo}
+                  />
+                </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <SecuritySidebarBodyInline
-                  metrics={combinedMetrics}
-                  config={security}
-                  proctor={
-                    security.aiProctor && !cameraGateOpen
-                      ? {
-                          isReady: aiProctor.isReady,
-                          error: aiProctor.error,
-                        }
-                      : null
-                  }
-                  videoRef={aiProctor.videoRef}
-                />
+
+              {/* Security Monitor — 40% height with internal scroll */}
+              <div className="flex min-h-0 flex-[4] flex-col rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 border-b border-slate-200 px-3 py-2 text-sm font-semibold dark:border-slate-800">
+                  <ShieldCheck className="size-4 text-emerald-600" /> Security
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <SecuritySidebarBodyInline
+                    metrics={combinedMetrics}
+                    config={security}
+                    proctor={
+                      security.aiProctor && !cameraGateOpen
+                        ? {
+                            isReady: aiProctor.isReady,
+                            error: aiProctor.error,
+                          }
+                        : null
+                    }
+                    videoRef={aiProctor.videoRef}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Backdrop for mobile panel — tap to close. Also inline (no Portal)
+          so it works in fullscreen mode. */}
+      <AnimatePresence>
+        {mobilePanelOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[140] bg-black/40"
+            onClick={() => setMobilePanelOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Fullscreen prompt overlay */}
       {awaitingFullscreen && status === "active" && (

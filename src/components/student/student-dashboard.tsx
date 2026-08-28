@@ -692,16 +692,19 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                   {a.published === false ? "Hidden" : a.percentage != null ? `${a.percentage}%` : "—"}
                 </span>
               </span>
-              {a.passed === true && (
+              {a.published === false ? (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Pending
+                </Badge>
+              ) : a.passed === true ? (
                 <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300">
                   Pass
                 </Badge>
-              )}
-              {a.passed === false && (
+              ) : a.passed === false ? (
                 <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-950/60 dark:text-red-300">
                   Fail
                 </Badge>
-              )}
+              ) : null}
             </div>
             <Separator className="my-2" />
             <div className="flex items-center justify-between gap-2">
