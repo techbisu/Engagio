@@ -26,6 +26,10 @@ export interface AiProctorState {
   error: string | null
   /** Live ref to the underlying <video> element for the sidebar preview. */
   videoRef: React.RefObject<HTMLVideoElement | null>
+  /** LIVE face-present status — true when a face is currently detected in
+   *  the latest analyzed frame. Updated every tick (1.5s). This is
+   *  separate from `faceNotDetected` (cumulative violation counter). */
+  facePresent: boolean
 }
 
 interface SkinAnalysis {
@@ -58,6 +62,11 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   const [lookAwayAlerts, setLookAwayAlerts] = useState(0)
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Live face-present status — true when a face is currently detected in the
+  // latest analyzed frame. Updated every tick. This is separate from
+  // `faceNotDetected` (a cumulative violation counter) so the UI can show
+  // a LIVE "Face detected: Yes/No" indicator.
+  const [facePresent, setFacePresent] = useState(false)
 
   // videoRef is the PREVIEW element rendered in the security sidebar.
   // It may not be in the DOM when the sidebar is collapsed/closed.
@@ -193,10 +202,19 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const result = analyzeFrame()
     if (!result) return
 
-    // ─── Face detection ──────────────────────────────────────────────────
+    // ─── Live face-present status ────────────────────────────────────────
+    // Update the live `facePresent` flag so the UI can show a real-time
+    // "Face detected: Yes/No" indicator. This is independent of the
+    // cumulative `faceNotDetected` violation counter.
+    // Threshold: 200+ skin pixels in the 80×80 center region = face present.
+    // Lower than the violation threshold (400) so the indicator turns green
+    // as soon as a face is roughly present, even if not perfectly centered.
+    const isFacePresent = result.count >= 200
+    setFacePresent(isFacePresent)
+
+    // ─── Face detection (violation counter) ──────────────────────────────
     // Face is detected if the center region has enough skin-tone pixels.
     // Threshold: 400+ skin pixels in the 80×80 center region (out of 6400 total).
-    // Raised from 250 to 400 to reduce false "face detected" from backgrounds.
     if (faceDetection) {
       const hasFace = result.count >= 400
       if (!hasFace && canFire("counter:face", 3000)) {
@@ -211,30 +229,61 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     }
 
     // ─── Multi-face detection ────────────────────────────────────────────
-    // Multiple faces are detected when skin-tone pixels form TWO DISTINCT
-    // CLUSTERS in the left and right halves of the frame (not quadrants —
-    // a single face straddling the center naturally spreads across 4
-    // quadrants). We check:
-    //   1. Total skin pixels are high enough (>1200) to suggest 2+ faces
-    //   2. BOTH the left half AND right half have significant skin presence
-    //   3. The left and right clusters are each >25% of total skin
-    //   4. EXCLUDE the center column (the face at center shouldn't count)
-    //      — we only count skin in the OUTER left and OUTER right regions.
-    // This prevents false positives where a single centered face fills all
-    // four quadrants.
-    if (multiFace && result.totalSkin > 1200) {
-      // A single face centered in the frame will naturally fill all four
-      // quadrants (since it straddles the center lines). To avoid false
-      // positives, we check that the center region does NOT dominate
-      // (centerDominance < 0.5) AND both left and right halves have
-      // significant skin presence (>500 each = enough for a separate face).
-      const centerDominance = result.count / result.totalSkin
-      const leftHalf = result.quadrants[0] + result.quadrants[2]
-      const rightHalf = result.quadrants[1] + result.quadrants[3]
+    // Multiple faces are detected when there are TWO SEPARATE horizontal
+    // clusters of skin pixels — one on the LEFT side and one on the RIGHT side
+    // of the frame, with a clear gap (no skin) in the center column.
+    //
+    // This is much more reliable than quadrant heuristics because:
+    //   - A single face centered in the frame fills the CENTER column, so
+    //     there is no gap between left and right → no false positive.
+    //   - Two people side by side produce skin on the far left and far right
+    //     with a gap in the center → detected correctly.
+    //
+    // Algorithm:
+    //   1. Count skin pixels in 3 vertical bands: left 1/3, center 1/3, right 1/3.
+    //   2. Multi-face = left band has >400 skin AND right band has >400 skin
+    //      AND center band has <200 skin (the gap between the two faces).
+    //   3. Also require totalSkin > 1500 (enough for 2 faces).
+    //   4. Require isFacePresent (don't trigger when face detection itself
+    //      hasn't confirmed a face).
+    if (multiFace && result.totalSkin > 1500 && isFacePresent) {
+      // Divide the 160px width into thirds: 0-53, 53-106, 106-160
+      const thirdW = Math.floor(CW / 3) // ~53
+      // Recount skin per band by analyzing the quadrant data.
+      // We already have quadrant data (left half vs right half), but we need
+      // 3 bands. Recompute from scratch on the canvas.
+      let leftBand = 0
+      let centerBand = 0
+      let rightBand = 0
+      const ctx2 = canvasRef.current?.getContext("2d", { willReadFrequently: true })
+      if (ctx2) {
+        try {
+          const imgData = ctx2.getImageData(0, 0, CW, CH)
+          const d = imgData.data
+          for (let y = 0; y < CH; y++) {
+            for (let x = 0; x < CW; x++) {
+              const idx = (y * CW + x) * 4
+              const r = d[idx], g = d[idx + 1], b = d[idx + 2]
+              const max = Math.max(r, g, b)
+              const min = Math.min(r, g, b)
+              const isSkin =
+                r > 95 && g > 40 && b > 20 && r > g && r > b &&
+                r - g > 15 && r - b > 15 && max - min > 15 &&
+                !(r > 220 && g > 210 && b > 170)
+              if (!isSkin) continue
+              if (x < thirdW) leftBand++
+              else if (x < thirdW * 2) centerBand++
+              else rightBand++
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      // Multi-face: both outer bands have significant skin AND the center
+      // band has a clear gap (low skin count) = two separate people.
       if (
-        leftHalf > 500 &&
-        rightHalf > 500 &&
-        centerDominance < 0.5 &&
+        leftBand > 400 &&
+        rightBand > 400 &&
+        centerBand < 200 &&
         canFire("counter:multiFace", 5000)
       ) {
         setMultiFaceAlerts((n) => n + 1)
@@ -502,5 +551,6 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     isReady,
     error,
     videoRef,
+    facePresent,
   }
 }

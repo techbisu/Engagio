@@ -720,7 +720,7 @@ export function QuizRunner({
           </Card>
         </section>
 
-        <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen ? { isReady: aiProctor.isReady, error: aiProctor.error } : null} videoRef={aiProctor.videoRef} />
+        <ExamSidebar total={questions.length} current={currentIdx} answered={answeredArr} flagged={flaggedArr} onJump={jumpTo} metrics={combinedMetrics} config={security} securityOpen={securityOpen} onToggleSecurity={() => setSecurityOpen((v) => !v)} proctor={security.aiProctor && !cameraGateOpen ? { isReady: aiProctor.isReady, error: aiProctor.error, facePresent: aiProctor.facePresent } : null} videoRef={aiProctor.videoRef} />
       </main>
 
       {/* Mobile single toggle button — opens a combined panel with both
@@ -830,6 +830,7 @@ export function QuizRunner({
                         ? {
                             isReady: aiProctor.isReady,
                             error: aiProctor.error,
+                            facePresent: aiProctor.facePresent,
                           }
                         : null
                     }
@@ -1205,13 +1206,13 @@ function SecuritySidebarBodyInline({
 }: {
   metrics: SecurityMetrics
   config: SecurityConfig
-  proctor: { isReady: boolean; error: string | null } | null
+  proctor: { isReady: boolean; error: string | null; facePresent?: boolean } | null
   videoRef?: React.RefObject<HTMLVideoElement | null>
 }) {
   const faceStatus: "ok" | "warn" | "off" = proctor
     ? proctor.error
       ? "off"
-      : proctor.isReady && metrics.faceNotDetected === 0
+      : proctor.facePresent
         ? "ok"
         : "warn"
     : "off"
