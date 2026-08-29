@@ -87,16 +87,36 @@ export async function POST(req: NextRequest) {
 
     // Optional org-scoped validation: if eventId is provided, ensure it belongs
     // to the same org (prevents cross-org leaks via foreign keys).
+    // EXCEPTION: participants who took a quiz for an event in ANOTHER org
+    // (external participants who received a quiz link) are allowed to share
+    // their achievement. We verify this by checking if they have a QuizAttempt
+    // for the event.
     if (eventId) {
       const ev = await db.event.findUnique({
         where: { id: eventId },
         select: { id: true, organizationId: true },
       })
-      if (!ev || !ownsResource(ev, ctx)) {
+      if (!ev) {
         return NextResponse.json(
-          { error: "Event not found in current organization" },
+          { error: "Event not found" },
           { status: 404 }
         )
+      }
+      // If the event belongs to the user's org, allow.
+      if (!ownsResource(ev, ctx)) {
+        // Event is in a different org — check if the user has an attempt
+        // for this event (they're an external participant who took the quiz).
+        const attempt = await db.quizAttempt.findFirst({
+          where: { eventId, userId: ctx.userId },
+          select: { id: true },
+        })
+        if (!attempt) {
+          return NextResponse.json(
+            { error: "Event not found in current organization" },
+            { status: 404 }
+          )
+        }
+        // User has an attempt — allow sharing (external participant).
       }
     }
     if (activityId) {

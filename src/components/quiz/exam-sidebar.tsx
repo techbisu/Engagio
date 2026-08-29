@@ -15,7 +15,7 @@ interface ExamSidebarProps {
   total: number; current: number; answered: boolean[]; flagged?: boolean[]
   onJump: (idx: number) => void; metrics: SecurityMetrics; config: SecurityConfig
   securityOpen: boolean; onToggleSecurity: () => void
-  proctor?: { isReady: boolean; error: string | null; facePresent?: boolean } | null
+  proctor?: { isReady: boolean; error: string | null; facePresent?: boolean; faceCount?: number } | null
   videoRef?: React.RefObject<HTMLVideoElement | null>
 }
 
@@ -44,7 +44,7 @@ export function ExamSidebar({ total, current, answered, flagged, onJump, metrics
         {config.keyboardShortcutBlocking && <MR icon={<Keyboard className="size-3.5" />} label="Keyboard" value={metrics.keyboardViolations||0} />}
       </div>
       {proctor && (<><Separator className="my-3" /><p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">AI Proctor</p><div className="space-y-0.5">
-        <div className="flex items-center justify-between gap-2 py-1.5"><div className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"><ScanFace className="size-3.5" /></span><span className="truncate text-xs text-slate-700 dark:text-slate-300">Face detected</span></div><Badge variant="secondary" className={cn("gap-1 text-xs font-semibold", proctor.facePresent ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300")}>{proctor.facePresent ? <><ShieldCheck className="size-3" /> Yes</> : <><EyeOff className="size-3" /> No</>}</Badge></div>
+        <div className="flex items-center justify-between gap-2 py-1.5"><div className="flex min-w-0 items-center gap-2"><span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"><ScanFace className="size-3.5" /></span><span className="truncate text-xs text-slate-700 dark:text-slate-300">Face detected</span></div><Badge variant="secondary" className={cn("gap-1 text-xs font-semibold", proctor.facePresent ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300")}>{proctor.facePresent ? <><ShieldCheck className="size-3" /> Yes ({proctor.faceCount ?? 1})</> : <><EyeOff className="size-3" /> No</>}</Badge></div>
         {config.aiProctorMultiFace && <MR icon={<Users className="size-3.5" />} label="Multi-face" value={metrics.multiFaceAlerts||0} />}
         {config.aiProctorLookAway && <MR icon={<EyeOff className="size-3.5" />} label="Look-aways" value={metrics.lookAwayAlerts||0} />}
       </div></>)}
