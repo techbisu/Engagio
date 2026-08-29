@@ -38,7 +38,15 @@ interface SkinAnalysis {
   cy: number
   quadrants: [number, number, number, number]
   totalSkin: number
+  bands: [number, number, number] // left, center, right — for multi-face
 }
+
+// Canvas dimensions used for analysis. Defined at module level so both
+// `analyzeFrame` and `tick` can reference them (previously `CW`/`CH` were
+// local to `analyzeFrame` only, causing `tick`'s multi-face code to use
+// `undefined` → silently fail).
+const CW = 160
+const CH = 120
 
 /**
  * Lightweight canvas-based AI proctor. Uses a skin-tone pixel heuristic to
@@ -121,9 +129,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     const VH = video.videoHeight || 240
     if (VW === 0 || VH === 0) return null
 
-    // Use a larger canvas for better detection accuracy
-    const CW = 160
-    const CH = 120
+    // Ensure canvas dimensions match our analysis grid.
     canvas.width = CW
     canvas.height = CH
     const ctx = canvas.getContext("2d", { willReadFrequently: true })
@@ -152,6 +158,10 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     let sumY = 0
     let totalSkin = 0
 
+    // Also count skin per horizontal band (3 bands) for multi-face detection.
+    const bandW = Math.floor(CW / 3) // ~53
+    const bands = [0, 0, 0] // left, center, right
+
     const quadrants: [number, number, number, number] = [0, 0, 0, 0]
     const halfW = Math.floor(CW / 2)
     const halfH = Math.floor(CH / 2)
@@ -165,9 +175,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         const max = Math.max(r, g, b)
         const min = Math.min(r, g, b)
 
-        // Improved skin detection: RGB rule + uniformity check.
-        // Tightened thresholds to reduce false positives from background
-        // skin-colored objects (wood, warm walls, etc.).
+        // Skin detection: RGB rule + uniformity check.
         const isSkin =
           r > 95 &&
           g > 40 &&
@@ -185,6 +193,11 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         const qIdx = (x < halfW ? 0 : 1) + (y < halfH ? 0 : 2)
         quadrants[qIdx]++
 
+        // Band counting for multi-face detection
+        if (x < bandW) bands[0]++
+        else if (x < bandW * 2) bands[1]++
+        else bands[2]++
+
         if (x >= cx0 && x < cx0 + centerSize && y >= cy0 && y < cy0 + centerSize) {
           centerCount++
           sumX += x
@@ -195,7 +208,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
     const cx = centerCount > 0 ? sumX / centerCount : -1
     const cy = centerCount > 0 ? sumY / centerCount : -1
-    return { count: centerCount, cx, cy, quadrants, totalSkin }
+    return { count: centerCount, cx, cy, quadrants, totalSkin, bands }
   }, [])
 
   const tick = useCallback(() => {
@@ -233,57 +246,23 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
     // clusters of skin pixels — one on the LEFT side and one on the RIGHT side
     // of the frame, with a clear gap (no skin) in the center column.
     //
-    // This is much more reliable than quadrant heuristics because:
-    //   - A single face centered in the frame fills the CENTER column, so
-    //     there is no gap between left and right → no false positive.
-    //   - Two people side by side produce skin on the far left and far right
-    //     with a gap in the center → detected correctly.
+    // Algorithm (3-band gap detection):
+    //   1. `analyzeFrame` already computed skin pixel counts in 3 vertical
+    //      bands: left 1/3, center 1/3, right 1/3 (result.bands).
+    //   2. Multi-face = left band has >300 skin AND right band has >300 skin
+    //      AND center band has <150 skin (the gap between the two faces).
+    //   3. Also require totalSkin > 1200 (enough for 2 faces).
+    //   4. Require isFacePresent (don't trigger when no face is detected).
     //
-    // Algorithm:
-    //   1. Count skin pixels in 3 vertical bands: left 1/3, center 1/3, right 1/3.
-    //   2. Multi-face = left band has >400 skin AND right band has >400 skin
-    //      AND center band has <200 skin (the gap between the two faces).
-    //   3. Also require totalSkin > 1500 (enough for 2 faces).
-    //   4. Require isFacePresent (don't trigger when face detection itself
-    //      hasn't confirmed a face).
-    if (multiFace && result.totalSkin > 1500 && isFacePresent) {
-      // Divide the 160px width into thirds: 0-53, 53-106, 106-160
-      const thirdW = Math.floor(CW / 3) // ~53
-      // Recount skin per band by analyzing the quadrant data.
-      // We already have quadrant data (left half vs right half), but we need
-      // 3 bands. Recompute from scratch on the canvas.
-      let leftBand = 0
-      let centerBand = 0
-      let rightBand = 0
-      const ctx2 = canvasRef.current?.getContext("2d", { willReadFrequently: true })
-      if (ctx2) {
-        try {
-          const imgData = ctx2.getImageData(0, 0, CW, CH)
-          const d = imgData.data
-          for (let y = 0; y < CH; y++) {
-            for (let x = 0; x < CW; x++) {
-              const idx = (y * CW + x) * 4
-              const r = d[idx], g = d[idx + 1], b = d[idx + 2]
-              const max = Math.max(r, g, b)
-              const min = Math.min(r, g, b)
-              const isSkin =
-                r > 95 && g > 40 && b > 20 && r > g && r > b &&
-                r - g > 15 && r - b > 15 && max - min > 15 &&
-                !(r > 220 && g > 210 && b > 170)
-              if (!isSkin) continue
-              if (x < thirdW) leftBand++
-              else if (x < thirdW * 2) centerBand++
-              else rightBand++
-            }
-          }
-        } catch { /* ignore */ }
-      }
-      // Multi-face: both outer bands have significant skin AND the center
-      // band has a clear gap (low skin count) = two separate people.
+    // A single face centered in the frame fills the center band → no gap →
+    // no false positive. Two people side by side produce skin on the far
+    // left and far right with a gap in the center → detected correctly.
+    if (multiFace && result.totalSkin > 1200 && isFacePresent) {
+      const [leftBand, centerBand, rightBand] = result.bands
       if (
-        leftBand > 400 &&
-        rightBand > 400 &&
-        centerBand < 200 &&
+        leftBand > 300 &&
+        rightBand > 300 &&
+        centerBand < 150 &&
         canFire("counter:multiFace", 5000)
       ) {
         setMultiFaceAlerts((n) => n + 1)
@@ -298,53 +277,56 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
     // ─── Look-away detection ─────────────────────────────────────────────
     // Track the centroid of skin-tone pixels in the center region.
-    // If the centroid moves significantly between frames (averaged over
-    // the last 4 frames to reduce noise), it indicates the person is
-    // looking away or moving their head.
+    // If the centroid shifts significantly between consecutive tick groups,
+    // it indicates the person is looking away or turning their head.
+    //
+    // The centroid is computed from the center 80×80 region (where the face
+    // should be). When the user looks left/right, the skin centroid shifts
+    // in that direction. When they look down, it shifts down.
     //
     // Detection logic:
-    //   - Keep a rolling history of the last 4 centroid positions.
-    //   - Compare the current average against the previous average.
-    //   - If the delta exceeds the threshold, count it as a look-away.
+    //   - Track the centroid every tick (1.5s).
+    //   - Keep a rolling history of the last 4 positions.
+    //   - Compare the LATEST centroid against the OLDEST in the window.
+    //   - If the horizontal shift exceeds the threshold, count as look-away.
+    //   - Only count HORIZONTAL movement (x-axis) — looking left/right.
+    //     Vertical movement (nodding) is common while reading and should
+    //     not trigger.
     //
-    // Threshold: 10px on a 160×120 canvas. This is sensitive enough to
-    // detect a head turn (looking away) but not so sensitive that normal
-    // reading/studying movement triggers it. Cooldown: 4 seconds (reduced
-    // from 8s so repeated look-aways are counted).
-    if (lookAway && result.cx >= 0 && result.cy >= 0) {
+    // Threshold: 8px on a 160px-wide canvas. The center region is 80px wide
+    // (40-120), so an 8px shift is ~10% of the region — a clear head turn.
+    // Cooldown: 3 seconds.
+    if (lookAway && result.cx >= 0) {
       const currentCentroid = { x: result.cx, y: result.cy }
 
-      // Add to history (keep last 6 frames for a smoother average)
       centroidHistoryRef.current.push(currentCentroid)
-      if (centroidHistoryRef.current.length > 6) {
+      if (centroidHistoryRef.current.length > 4) {
         centroidHistoryRef.current.shift()
       }
 
-      // Calculate average centroid from history
       const history = centroidHistoryRef.current
       if (history.length >= 3) {
-        const avgX = history.reduce((s, p) => s + p.x, 0) / history.length
-        const avgY = history.reduce((s, p) => s + p.y, 0) / history.length
+        // Compare the latest centroid against the oldest in the window.
+        const oldest = history[0]
+        const newest = history[history.length - 1]
+        const dx = newest.x - oldest.x
+        const dy = newest.y - oldest.y
 
-        const last = lastCentroidRef.current
-        lastCentroidRef.current = { x: avgX, y: avgY }
+        // Horizontal shift (looking left/right) — primary trigger.
+        // Use absolute value so both directions count.
+        const horizontalShift = Math.abs(dx)
 
-        if (last) {
-          const dx = avgX - last.x
-          const dy = avgY - last.y
-          const delta = Math.sqrt(dx * dx + dy * dy)
-          // Threshold of 10px on a 160×120 canvas detects head turns
-          // (looking left/right/away) without triggering on normal
-          // micro-movements while reading. 4 second cooldown.
-          if (delta > 10 && canFire("counter:lookAway", 4000)) {
-            setLookAwayAlerts((n) => n + 1)
-            onViolationRef.current?.("lookAway")
-            fireToast(
-              "lookAway",
-              "Looking away detected",
-              "Please keep your eyes on the screen.",
-            )
-          }
+        // Only trigger on significant horizontal movement (looking away).
+        // 8px on a 160px canvas = 5% shift = a clear head turn.
+        // 4px threshold would be too sensitive (normal reading micro-movements).
+        if (horizontalShift > 8 && canFire("counter:lookAway", 3000)) {
+          setLookAwayAlerts((n) => n + 1)
+          onViolationRef.current?.("lookAway")
+          fireToast(
+            "lookAway",
+            "Looking away detected",
+            "Please keep your eyes on the screen.",
+          )
         }
       }
     }
