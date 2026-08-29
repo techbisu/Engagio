@@ -1,4 +1,4 @@
-import type { CsvRow, QuestionType } from "@/types"
+import type { CsvRow, QuestionType, QuestionDifficulty } from "@/types"
 
 const VALID_TYPES: QuestionType[] = [
   "MCQ",
@@ -60,6 +60,7 @@ export function parseCsvQuestions(csvText: string): {
     correctText: header.findIndex(
       (h) => h === "correct_text" || h === "correcttext" || h === "answer_text"
     ),
+    difficulty: header.findIndex((h) => h === "difficulty"),
   }
 
   if (idx.question < 0) {
@@ -127,6 +128,7 @@ export function parseCsvQuestions(csvText: string): {
         type,
         category: parseCategory(cells, idx.category),
         negativeMarks: parseNegative(cells, idx.negativeMarks),
+        difficulty: parseDifficulty(cells, idx.difficulty),
       })
       continue
     }
@@ -157,6 +159,7 @@ export function parseCsvQuestions(csvText: string): {
         type,
         category: parseCategory(cells, idx.category),
         negativeMarks: parseNegative(cells, idx.negativeMarks),
+        difficulty: parseDifficulty(cells, idx.difficulty),
       })
       continue
     }
@@ -183,6 +186,7 @@ export function parseCsvQuestions(csvText: string): {
         category: parseCategory(cells, idx.category),
         negativeMarks: parseNegative(cells, idx.negativeMarks),
         correctText,
+        difficulty: parseDifficulty(cells, idx.difficulty),
       })
       continue
     }
@@ -224,6 +228,7 @@ export function parseCsvQuestions(csvText: string): {
         category: parseCategory(cells, idx.category),
         negativeMarks: parseNegative(cells, idx.negativeMarks),
         correctText: JSON.stringify(pairs),
+        difficulty: parseDifficulty(cells, idx.difficulty),
       })
       continue
     }
@@ -276,6 +281,21 @@ function parseNegative(cells: string[], idx: number): number | undefined {
   if (idx < 0) return undefined
   const v = parseFloat(cells[idx] || "0")
   return Number.isFinite(v) && v > 0 ? v : 0
+}
+
+const VALID_DIFFICULTIES: QuestionDifficulty[] = ["EASY", "MEDIUM", "HARD"]
+
+/** Resolve a difficulty string (case-insensitive) — default MEDIUM. */
+function parseDifficulty(cells: string[], idx: number): QuestionDifficulty {
+  if (idx < 0) return "MEDIUM"
+  const v = (cells[idx] || "").trim().toUpperCase()
+  if (!v) return "MEDIUM"
+  // Allow "EASY" / "MEDIUM" / "HARD" as well as single-letter shortcuts.
+  if (v === "E" || v === "EASY") return "EASY"
+  if (v === "H" || v === "HARD") return "HARD"
+  if (v === "M" || v === "MEDIUM") return "MEDIUM"
+  if (VALID_DIFFICULTIES.includes(v as QuestionDifficulty)) return v as QuestionDifficulty
+  return "MEDIUM"
 }
 
 /** Split CSV text into rows of cells (handles quoted fields, escaped quotes, newlines). */
@@ -337,19 +357,62 @@ function splitCsvLines(text: string): string[][] {
 
 export function buildCsvTemplate(): string {
   const header =
-    "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation,type,category,negative_marks"
+    "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation,type,category,negative_marks,difficulty"
   const rows = [
     // MCQ — classic 4-option layout, B is correct.
-    '"What is the capital of France?","London","Paris","Berlin","Madrid","B",1,"Paris is the capital of France.","MCQ","Geography",0',
+    '"What is the capital of France?","London","Paris","Berlin","Madrid","B",1,"Paris is the capital of France.","MCQ","Geography",0,"MEDIUM"',
     // TRUE_FALSE — options auto-generated; correct_answer uses true/false.
-    '"The Earth revolves around the Sun.",,,,,true,1,"Heliocentric model.","TRUE_FALSE","Astronomy",0.25',
+    '"The Earth revolves around the Sun.",,,,,true,1,"Heliocentric model.","TRUE_FALSE","Astronomy",0.25,"EASY"',
     // FILL_BLANK — the answer is in option_a (mapped to correct_text); the
     // correct_answer column is ignored for this type.
-    '"The chemical symbol for water is ____.","H2O",,,,,1,"Two hydrogen + one oxygen.","FILL_BLANK","Chemistry",0',
+    '"The chemical symbol for water is ____.","H2O",,,,,1,"Two hydrogen + one oxygen.","FILL_BLANK","Chemistry",0,"MEDIUM"',
     // MATCHING — pairs are encoded in option_a/b + option_c/d.
-    '"Match the country to its capital.","France","Paris","Japan","Tokyo",,1,"Two pairs.","MATCHING","Geography",0',
+    '"Match the country to its capital.","France","Paris","Japan","Tokyo",,1,"Two pairs.","MATCHING","Geography",0,"HARD"',
     // CODING — reference solution goes in option_a (mapped to correct_text).
-    '"Write a function that returns 4.","function four() { return 4; }",,,,,2,"Trivial implementation.","CODING","Programming",0',
+    '"Write a function that returns 4.","function four() { return 4; }",,,,,2,"Trivial implementation.","CODING","Programming",0,"MEDIUM"',
   ]
   return [header, ...rows].join("\n")
+}
+
+// ─── Generic CSV export helpers (used by admin tables) ───────────────────────
+
+/**
+ * Escape a single cell value for CSV. Quotes fields containing commas, double
+ * quotes, or newlines; doubles any internal double-quote per RFC 4180.
+ */
+export function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  const s = typeof value === "string" ? value : String(value)
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`
+  }
+  return s
+}
+
+/**
+ * Build a CSV string from a header row and an array of data rows. Each row
+ * is the raw (unescaped) cell values — `csvEscape` is applied per cell.
+ */
+export function buildCsv(headers: string[], rows: unknown[][]): string {
+  const headerLine = headers.map(csvEscape).join(",")
+  const dataLines = rows.map((row) => row.map(csvEscape).join(","))
+  return [headerLine, ...dataLines].join("\n")
+}
+
+/**
+ * Trigger a client-side download of a CSV string. Creates a Blob, generates
+ * an object URL, programmatically clicks a temporary <a>, then revokes the
+ * URL. The filename should end in `.csv`.
+ */
+export function downloadCsv(csvContent: string, filename: string): void {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // Defer revoke so the click has time to start the download.
+  setTimeout(() => URL.revokeObjectURL(url), 500)
 }

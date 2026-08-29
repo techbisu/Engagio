@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import {
   LayoutDashboard,
   CalendarDays,
@@ -41,7 +42,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { AdminTab, SafeUser } from "@/types"
 
-import { Dashboard } from "./dashboard"
+// Lazy-load heavy components that use recharts or complex rendering.
+// These are only rendered when the admin clicks the relevant tab.
+const Dashboard = dynamic(
+  () => import("./dashboard").then((m) => m.Dashboard),
+  { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div> }
+)
+const ResultsCertDashboard = dynamic(
+  () => import("./results-cert-dashboard").then((m) => m.ResultsCertDashboard),
+  { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div> }
+)
 import { EventsManager } from "./events-manager"
 import { QuestionsManager } from "./questions-manager"
 import { LinksManager } from "./links-manager"
@@ -52,9 +62,9 @@ import { RegistrationFormBuilder } from "./registration-form-builder"
 import { RegistrationsList } from "./registrations-list"
 import { CertificatesPanel } from "./certificates-panel"
 import { PaymentsPanel } from "./payments-panel"
-import { ResultsCertDashboard } from "./results-cert-dashboard"
 import { ActivitiesPanel } from "./activities/activities-panel"
 import { LandingPageBuilder } from "./landing-page-builder"
+import { AuditLogPanel } from "./audit-log-panel"
 import { OrgSwitcher } from "@/components/organization/org-switcher"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { getOrgSlug, ROLE_LABEL, type OrgRole } from "@/components/organization/api"
@@ -92,6 +102,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "gatepasses", label: "Gate Passes", icon: QrCode, description: "ID cards + check-in" },
   { id: "users", label: "Users", icon: Users, description: "Registered participants" },
   { id: "certificates", label: "Certificates", icon: Award, description: "Issue & verify certificates" },
+  { id: "auditlog", label: "Audit Log", icon: Shield, description: "Recent admin actions" },
 ]
 
 const TAB_LABEL: Record<AdminTab, string> = {
@@ -106,6 +117,7 @@ const TAB_LABEL: Record<AdminTab, string> = {
   gatepasses: "Gate Passes",
   users: "Users",
   certificates: "Certificates",
+  auditlog: "Audit Log",
 }
 
 export function AdminShell({
@@ -165,6 +177,19 @@ export function AdminShell({
     eventId: string
     eventTitle: string
   } | null>(null)
+
+  // Fetch the current org ID for the audit log panel.
+  const [currentOrgId, setCurrentOrgId] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const slug = getOrgSlug()
+    if (!slug) return
+    fetch("/api/organizations/current")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.id) setCurrentOrgId(data.id)
+      })
+      .catch(() => {})
+  }, [])
 
   const changeTab = React.useCallback(
     (next: AdminTab) => {
@@ -515,6 +540,8 @@ export function AdminShell({
             {tab === "users" && <UsersList />}
 
             {tab === "certificates" && <CertificatesPanel />}
+
+            {tab === "auditlog" && currentOrgId && <AuditLogPanel orgId={currentOrgId} />}
           </div>
         </main>
       </div>

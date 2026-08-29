@@ -18,6 +18,7 @@ import {
   PanelsTopLeft,
   ExternalLink,
   Copy,
+  CopyPlus,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
@@ -219,6 +220,19 @@ export function EventsManager({
       setDeleteTarget(null)
     },
     onError: (e: Error) => toast.error("Failed to delete event: " + e.message),
+  })
+
+  const duplicateMutation = useMutation({
+    mutationFn: (id: string) =>
+      api<EventDto>(`/api/events/${id}/duplicate`, { method: "POST" }),
+    onSuccess: (newEvent) => {
+      qc.invalidateQueries({ queryKey: ["events"] })
+      qc.invalidateQueries({ queryKey: ["analytics"] })
+      toast.success("Event duplicated", {
+        description: `Created "${newEvent.title}" with ${newEvent.questionCount} questions.`,
+      })
+    },
+    onError: (e: Error) => toast.error("Failed to duplicate event: " + e.message),
   })
 
   function openCreate() {
@@ -499,6 +513,15 @@ export function EventsManager({
                       disabled={can ? !can("event.update") : false}
                     >
                       <PanelsTopLeft className="size-4" /> Build Landing Page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => duplicateMutation.mutate(ev.id)}
+                      disabled={
+                        (can ? !can("event.create") : false) ||
+                        duplicateMutation.isPending
+                      }
+                    >
+                      <CopyPlus className="size-4" /> Duplicate Event
                     </DropdownMenuItem>
                     {ev.slug && (
                       <>

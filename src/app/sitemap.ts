@@ -1,38 +1,58 @@
 import type { MetadataRoute } from "next";
 import { publicOrigin } from "@/lib/seo";
+import { db } from "@/lib/db";
 
 /**
  * Next.js 16 dynamic sitemap — auto-generates `/sitemap.xml`.
  *
- * Reference: https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap
+ * Includes:
+ *   - Landing page (/) + marketing pages
+ *   - Public org landing pages (/org/[slug]) — for active organizations
+ *   - Public event landing pages (/org/[slug]/event/[eventSlug]) — for active events with slugs
  *
- * Engagio's public surface is intentionally narrow:
- *
- *   - The landing page (/) — fully public, indexed.
- *   - Marketing pages (/about, /privacy, /terms, /contact, /pricing) —
- *     fully public, indexed.
- *   - Event pages (/event/[slug]) — require auth to take the quiz, so they
- *     are not eligible for indexing (and the quiz deep-link itself is
- *     disallowed in robots.txt). We do not enumerate them here.
- *   - Certificate verification (/verify/[token]) — token-gated, noindex.
- *   - Public share pages (/share/[token]) — noindex per spec.
- *
- * As the platform grows to host truly public event landing pages (e.g.
- * public marketing pages per event), this file should be extended to
- * query `db.event.findMany({ where: { isActive: true, isPublic: true } })`
- * and append one entry per event.
- *
- * For now: emit entries for the landing page + marketing pages so crawlers
- * can discover the canonical origin and follow internal links.
- *
- * Updated during the Phase 1 routing migration to use the new file-based
- * routes.
+ * Token-gated routes (quiz, verify, share, gate) are excluded (noindex).
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = publicOrigin();
   const now = new Date();
 
   const marketingPages = ["/about", "/privacy", "/terms", "/contact", "/pricing"];
+
+  // Fetch all active organizations with their slug for public org landing pages.
+  let orgEntries: MetadataRoute.Sitemap = [];
+  let eventEntries: MetadataRoute.Sitemap = [];
+  try {
+    const orgs = await db.organization.findMany({
+      where: { status: "ACTIVE", slug: { not: "default" } },
+      select: { slug: true, updatedAt: true },
+    });
+    orgEntries = orgs.map((org) => ({
+      url: `${origin}/org/${org.slug}`,
+      lastModified: org.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }));
+
+    // Fetch all active events with slugs + their org slug for public event landing pages.
+    const events = await db.event.findMany({
+      where: { isActive: true, slug: { not: null } },
+      select: {
+        slug: true,
+        updatedAt: true,
+        organization: { select: { slug: true } },
+      },
+    });
+    eventEntries = events
+      .filter((e) => e.slug && e.organization?.slug)
+      .map((e) => ({
+        url: `${origin}/org/${e.organization!.slug}/event/${e.slug}`,
+        lastModified: e.updatedAt,
+        changeFrequency: "weekly" as const,
+        priority: 0.8,
+      }));
+  } catch {
+    // If DB is unavailable during build, skip org/event entries.
+  }
 
   return [
     {
@@ -47,5 +67,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
+    ...orgEntries,
+    ...eventEntries,
   ];
 }

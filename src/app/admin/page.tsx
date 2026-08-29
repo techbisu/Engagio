@@ -102,7 +102,12 @@ function AdminPageInner() {
     [setCurrentOrgSlug, router],
   )
 
-  const handleOpenOrgSettings = React.useCallback(() => {}, [])
+  const handleOpenOrgSettings = React.useCallback(() => {
+    const slug = currentOrgSlug || user?.orgMemberships?.find((m) => m.role === "OWNER" || m.role === "ADMIN")?.organization?.slug
+    if (slug) {
+      router.push("/org/" + slug + "/admin")
+    }
+  }, [currentOrgSlug, router, user])
 
   const handleOpenOrgOnboarding = React.useCallback(() => {
     router.push("/org-register")

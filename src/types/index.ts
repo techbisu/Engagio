@@ -40,6 +40,7 @@ export type AdminTab =
   | "certificates"
   | "results"
   | "gatepasses"
+  | "auditlog"
 
 export type Role = "ADMIN" | "PARTICIPANT"
 

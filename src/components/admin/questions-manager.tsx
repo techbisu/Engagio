@@ -1732,6 +1732,7 @@ interface ParsedRow {
   explanation?: string
   category?: string
   negativeMarks?: number
+  difficulty?: QuestionDifficulty
   error?: string
 }
 
@@ -1811,6 +1812,7 @@ function ImportCsvDialog({
       explanation: r.explanation,
       category: r.category,
       negativeMarks: r.negativeMarks,
+      difficulty: r.difficulty,
       error: undefined,
     }))
 
@@ -1923,7 +1925,7 @@ function ImportCsvDialog({
                   parsePreview(e.target.value)
                 }}
                 placeholder={
-                  "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation,type,category,negative_marks"
+                  "question,option_a,option_b,option_c,option_d,correct_answer,marks,explanation,type,category,negative_marks,difficulty"
                 }
                 className="font-mono text-xs"
               />
@@ -1991,6 +1993,15 @@ function ImportCsvDialog({
                     </code>{" "}
                     — optional, the answer for FILL_BLANK or the reference
                     solution for CODING.
+                  </li>
+                  <li>
+                    <code className="text-amber-700 dark:text-amber-400">
+                      difficulty
+                    </code>{" "}
+                    — optional, one of <code>EASY</code> | <code>MEDIUM</code> |{" "}
+                    <code>HARD</code> (default <code>MEDIUM</code>;{" "}
+                    <code>E</code>/<code>M</code>/<code>H</code> shortcuts
+                    accepted).
                   </li>
                 </ul>
                 <p className="mt-2 text-slate-500 dark:text-slate-400">

@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { cn, formatDateTime, initials, truncate } from "@/lib/utils"
+import { buildCsv, downloadCsv } from "@/lib/csv"
 
 import { api } from "./api"
 import type { EventFieldDto, RegistrationDto } from "@/types"
@@ -57,26 +58,19 @@ function slugify(s: string): string {
     .slice(0, 60) || "event"
 }
 
-/** Build a CSV string from registrations and field labels. */
-function buildCsv(
+/** Build a CSV string from registrations, field labels, and payment status. */
+function buildRegistrationsCsv(
   registrations: RegistrationDto[],
   fields: EventFieldDto[]
 ): string {
-  const columns = [
+  const headers = [
     "Name",
     "Email",
     ...fields.map((f) => f.label),
+    "Payment Status",
     "Registered At",
   ]
-  const escape = (val: unknown): string => {
-    const str = val == null ? "" : String(val)
-    if (/[",\n\r]/.test(str)) {
-      return `"${str.replace(/"/g, '""')}"`
-    }
-    return str
-  }
-  const rows: string[] = [columns.map(escape).join(",")]
-  for (const r of registrations) {
+  const rows = registrations.map((r) => {
     const name = r.user?.name || ""
     const email = r.user?.email || ""
     const fieldVals = fields.map((f) => {
@@ -86,22 +80,9 @@ function buildCsv(
       }
       return v ?? ""
     })
-    const row = [name, email, ...fieldVals, r.createdAt].map(escape)
-    rows.push(row.join(","))
-  }
-  return rows.join("\n")
-}
-
-function downloadCsv(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 500)
+    return [name, email, ...fieldVals, r.paymentStatus, r.createdAt]
+  })
+  return buildCsv(headers, rows)
 }
 
 function renderValue(
@@ -180,34 +161,22 @@ export function RegistrationsList({
   )
 
   async function handleExport() {
+    if (list.length === 0) {
+      toast.error("Nothing to export")
+      return
+    }
     setExporting(true)
     try {
-      const res = await fetch(
-        `/api/events/${eventId}/registrations?format=csv`
+      // Always build the CSV client-side from the cached query data. This
+      // guarantees we include the required columns (name, email, custom
+      // fields, payment status, registered-at) regardless of server support.
+      const csv = buildRegistrationsCsv(list, fieldList)
+      downloadCsv(csv, `registrations-${slugify(eventTitle)}.csv`)
+      toast.success(
+        `Exported ${list.length} registration${list.length === 1 ? "" : "s"}`
       )
-      if (!res.ok) {
-        let msg = `Request failed: ${res.status}`
-        try {
-          const j = await res.json()
-          if (j?.error) msg = j.error
-        } catch {
-          /* ignore */
-        }
-        throw new Error(msg)
-      }
-      const text = await res.text()
-      const filename = `registrations-${slugify(eventTitle)}.csv`
-      downloadCsv(text, filename)
-      toast.success(`Exported ${list.length} registration${list.length === 1 ? "" : "s"}`)
     } catch (e) {
-      // Fallback: build CSV client-side from current query data.
-      if (list.length > 0) {
-        const csv = buildCsv(list, fieldList)
-        downloadCsv(csv, `registrations-${slugify(eventTitle)}.csv`)
-        toast.success("Exported (client-side fallback)")
-      } else {
-        toast.error("Export failed: " + (e as Error).message)
-      }
+      toast.error("Export failed: " + (e as Error).message)
     } finally {
       setExporting(false)
       // Keep server cache fresh.

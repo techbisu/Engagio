@@ -15,6 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { buildCsv, downloadCsv } from "@/lib/csv"
 import type { EventDto } from "@/types"
 import { api } from "./api"
 
@@ -143,6 +144,32 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
     )
   })
 
+  /** Export all gate passes (filtered view) as CSV. Columns:
+   *  Name, Email, Pass Number, Status, Check-in Date. */
+  function exportCsv() {
+    if (filtered.length === 0) {
+      toast.error("Nothing to export")
+      return
+    }
+    const headers = [
+      "Name",
+      "Email",
+      "Pass Number",
+      "Status",
+      "Check-in Date",
+    ]
+    const rows = filtered.map((p) => [
+      p.participantName,
+      p.participantEmail,
+      p.passNumber,
+      p.status,
+      p.checkedInAt ?? "",
+    ])
+    const csv = buildCsv(headers, rows)
+    downloadCsv(csv, `gate-passes-${new Date().toISOString().slice(0, 10)}.csv`)
+    toast.success(`Exported ${filtered.length} gate pass${filtered.length === 1 ? "" : "es"}`)
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -155,17 +182,28 @@ export function GatePassManager({ eventId: initialEventId }: { eventId: string }
               <CardDescription>Generate ID cards, check in participants, and verify gate passes.</CardDescription>
             </div>
             {activeEventId && (
-            <Button
-              onClick={() => generateAllMutation.mutate()}
-              disabled={generateAllMutation.isPending}
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              {generateAllMutation.isPending ? (
-                <><Loader2 className="size-4 animate-spin" /> Generating...</>
-              ) : (
-                <><RefreshCw className="size-4" /> Generate for All</>
-              )}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={exportCsv}
+                disabled={filtered.length === 0}
+                variant="outline"
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              >
+                <Download className="size-4" />
+                Export CSV
+              </Button>
+              <Button
+                onClick={() => generateAllMutation.mutate()}
+                disabled={generateAllMutation.isPending}
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                {generateAllMutation.isPending ? (
+                  <><Loader2 className="size-4 animate-spin" /> Generating...</>
+                ) : (
+                  <><RefreshCw className="size-4" /> Generate for All</>
+                )}
+              </Button>
+            </div>
             )}
           </div>
         </CardHeader>

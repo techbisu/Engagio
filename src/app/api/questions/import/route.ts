@@ -96,6 +96,8 @@ export async function POST(req: NextRequest) {
             category: row.category || null,
             order: nextOrder++,
             explanation: row.explanation || null,
+            // Optional difficulty (default MEDIUM) — accepts EASY/MEDIUM/HARD.
+            difficulty: row.difficulty ?? "MEDIUM",
           },
         })
       )

@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Separator } from "@/components/ui/separator"
 import { cn, formatDateTime, formatDuration, initials, truncate } from "@/lib/utils"
+import { buildCsv, downloadCsv } from "@/lib/csv"
 
 import { api } from "./api"
 import type { AttemptStatus, EventDto, QuestionDto, QuizAttemptDto } from "@/types"
@@ -304,11 +305,6 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       "started_at",
       "completed_at",
     ]
-    const escape = (v: unknown) => {
-      const s = v == null ? "" : String(v)
-      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
-      return s
-    }
     const rows = filtered.map((a) => {
       const flagged = Array.isArray(a.flaggedQuestions)
         ? a.flaggedQuestions.length
@@ -341,19 +337,9 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
         a.startedAt,
         a.completedAt || "",
       ]
-        .map(escape)
-        .join(",")
     })
-    const csv = [headers.join(","), ...rows].join("\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `attempts-${format(new Date(), "yyyyMMdd-HHmm")}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const csv = buildCsv(headers, rows)
+    downloadCsv(csv, `attempts-${format(new Date(), "yyyyMMdd-HHmm")}.csv`)
     toast.success(`Exported ${filtered.length} attempts`)
   }
 

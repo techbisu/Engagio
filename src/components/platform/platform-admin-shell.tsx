@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   Building2,
@@ -49,7 +50,20 @@ import {
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { SignOutButton } from "@/components/shared/sign-out-button"
-import { PlatformAnalytics } from "@/components/platform/platform-analytics"
+import { PlatformPaymentsManager } from "./platform-payments-manager"
+// Lazy-load the heavy analytics component (recharts is ~200KB gzipped).
+// It's only rendered when the admin clicks the "Analytics" tab.
+const PlatformAnalytics = dynamic(
+  () => import("@/components/platform/platform-analytics").then((m) => m.PlatformAnalytics),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="size-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+      </div>
+    ),
+  }
+)
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n"
 import type { SafeUser } from "@/types"
