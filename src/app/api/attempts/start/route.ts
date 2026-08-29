@@ -164,44 +164,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Org-membership / authorization gate ─────────────────────────────
-    // Security: verify the user is allowed to attempt this quiz. The user
-    // must satisfy AT LEAST ONE of:
-    //   1. Have an active OrganizationMember row for the event's org
-    //      (org admins, staff, and registered participants)
-    //   2. Have a Registration row for this event (registered participant)
-    //   3. The event has no organizationId (legacy/backward-compat)
-    // This prevents cross-tenant access: a user from Org A cannot start
-    // Org B's quiz links unless they've registered for Org B's event.
-    if (quizLink.event?.organizationId) {
-      const [membership, registration] = await Promise.all([
-        db.organizationMember.findFirst({
-          where: {
-            userId: session.user.id,
-            organizationId: quizLink.event.organizationId,
-            status: "ACTIVE",
-          },
-          select: { id: true },
-        }),
-        db.registration.findFirst({
-          where: {
-            userId: session.user.id,
-            eventId: quizLink.eventId,
-          },
-          select: { id: true },
-        }),
-      ]);
-      if (!membership && !registration) {
-        return NextResponse.json(
-          {
-            error:
-              "You are not authorized to take this quiz. Please register for the event first.",
-            code: "NOT_AUTHORIZED",
-          },
-          { status: 403 }
-        );
-      }
-    }
+    // ── Authorization ────────────────────────────────────────────────────
+    // Access control for quiz attempts:
+    //
+    //   1. If the event REQUIRES registration (requireRegistration=true AND
+    //      has EventFields), the registration gate above already enforces it.
+    //      If the user has no registration, they get 403 "REGISTRATION_REQUIRED".
+    //      If they have a registration but payment isn't complete, they get
+    //      403 "PAYMENT_REQUIRED". If we reach here, they passed both gates.
+    //
+    //   2. If the event does NOT require registration (open quiz), any
+    //      authenticated user can attempt it. The quiz link is a secret
+    //      6-character random slug that controls access — knowing the link
+    //      IS the authorization. No org membership needed because participants
+    //      are external users who received the link from the organizer.
+    //
+    //   3. If the event has no organizationId (legacy/backward-compat), skip.
+    //
+    // This allows participants who log in via Google (from the quiz link) to
+    // take open quizzes without being blocked by org-membership checks.
 
     // Fetch all questions for the event, ordered by `order` then createdAt
     const allQuestions = await db.question.findMany({
