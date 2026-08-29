@@ -50,7 +50,6 @@ import {
 import { BrandLogo } from "@/components/shared/brand-logo"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { SignOutButton } from "@/components/shared/sign-out-button"
-import { PlatformPaymentsManager } from "./platform-payments-manager"
 // Lazy-load the heavy analytics component (recharts is ~200KB gzipped).
 // It's only rendered when the admin clicks the "Analytics" tab.
 const PlatformAnalytics = dynamic(
