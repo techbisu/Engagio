@@ -6,7 +6,15 @@ import { renderGatePassCard } from "@/lib/gate-pass-renderer";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-/** POST /api/gate-passes/[id]/generate-card — generate the ID card PNG */
+/**
+ * POST /api/gate-passes/[id]/generate-card — generate the ID card PNG ON
+ * DEMAND and return it directly as a download (NOT stored in the DB or
+ * Cloudinary). This keeps storage costs at zero — the card is regenerated
+ * each time the admin requests it.
+ *
+ * Returns a PNG image response (Content-Type: image/png) with a
+ * Content-Disposition header for download.
+ */
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
@@ -33,7 +41,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: "Gate pass not found" }, { status: 404 });
     }
 
-    // Generate the card PNG
+    // Generate the card PNG on demand.
     const { png } = await renderGatePassCard({
       passNumber: pass.passNumber,
       participantName: pass.participantName,
@@ -49,15 +57,16 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       shareUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/gate/${pass.verifyToken}`,
     });
 
-    // Update the gate pass with the card image
-    const updated = await db.gatePass.update({
-      where: { id },
-      data: {
-        cardImageUrl: `data:image/png;base64,${png.toString("base64")}`,
-      },
+    // Return the PNG directly — no DB save, no storage upload.
+    const fileName = `gate-pass-${pass.passNumber}.png`;
+    const headers = new Headers({
+      "Content-Type": "image/png",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Cache-Control": "no-store",
     });
-
-    return NextResponse.json({ gatePass: updated });
+    // Convert Buffer to Uint8Array for the Response body.
+    const pngBytes = new Uint8Array(png);
+    return new NextResponse(pngBytes, { status: 200, headers });
   } catch (e) {
     console.error("[POST /api/gate-passes/[id]/generate-card] error:", e);
     return NextResponse.json({ error: "Internal Server Error", detail: "An unexpected error occurred" }, { status: 500 });

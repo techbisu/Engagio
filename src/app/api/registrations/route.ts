@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { stringifyJson } from "@/lib/utils";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -23,6 +24,16 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  */
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit: 10 registrations per minute per IP ──────────────────
+    const ip = getClientIp(req);
+    const rl = await rateLimit(`registration:${ip}`, 10, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please wait a moment." },
+        { status: 429 }
+      );
+    }
+
     const limitErr = await checkBodySize(req, BODY_LIMITS.STANDARD)
     if (limitErr) return limitErr
     const session = await getServerSession(authOptions);

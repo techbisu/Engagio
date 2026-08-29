@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { parseJsonArray, stringifyJson } from "@/lib/utils";
 import type { MatchPair } from "@/types";
 
@@ -26,6 +27,16 @@ interface SubmitBody {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit: 20 quiz submits per minute per IP ──────────────────
+    const ip = getClientIp(req);
+    const rl = await rateLimit(`quiz:submit:${ip}`, 20, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please slow down." },
+        { status: 429 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

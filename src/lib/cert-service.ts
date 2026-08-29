@@ -3,7 +3,7 @@ import {
   generateCertificateNumber,
   generateVerificationToken,
 } from "@/lib/cert"
-import { sendResultPublishedEmail } from "@/lib/email"
+import { sendResultPublishedEmail, sendCertificateIssuedEmail } from "@/lib/email"
 import type { CertificateDto } from "@/types"
 
 /**
@@ -189,6 +189,23 @@ export async function generateCertificate(opts: {
       manualOverride,
     },
   })
+
+  // ── Send certificate-issued email notification ──────────────────────
+  // Fire-and-forget — we don't want email failures to block cert generation.
+  if (user.email) {
+    try {
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000"
+      await sendCertificateIssuedEmail({
+        to: user.email,
+        participantName: recipientName,
+        eventTitle: event.title,
+        certificateNumber: cert.certificateNumber,
+        verifyUrl: `${baseUrl}/verify/${cert.verificationToken}`,
+      })
+    } catch (e) {
+      console.error("[cert-service] Failed to send certificate email:", e)
+    }
+  }
 
   return {
     certificate: toCertDto(cert, event),

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { toQuizLinkDto } from "@/app/api/quiz-links/route";
 
 type RouteContext = { params: Promise<{ slug: string }> };
@@ -12,8 +13,18 @@ type RouteContext = { params: Promise<{ slug: string }> };
  * Returns the full set of security toggles + questionCount + publishResults
  * + aiProctor sub-toggles so the client knows which features to activate.
  */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
+    // ── Rate limit: 60 requests per minute per IP (public endpoint) ────
+    const ip = getClientIp(req);
+    const rl = await rateLimit(`quiz:by-slug:${ip}`, 60, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please slow down." },
+        { status: 429 }
+      );
+    }
+
     const { slug } = await ctx.params;
     if (!slug) {
       return NextResponse.json({ error: "Slug is required" }, { status: 400 });

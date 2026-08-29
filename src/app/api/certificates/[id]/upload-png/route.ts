@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePermission, ownsResource } from "@/lib/tenant";
-import { uploadFile, deleteFile } from "@/lib/storage";
 import type {
   CertificateDto,
   CertStatus,
@@ -64,12 +63,15 @@ type RouteContext = { params: Promise<{ id: string }> };
  *
  * Body: { pngDataUrl: string }  // canvas.toDataURL("image/png") output
  *
- * Uploads the rendered certificate PNG to the storage provider (Cloudinary
- * if configured, else base64 data URL fallback) and updates the Certificate
- * row with the resolved URL + publicId. If a PNG was previously uploaded,
- * the old Cloudinary asset is deleted first (best-effort).
+ * This endpoint is now a NO-OP for storage — the PNG is NOT uploaded to
+ * Cloudinary or stored in the DB. The certificate PNG is generated and
+ * downloaded on the CLIENT side directly from the canvas. This keeps
+ * storage costs at zero.
  *
- * Response: { certificate: CertificateDto }
+ * The endpoint still verifies auth + ownership and returns the certificate
+ * DTO (without a certificateUrl) so the client can update its local state.
+ *
+ * Response: { certificate: CertificateDto, downloaded: true }
  */
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
@@ -98,51 +100,18 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       );
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-    }
-    const { pngDataUrl } = body as { pngDataUrl?: unknown };
-    if (typeof pngDataUrl !== "string" || !pngDataUrl.trim()) {
-      return NextResponse.json(
-        { error: "pngDataUrl is required" },
-        { status: 400 },
-      );
-    }
-    // Sanity: must be a PNG data URL (canvas.toDataURL output).
-    if (!pngDataUrl.startsWith("data:image/png")) {
-      return NextResponse.json(
-        { error: "pngDataUrl must be a PNG data URL (data:image/png;base64,...)" },
-        { status: 400 },
-      );
-    }
-
-    // Replace any previously-uploaded PNG. deleteFile is a no-op when the
-    // publicId is null (base64 fallback path) or when Cloudinary isn't
-    // configured.
-    await deleteFile(existing.certificatePublicId);
-
-    // Use the certificate number as the public filename so regeneration
-    // overwrites the same Cloudinary asset (overwrite:true in uploadFile).
-    // Sanitize: keep alphanumerics + dashes only.
-    const safeName = existing.certificateNumber
-      .replace(/[^a-zA-Z0-9-]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase();
-
-    const uploaded = await uploadFile(pngDataUrl, "image/png", {
-      folder: "certificates",
-      filename: safeName || undefined,
-    });
-
+    // The PNG is generated and downloaded on the CLIENT side directly from
+    // the canvas. We do NOT upload it to Cloudinary or store the base64 in
+    // the DB. The client calls this endpoint just to mark the certificate
+    // as "manually overridden" (admin action) — the download happens locally.
     const updated = await db.certificate.update({
       where: { id },
       data: {
-        certificateUrl: uploaded.url,
-        certificatePublicId: uploaded.publicId,
-        // Mark that an admin has manually (re)generated the PNG asset.
+        // Mark that an admin has manually (re)generated the PNG.
         manualOverride: true,
+        // Clear any previously-stored URL — we no longer persist the PNG.
+        certificateUrl: null,
+        certificatePublicId: null,
       },
       include: {
         event: {
@@ -162,7 +131,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       },
     });
 
-    return NextResponse.json({ certificate: toCertDto(updated) });
+    return NextResponse.json({ certificate: toCertDto(updated), downloaded: true });
   } catch (e) {
     return NextResponse.json(
       { error: "Internal Server Error" },

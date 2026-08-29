@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireTenantContext, auditLog, ownsResource } from "@/lib/tenant"
-import { generateAchievementImage } from "@/lib/achievement-image"
+import { renderCard } from "@/lib/card-renderer"
+import { parseAchievementData } from "@/lib/achievement-mapper"
+import { buildShareUrl } from "@/lib/achievement"
+import type { AchievementData, AchievementTemplateId, AchievementType } from "@/types"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/achievements/[id]/generate-image
  *
- * Owner or admin. Generates the card image if not already generated, or
- * regenerates it when `?force=true` (or `{ force: true }` in the body).
+ * Owner or admin. Generates the card image ON DEMAND and returns it directly
+ * as a PNG download (NOT stored in Cloudinary or DB). This keeps storage
+ * costs at zero — the image is regenerated each time the user requests it.
  *
- * Returns `{ imageUrl, imagePublicId, dataVersion }`.
+ * Returns a PNG image response (Content-Type: image/png) with a
+ * Content-Disposition header for download.
  */
 export async function POST(req: NextRequest, ctxParams: RouteContext) {
   try {
@@ -34,34 +39,45 @@ export async function POST(req: NextRequest, ctxParams: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Determine `force` from query or body.
-    const url = new URL(req.url)
-    const forceQuery = url.searchParams.get("force") === "true"
-    let forceBody = false
-    try {
-      const body = await req.json()
-      forceBody = body?.force === true
-    } catch {
-      // Body is optional — ignore.
-    }
-    const force = forceQuery || forceBody
+    // Build the share URL for the QR code.
+    const shareUrl = buildShareUrl(req, row.publicToken)
+    const achievementData: AchievementData = parseAchievementData(row.achievementData)
 
-    const result = await generateAchievementImage(row, req, force)
+    // Render the card (SVG + PNG buffer) on demand.
+    const { png } = await renderCard({
+      templateId: row.templateId as AchievementTemplateId,
+      type: row.type as AchievementType,
+      title: row.title,
+      subtitle: row.subtitle,
+      participantName: row.participantName,
+      score: row.score,
+      totalScore: row.totalScore,
+      percentage: row.percentage,
+      rank: row.rank,
+      totalParticipants: row.totalParticipants,
+      achievementData,
+      orgLogoUrl: achievementData.orgLogoUrl ?? null,
+      shareUrl,
+    })
 
     await auditLog(
       ctx,
       "ACHIEVEMENT_IMAGE_GENERATED",
       "ShareableAchievement",
       id,
-      { force, dataVersion: result.dataVersion }
+      { onDemand: true }
     )
 
-    return NextResponse.json({
-      imageUrl: result.imageUrl,
-      imagePublicId: result.imagePublicId,
-      dataVersion: result.dataVersion,
-      isLocal: result.isLocal,
+    // Return the PNG directly — no storage upload, no DB save.
+    const fileName = `achievement-${row.id.slice(-12)}.png`
+    const headers = new Headers({
+      "Content-Type": "image/png",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Cache-Control": "no-store",
     })
+    // Convert Buffer to Uint8Array for the Response body.
+    const pngBytes = new Uint8Array(png)
+    return new NextResponse(pngBytes, { status: 200, headers })
   } catch (e) {
     console.error("[POST /api/achievements/[id]/generate-image] error:", e)
     return NextResponse.json(

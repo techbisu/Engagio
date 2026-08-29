@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // NOTE: There are ~230 pre-existing TypeScript errors in the codebase
+  // (Prisma select+include conflicts, unused vars, etc.). These need to be
+  // fixed one by one before this flag can be removed. Removing it now would
+  // break the production build. DO NOT add new code that introduces new
+  // TypeScript errors — fix them at the source.
   typescript: {
     ignoreBuildErrors: true,
   },

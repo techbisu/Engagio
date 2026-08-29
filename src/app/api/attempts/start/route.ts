@@ -2,21 +2,40 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   shuffleArray,
   parseJsonArray,
   stringifyJson,
-  getClientIp,
   getUserAgent,
 } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit: 20 quiz starts per minute per IP ──────────────────
+    const ip = getClientIp(req);
+    const rl = await rateLimit(`quiz:start:${ip}`, 20, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please slow down." },
+        { status: 429 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: "Not authenticated" },
         { status: 401 }
+      );
+    }
+
+    // ── Rate limit: 10 quiz starts per minute per user ─────────────────
+    const userRl = await rateLimit(`quiz:start:user:${session.user.id}`, 10, 60_000);
+    if (!userRl.allowed) {
+      return NextResponse.json(
+        { error: "Too many quiz starts. Please wait a moment." },
+        { status: 429 }
       );
     }
 
@@ -33,7 +52,7 @@ export async function POST(req: NextRequest) {
       where: { id: quizLinkId },
       include: {
         event: {
-          select: { id: true, title: true, description: true },
+          select: { id: true, title: true, description: true, organizationId: true },
         },
       },
     });
@@ -142,6 +161,45 @@ export async function POST(req: NextRequest) {
             );
           }
         }
+      }
+    }
+
+    // ── Org-membership / authorization gate ─────────────────────────────
+    // Security: verify the user is allowed to attempt this quiz. The user
+    // must satisfy AT LEAST ONE of:
+    //   1. Have an active OrganizationMember row for the event's org
+    //      (org admins, staff, and registered participants)
+    //   2. Have a Registration row for this event (registered participant)
+    //   3. The event has no organizationId (legacy/backward-compat)
+    // This prevents cross-tenant access: a user from Org A cannot start
+    // Org B's quiz links unless they've registered for Org B's event.
+    if (quizLink.event?.organizationId) {
+      const [membership, registration] = await Promise.all([
+        db.organizationMember.findFirst({
+          where: {
+            userId: session.user.id,
+            organizationId: quizLink.event.organizationId,
+            status: "ACTIVE",
+          },
+          select: { id: true },
+        }),
+        db.registration.findFirst({
+          where: {
+            userId: session.user.id,
+            eventId: quizLink.eventId,
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (!membership && !registration) {
+        return NextResponse.json(
+          {
+            error:
+              "You are not authorized to take this quiz. Please register for the event first.",
+            code: "NOT_AUTHORIZED",
+          },
+          { status: 403 }
+        );
       }
     }
 
