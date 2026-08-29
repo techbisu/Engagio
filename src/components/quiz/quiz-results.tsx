@@ -111,7 +111,112 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
   }
 
   // Case A: instructor has hidden results entirely (showResults === false).
+  // If a certificate was auto-generated, show a participation certificate
+  // screen with a share button (LinkedIn, WhatsApp, etc.) instead of the
+  // generic "results coming soon" message.
   if (data.showResults === false) {
+    // If a certificate exists, show the participation certificate screen.
+    if (data.certificate) {
+      const verifyUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate.verificationToken}`
+      const orgName = data.organization?.name || data.event?.title || "Engagio"
+      const orgLogo = data.organization?.logoUrl || null
+      return (
+        <Shell onBack={onBack}>
+          <Card className="w-full max-w-md overflow-hidden">
+            {/* Org logo header */}
+            {orgLogo && (
+              <div className="flex items-center justify-center bg-emerald-50 py-4 dark:bg-emerald-950/30">
+                <img
+                  src={orgLogo}
+                  alt={orgName}
+                  className="h-12 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+                />
+              </div>
+            )}
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
+                <CheckCircle2 className="size-7 text-emerald-600" />
+              </div>
+              <CardTitle className="text-xl">Participation Certificate</CardTitle>
+              <CardDescription>
+                Congratulations! You&apos;ve successfully completed{" "}
+                <span className="font-semibold text-foreground">
+                  {data.event?.title ?? "the assessment"}
+                </span>
+                .
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Certificate details */}
+              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Certificate #</span>
+                  <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+                    {data.certificate.certificateNumber}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Issued to</span>
+                  <span className="font-medium">{data.certificate.recipientName}</span>
+                </div>
+                {data.organization && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Organization</span>
+                    <span className="font-medium">{data.organization.name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium">
+                    {new Date(data.certificate.issuedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Share section */}
+              <div className="space-y-3">
+                <p className="text-center text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  Share your achievement
+                </p>
+                <ShareAchievementButton
+                  achievementInput={{
+                    type: "QUIZ_RESULT",
+                    eventId: data.event?.id,
+                    title: `${data.event?.title ?? "Assessment"} · Participation Certificate`,
+                    subtitle: data.organization?.name ?? data.event?.title,
+                    score: data.score ?? undefined,
+                    totalScore: data.totalMarks ?? undefined,
+                    percentage: data.percentage ?? undefined,
+                    achievementData: {
+                      eventTitle: data.event?.title,
+                      orgName: data.organization?.name,
+                      orgLogoUrl: data.organization?.logoUrl,
+                      certificateNumber: data.certificate.certificateNumber,
+                      verifyUrl,
+                    },
+                    templateId: data.certificate.template as any || "modern",
+                    visibility: "LINK_ONLY",
+                  }}
+                  label="Share on LinkedIn"
+                  className="w-full"
+                />
+              </div>
+
+              <Button
+                onClick={onBack}
+                variant="outline"
+                className="w-full"
+              >
+                <ArrowLeft className="size-4" /> Back to Dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        </Shell>
+      )
+    }
+
+    // No certificate — show the generic "results coming soon" message.
     return (
       <Shell onBack={onBack}>
         <Card className="w-full max-w-md">
@@ -502,14 +607,20 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                 title: data.event?.title
                   ? `${data.event.title} · Quiz Result`
                   : "Quiz Result",
-                subtitle: data.event?.title ?? undefined,
+                subtitle: data.organization?.name ?? data.event?.title,
                 score: data.score ?? undefined,
                 totalScore: data.totalMarks ?? undefined,
                 percentage: data.percentage ?? undefined,
                 achievementData: {
                   eventTitle: data.event?.title,
+                  orgName: data.organization?.name,
+                  orgLogoUrl: data.organization?.logoUrl,
+                  certificateNumber: data.certificate?.certificateNumber,
+                  verifyUrl: data.certificate
+                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate.verificationToken}`
+                    : undefined,
                 },
-                templateId: "modern",
+                templateId: data.certificate?.template as any || "modern",
                 visibility: "LINK_ONLY",
               }}
               className="w-full sm:w-auto"

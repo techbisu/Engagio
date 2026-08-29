@@ -236,6 +236,22 @@ export interface AttemptReviewPayload {
     requireFullscreen?: boolean
     publishResults?: boolean
   } | null
+  /** Certificate info — present when auto-generated on submit */
+  certificate?: {
+    id: string
+    certificateNumber: string
+    verificationToken: string
+    template: string
+    recipientName: string
+    issuedAt: string
+  } | null
+  /** Organization info for the share card (logo, name, colors) */
+  organization?: {
+    name: string
+    slug: string
+    logoUrl: string | null
+    primaryColor: string | null
+  } | null
 }
 
 export interface AttemptListItem {

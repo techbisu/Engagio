@@ -248,6 +248,27 @@ export async function GET(
       ? attempt.publishedAt.toISOString()
       : null;
 
+    // Fetch certificate for this user+event (if auto-generated).
+    const certificate = await db.certificate.findFirst({
+      where: { eventId: attempt.eventId, userId: attempt.userId, status: "VALID" },
+      select: {
+        id: true,
+        certificateNumber: true,
+        verificationToken: true,
+        template: true,
+        recipientName: true,
+        issuedAt: true,
+      },
+    });
+
+    // Fetch org info for the share card (logo, name, colors).
+    const orgInfo = attempt.event.organizationId
+      ? await db.organization.findUnique({
+          where: { id: attempt.event.organizationId },
+          select: { name: true, slug: true, logoUrl: true, primaryColor: true },
+        })
+      : null;
+
     if (hideForStudent) {
       return NextResponse.json({
         attemptId: attempt.id,
@@ -269,6 +290,19 @@ export async function GET(
         publishedAt: null,
         event: attempt.event,
         quizLink: attempt.quizLink,
+        certificate: certificate
+          ? {
+              id: certificate.id,
+              certificateNumber: certificate.certificateNumber,
+              verificationToken: certificate.verificationToken,
+              template: certificate.template,
+              recipientName: certificate.recipientName,
+              issuedAt: certificate.issuedAt.toISOString(),
+            }
+          : null,
+        organization: orgInfo
+          ? { name: orgInfo.name, slug: orgInfo.slug, logoUrl: orgInfo.logoUrl, primaryColor: orgInfo.primaryColor }
+          : null,
       });
     }
 
@@ -303,6 +337,19 @@ export async function GET(
       publishedAt: publishedAtIso,
       event: attempt.event,
       quizLink: attempt.quizLink,
+      certificate: certificate
+        ? {
+            id: certificate.id,
+            certificateNumber: certificate.certificateNumber,
+            verificationToken: certificate.verificationToken,
+            template: certificate.template,
+            recipientName: certificate.recipientName,
+            issuedAt: certificate.issuedAt.toISOString(),
+          }
+        : null,
+      organization: orgInfo
+        ? { name: orgInfo.name, slug: orgInfo.slug, logoUrl: orgInfo.logoUrl, primaryColor: orgInfo.primaryColor }
+        : null,
     });
   } catch (error) {
     console.error("[GET /api/attempts/[id]] error:", error);
