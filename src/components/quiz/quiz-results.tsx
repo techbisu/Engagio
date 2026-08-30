@@ -61,6 +61,8 @@ import type {
   AttemptReviewQuestion,
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
+import { CertificateRenderer } from "@/components/cert/certificate-renderer"
+import type { CertTemplate } from "@/types"
 
 
 interface QuizResultsProps {
@@ -197,6 +199,21 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                     {new Date(data.certificate.issuedAt).toLocaleDateString()}
                   </span>
                 </div>
+              </div>
+
+              {/* Certificate image rendered on canvas */}
+              <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                <CertificateRenderer
+                  template={data.certificate.template as CertTemplate}
+                  recipientName={data.certificate.recipientName}
+                  eventName={data.event?.title ?? "Assessment"}
+                  orgName={data.organization?.name ?? undefined}
+                  certificateNumber={data.certificate.certificateNumber}
+                  issuedAt={data.certificate.issuedAt}
+                  verificationUrl={verifyUrl}
+                  logo={orgLogo}
+                  className="w-full"
+                />
               </div>
 
               {/* Social share buttons — direct, no achievement card */}

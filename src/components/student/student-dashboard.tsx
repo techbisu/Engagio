@@ -212,33 +212,47 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{activities.length} activities</span>
+                      {activities.length > 0 && <span>{activities.length} activities</span>}
                       {upcomingCount > 0 && <span>· {upcomingCount} upcoming</span>}
                       <span>· {new Date(event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      {orgSlug && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs"
-                          onClick={() => {
-                            window.location.href = `/org/${orgSlug}/participant/dashboard`
-                          }}
-                        >
-                          Go to Dashboard
-                        </Button>
-                      )}
-                      {liveCount > 0 && activities.find(a => a.status === "LIVE" && a.quizLink?.slug) && (
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 text-white text-xs hover:bg-emerald-700"
-                          onClick={() => onStartQuiz(activities.find(a => a.status === "LIVE" && a.quizLink?.slug)!.quizLink!.slug)}
-                        >
-                          Start Quiz
-                        </Button>
-                      )}
-                    </div>
+                    {/* Show quiz link info + Start button for each quiz link */}
+                    {activities.filter(a => a.quizLink?.slug).length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {activities.filter(a => a.quizLink?.slug).map(a => (
+                          <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900/60">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium">{a.title || "Quiz"}</p>
+                              {a.quizLink?.questionCount !== undefined && a.quizLink.questionCount > 0 && (
+                                <p className="text-[10px] text-muted-foreground">{a.quizLink.questionCount} questions</p>
+                              )}
+                              {a.quizLink?.timeLimit !== undefined && a.quizLink.timeLimit > 0 && (
+                                <p className="text-[10px] text-muted-foreground">{a.quizLink.timeLimit} min</p>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              className="shrink-0 bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                              onClick={() => onStartQuiz(a.quizLink!.slug)}
+                            >
+                              Start Quiz
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {orgSlug && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={() => {
+                          window.location.href = `/org/${orgSlug}/participant/dashboard`
+                        }}
+                      >
+                        Go to Dashboard
+                      </Button>
+                    )}
                   </div>
                 )
               })}

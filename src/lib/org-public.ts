@@ -84,11 +84,16 @@ export async function fetchOrgBySlug(
     events.map(async (e) => {
       const quizLink = await db.quizLink.findFirst({
         where: { eventId: e.id, isActive: true },
-        select: { slug: true, timeLimit: true, passThreshold: true },
+        select: { slug: true, timeLimit: true, passThreshold: true, questionCount: true },
       })
-      const questionCount = await db.question.count({
+      const totalQuestions = await db.question.count({
         where: { eventId: e.id },
       })
+      // Use the quiz link's questionCount if set (picks N random questions),
+      // otherwise show the total event question count.
+      const questionCount = quizLink?.questionCount && quizLink.questionCount > 0
+        ? quizLink.questionCount
+        : totalQuestions
       return {
         id: e.id,
         title: e.title,
