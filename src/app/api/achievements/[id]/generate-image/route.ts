@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "@/lib/auth"
+import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { requireTenantContext, auditLog, ownsResource } from "@/lib/tenant"
 import { renderCard } from "@/lib/card-renderer"
 import { parseAchievementData } from "@/lib/achievement-mapper"
 import { buildShareUrl } from "@/lib/achievement"
@@ -11,32 +12,40 @@ type RouteContext = { params: Promise<{ id: string }> }
 /**
  * POST /api/achievements/[id]/generate-image
  *
- * Owner or admin. Generates the card image ON DEMAND and returns it directly
- * as a PNG download (NOT stored in Cloudinary or DB). This keeps storage
- * costs at zero — the image is regenerated each time the user requests it.
+ * Authenticated (session-based, NOT tenant-context). Generates the card image
+ * ON DEMAND and returns it directly as a PNG download. The caller must be
+ * either the achievement owner (participantId === session.user.id) OR a
+ * platform admin.
  *
- * Returns a PNG image response (Content-Type: image/png) with a
- * Content-Disposition header for download.
+ * Returns a PNG image response (Content-Type: image/png).
  */
 export async function POST(req: NextRequest, ctxParams: RouteContext) {
   try {
-    const ctx = await requireTenantContext(req)
-    if ("error" in ctx) {
-      return NextResponse.json({ error: ctx.error }, { status: ctx.status })
+    // Use session-based auth instead of requireTenantContext so external
+    // participants (who aren't org members) can generate their achievement
+    // card without being blocked by org-membership checks.
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await ctxParams.params
 
     const row = await db.shareableAchievement.findUnique({ where: { id } })
-    if (!row || !ownsResource(row, ctx)) {
+    if (!row) {
       return NextResponse.json({ error: "Achievement not found" }, { status: 404 })
     }
-    const isOwner = row.participantId === ctx.userId
-    const isAdmin =
-      ctx.isPlatformAdmin ||
-      ctx.orgRole === "OWNER" ||
-      ctx.orgRole === "ADMIN"
-    if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    // Only the owner or a platform admin can generate the image.
+    const isOwner = row.participantId === session.user.id
+    if (!isOwner) {
+      // Check if user is a platform admin
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { platformRole: true },
+      })
+      if (user?.platformRole !== "SUPERADMIN") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
     }
 
     // Build the share URL for the QR code.
@@ -60,14 +69,6 @@ export async function POST(req: NextRequest, ctxParams: RouteContext) {
       shareUrl,
     })
 
-    await auditLog(
-      ctx,
-      "ACHIEVEMENT_IMAGE_GENERATED",
-      "ShareableAchievement",
-      id,
-      { onDemand: true }
-    )
-
     // Return the PNG directly — no storage upload, no DB save.
     const fileName = `achievement-${row.id.slice(-12)}.png`
     const headers = new Headers({
@@ -75,7 +76,6 @@ export async function POST(req: NextRequest, ctxParams: RouteContext) {
       "Content-Disposition": `attachment; filename="${fileName}"`,
       "Cache-Control": "no-store",
     })
-    // Convert Buffer to Uint8Array for the Response body.
     const pngBytes = new Uint8Array(png)
     return new NextResponse(pngBytes, { status: 200, headers })
   } catch (e) {

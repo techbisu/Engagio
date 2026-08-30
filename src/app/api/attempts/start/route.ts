@@ -103,6 +103,9 @@ export async function POST(req: NextRequest) {
 
     // Registration gate — if the event requires registration and the user
     // has not yet registered, refuse to start and tell the client to register first.
+    // If the event does NOT require registration, auto-create a registration
+    // record so the participant shows up in the admin's registration list and
+    // the participant dashboard shows the event.
     const fieldCount = await db.eventField.count({
       where: { eventId: quizLink.eventId },
     });
@@ -161,6 +164,51 @@ export async function POST(req: NextRequest) {
             );
           }
         }
+      }
+    } else {
+      // ── Auto-register for open events (no registration required) ───────
+      // When the event does NOT require registration, auto-create a Registration
+      // record so the participant appears in the admin's registration list and
+      // the participant dashboard shows the event. This uses upsert so it's
+      // idempotent — if already registered, it's a no-op.
+      await db.registration.upsert({
+        where: {
+          eventId_userId: {
+            eventId: quizLink.eventId,
+            userId: session.user.id,
+          },
+        },
+        update: {}, // no-op if already exists
+        create: {
+          eventId: quizLink.eventId,
+          userId: session.user.id,
+          data: JSON.stringify({ auto: true, method: "google_login" }),
+          paymentStatus: "NONE",
+        },
+      });
+
+      // Also auto-add as PARTICIPANT member of the org if not already a member.
+      // This ensures the participant dashboard shows the event.
+      const event = await db.event.findUnique({
+        where: { id: quizLink.eventId },
+        select: { organizationId: true },
+      });
+      if (event?.organizationId) {
+        await db.organizationMember.upsert({
+          where: {
+            organizationId_userId: {
+              organizationId: event.organizationId,
+              userId: session.user.id,
+            },
+          },
+          update: {},
+          create: {
+            organizationId: event.organizationId,
+            userId: session.user.id,
+            role: "PARTICIPANT",
+            status: "ACTIVE",
+          },
+        }).catch(() => {});
       }
     }
 
