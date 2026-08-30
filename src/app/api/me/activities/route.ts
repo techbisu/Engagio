@@ -21,17 +21,13 @@ export async function GET(req: NextRequest) {
     const userId = session.user.id;
 
     // Find all events the user has registered for OR attempted.
-    // Registrations = events with a registration form.
-    // Attempts = events the user has taken a quiz for (even without registration).
-    // Quiz links = events with active quiz links the user can take (always include these
-    // so the dashboard shows events the user CAN participate in, even if they haven't yet).
-    const [registrations, attempts, activeQuizLinks] = await Promise.all([
+    // We collect unique event IDs from multiple sources and merge them.
+    const [registrations, attemptEvents, activeQuizLinks] = await Promise.all([
+      // 1. Events the user has registered for
       db.registration.findMany({
         where: { userId },
         select: {
-          id: true,
           eventId: true,
-          createdAt: true,
           event: {
             select: {
               id: true, title: true, slug: true, image: true,
@@ -42,31 +38,20 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: "desc" },
       }),
-      // Events the user has attempted (has at least one QuizAttempt)
+      // 2. Events the user has attempted (use groupBy to get unique event IDs
+      //    without the `distinct` + `include` incompatibility on PostgreSQL)
       db.quizAttempt.findMany({
         where: { userId },
-        select: {
-          eventId: true,
-          event: {
-            select: {
-              id: true, title: true, slug: true, image: true,
-              startDate: true, endDate: true, isActive: true,
-              organization: { select: { id: true, name: true, slug: true, logoUrl: true } },
-            },
-          },
-        },
-        distinct: ["eventId"],
+        select: { eventId: true },
       }),
-      // Events with active quiz links (events the user CAN take)
+      // 3. Events with active quiz links (events the user CAN take)
       db.quizLink.findMany({
         where: {
           isActive: true,
           event: { isActive: true },
         },
         select: {
-          id: true,
-          slug: true,
-          eventId: true,
+          id: true, slug: true, eventId: true,
           event: {
             select: {
               id: true, title: true, slug: true, image: true,
@@ -78,7 +63,27 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Merge: collect unique event IDs from all three sources.
+    // Get unique event IDs from attempts
+    const attemptEventIds = [...new Set(attemptEvents.map((a) => a.eventId))]
+
+    // Fetch event details for attempted events (not already in registrations)
+    const regEventIds = new Set(registrations.map((r) => r.eventId))
+    const newAttemptEventIds = attemptEventIds.filter((id) => !regEventIds.has(id))
+
+    let attemptedEvents: { eventId: string; event: any }[] = []
+    if (newAttemptEventIds.length > 0) {
+      const events = await db.event.findMany({
+        where: { id: { in: newAttemptEventIds } },
+        select: {
+          id: true, title: true, slug: true, image: true,
+          startDate: true, endDate: true, isActive: true,
+          organization: { select: { id: true, name: true, slug: true, logoUrl: true } },
+        },
+      })
+      attemptedEvents = events.map((ev) => ({ eventId: ev.id, event: ev }))
+    }
+
+    // Merge: collect unique event IDs from all sources.
     const eventMap = new Map<string, { event: any; quizLinkSlug?: string }>()
 
     // Add registered events
@@ -87,7 +92,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Add attempted events
-    for (const att of attempts) {
+    for (const att of attemptedEvents) {
       if (!eventMap.has(att.eventId)) {
         eventMap.set(att.eventId, { event: att.event })
       }
@@ -98,7 +103,6 @@ export async function GET(req: NextRequest) {
       if (!eventMap.has(ql.eventId)) {
         eventMap.set(ql.eventId, { event: ql.event, quizLinkSlug: ql.slug })
       } else {
-        // Already in the map — add the quiz link slug if missing
         const existing = eventMap.get(ql.eventId)!
         if (!existing.quizLinkSlug) existing.quizLinkSlug = ql.slug
       }
@@ -110,7 +114,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ events: [] });
     }
 
-    // For each event, fetch activities (LIVE + SCHEDULED) + quiz links.
+    // For each event, fetch activities + quiz links.
     const eventsWithActivities = await Promise.all(
       allEventIds.map(async (eventId) => {
         const entry = eventMap.get(eventId)!
@@ -128,42 +132,21 @@ export async function GET(req: NextRequest) {
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         })
 
-        // Fetch ALL active quiz links for this event (not just from activities).
-        // This ensures the dashboard shows "Start Quiz" even if no Activity row exists.
+        // Fetch ALL active quiz links for this event
         const quizLinksForEvent = await db.quizLink.findMany({
           where: { eventId, isActive: true },
           select: { id: true, slug: true, timeLimit: true, passThreshold: true, questionCount: true },
         })
-
-        // If there are quiz links but no activities, create a synthetic activity
-        // so the dashboard shows a "Start Quiz" button.
         const quizLinkMap = new Map(quizLinksForEvent.map((ql) => [ql.id, ql]))
 
-        // If we found a quiz link slug from the activeQuizLinks query, ensure it's included
-        if (entry.quizLinkSlug && !quizLinksForEvent.find((ql) => ql.slug === entry.quizLinkSlug)) {
-          const ql = await db.quizLink.findUnique({
-            where: { slug: entry.quizLinkSlug },
-            select: { id: true, slug: true, timeLimit: true, passThreshold: true, questionCount: true },
-          })
-          if (ql) {
-            quizLinksForEvent.push(ql)
-            quizLinkMap.set(ql.id, ql)
-          }
-        }
-
-        // Build activities list — include real activities + a synthetic "quiz" activity
-        // for each quiz link that doesn't have a matching Activity row.
+        // Build synthetic activities for quiz links not already linked to an Activity
         const activityQuizLinkIds = new Set(activities.map((a) => a.quizLinkId).filter(Boolean))
         const standaloneQuizLinks = quizLinksForEvent.filter((ql) => !activityQuizLinkIds.has(ql.id))
 
         const allActivities = [
           ...activities.map((a) => ({
-            id: a.id,
-            type: a.type,
-            title: a.title,
-            description: a.description,
-            status: a.status,
-            slug: a.slug,
+            id: a.id, type: a.type, title: a.title, description: a.description,
+            status: a.status, slug: a.slug,
             scheduledAt: a.scheduledAt?.toISOString() ?? null,
             endsAt: a.endsAt?.toISOString() ?? null,
             isAcceptingResponses: a.isAcceptingResponses,
@@ -171,7 +154,6 @@ export async function GET(req: NextRequest) {
             participantCount: a._count.participations,
             quizLink: a.quizLinkId ? quizLinkMap.get(a.quizLinkId) : null,
           })),
-          // Add standalone quiz links as synthetic activities
           ...standaloneQuizLinks.map((ql) => ({
             id: `quiz-${ql.id}`,
             type: "QUIZ",
@@ -179,11 +161,9 @@ export async function GET(req: NextRequest) {
             description: null,
             status: "LIVE" as const,
             slug: ql.slug,
-            scheduledAt: null,
-            endsAt: null,
+            scheduledAt: null, endsAt: null,
             isAcceptingResponses: true,
-            questionCount: 0,
-            participantCount: 0,
+            questionCount: 0, participantCount: 0,
             quizLink: ql,
           })),
         ]
@@ -199,9 +179,7 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    // Filter out events with no activities/quiz links
     const filtered = eventsWithActivities.filter((e) => e.activities.length > 0)
-
     return NextResponse.json({ events: filtered });
   } catch (e) {
     console.error("[GET /api/me/activities] error:", e);
