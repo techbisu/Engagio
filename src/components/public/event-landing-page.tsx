@@ -347,7 +347,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
 
       {/* JOIN / REGISTRATION MODAL */}
       <Dialog open={showJoinModal} onOpenChange={setShowJoinModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">Join {event.title}</DialogTitle>
             <DialogDescription>

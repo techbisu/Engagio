@@ -22,7 +22,9 @@ interface RegistrationField {
   label: string
   type: 'text' | 'email' | 'tel' | 'number' | 'textarea' | 'checkbox' | 'date' | 'select'
   required: boolean
-  options?: string[] // For select fields
+  options?: string[]
+  placeholder?: string | null
+  helpText?: string | null
 }
 
 export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationFormProps) {
@@ -95,46 +97,25 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validate required fields
     const newErrors: Record<string, string> = {}
     data?.forEach((field: RegistrationField) => {
       if (field.required) {
         const value = formData[field.id]
         if (field.type === 'checkbox') {
-          if (value !== true) {
-            newErrors[field.id] = `Please check ${field.label}`
-          }
+          if (value !== true) newErrors[field.id] = `Please check ${field.label}`
         } else if (field.type === 'number') {
-          if (value === undefined || value === '' || isNaN(Number(value))) {
-            newErrors[field.id] = `${field.label} is required`
-          }
+          if (value === undefined || value === '' || isNaN(Number(value))) newErrors[field.id] = `${field.label} is required`
         } else {
-          if (!value || String(value).trim() === '') {
-            newErrors[field.id] = `${field.label} is required`
-          }
+          if (!value || String(value).trim() === '') newErrors[field.id] = `${field.label} is required`
         }
       }
-      
-      // Email validation
       if (field.type === 'email' && formData[field.id]) {
         const email = String(formData[field.id]).trim()
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        if (!emailRegex.test(email)) {
-          newErrors[field.id] = 'Invalid email format'
-        }
-      }
-      
-      // Number validation
-      if (field.type === 'number' && formData[field.id] && formData[field.id] !== '') {
-        if (isNaN(Number(formData[field.id]))) {
-          newErrors[field.id] = 'Please enter a valid number'
-        }
+        if (!emailRegex.test(email)) newErrors[field.id] = 'Invalid email format'
       }
     })
-    
     setErrors(newErrors)
-    
     if (Object.keys(newErrors).length === 0) {
       submitRegistration(formData)
     }
@@ -144,9 +125,9 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
     setFormData(prev => ({ ...prev, [fieldId]: value }))
     if (errors[fieldId]) {
       setErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[fieldId]
-        return newErrors
+        const next = { ...prev }
+        delete next[fieldId]
+        return next
       })
     }
   }
@@ -165,9 +146,9 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
         <div className="mb-6 grid size-20 place-items-center rounded-full bg-emerald-500/20">
           <CheckCircle className="size-10 text-emerald-500" />
         </div>
-        <h3 className="text-2xl font-bold text-white">You're registered!</h3>
-        <p className="mt-2 text-white/60">
-          Thank you for registering for this event. We'll send you updates soon.
+        <h3 className="text-2xl font-bold">You&apos;re registered!</h3>
+        <p className="mt-2 text-muted-foreground">
+          Thank you for registering for this event. We&apos;ll send you updates soon.
         </p>
       </div>
     )
@@ -177,80 +158,78 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
     return null
   }
 
+  // Use theme-aware (light/dark) styling — no hardcoded white-on-dark colors.
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur">
+    <Card className="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {data.map((field: RegistrationField) => (
-            <div key={field.id} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor={field.id} className="text-sm font-medium text-white">
-                  {field.label}
-                  {field.required && <span className="text-rose-500">*</span>}
-                </Label>
-              </div>
-              
+            <div key={field.id} className="space-y-1.5">
+              <Label htmlFor={field.id} className="text-sm font-medium text-foreground">
+                {field.label}
+                {field.required && <span className="text-rose-500"> *</span>}
+              </Label>
+
               {field.type === 'textarea' && (
                 <Textarea
                   id={field.id}
                   value={String(formData[field.id] || '')}
                   onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="border-white/10 bg-white/5 text-white focus:border-emerald-500"
-                  placeholder={`Enter your ${field.label.toLowerCase()}`}
+                  placeholder={field.placeholder || `Enter your ${field.label.toLowerCase()}`}
                 />
               )}
-              
+
               {field.type === 'checkbox' && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 py-1">
                   <Checkbox
                     id={field.id}
                     checked={!!formData[field.id]}
                     onCheckedChange={(checked) => handleChange(field.id, checked)}
                   />
-                  <label htmlFor={field.id} className="text-sm text-white/80">
+                  <label htmlFor={field.id} className="text-sm text-muted-foreground">
                     I confirm {field.label.toLowerCase()}
                   </label>
                 </div>
               )}
-              
+
               {field.type === 'select' && (
                 <select
                   id={field.id}
                   value={String(formData[field.id] || '')}
                   onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+                  className="w-full rounded-md border border-slate-200 bg-background px-3 py-2 text-sm text-foreground focus:border-emerald-500 focus:outline-none dark:border-slate-800"
                 >
                   <option value="">Select an option</option>
                   {field.options?.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
+                    <option key={option} value={option}>{option}</option>
                   ))}
                 </select>
               )}
-              
+
               {field.type === 'date' && (
                 <Input
                   id={field.id}
                   type="date"
                   value={String(formData[field.id] || '')}
                   onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="border-white/10 bg-white/5 text-white focus:border-emerald-500"
                 />
               )}
-              
+
               {(field.type === 'text' || field.type === 'email' || field.type === 'tel' || field.type === 'number') && (
                 <Input
                   id={field.id}
                   type={field.type}
                   value={String(formData[field.id] || '')}
                   onChange={(e) => handleChange(field.id, field.type === 'number' ? Number(e.target.value) : e.target.value)}
-                  className="border-white/10 bg-white/5 text-white focus:border-emerald-500"
-                  placeholder={`Enter your ${field.label.toLowerCase()}`}
+                  placeholder={field.placeholder || `Enter your ${field.label.toLowerCase()}`}
                   readOnly={field.type === 'email' && !!user?.email && formData[field.id] === user.email}
                 />
               )}
-              
+
+              {field.helpText && (
+                <p className="text-xs italic text-muted-foreground">{field.helpText}</p>
+              )}
+
               {errors[field.id] && (
                 <p className="text-xs text-rose-500">{errors[field.id]}</p>
               )}
@@ -260,7 +239,7 @@ export function EventRegistrationForm({ eventId, onSuccess }: EventRegistrationF
           <Button
             type="submit"
             size="lg"
-            className="w-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-400"
+            className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
             disabled={isPending}
           >
             {isPending ? (
