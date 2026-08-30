@@ -69,7 +69,7 @@ interface RegisteredActivity {
   isAcceptingResponses: boolean
   questionCount: number
   participantCount: number
-  quizLink: { slug: string; timeLimit: number; passThreshold: number } | null
+  quizLink: { slug: string; timeLimit: number; passThreshold: number; questionCount?: number } | null
 }
 
 interface RegisteredEvent {
