@@ -14,9 +14,15 @@ import {
   Download,
   Eye,
   EyeOff,
+  ExternalLink,
+  Facebook,
+  Link2,
+  Linkedin,
   Loader2,
+  MessageCircle,
   Minus,
   MousePointerClick,
+  Twitter,
   Trophy,
   X,
 } from "lucide-react"
@@ -55,7 +61,7 @@ import type {
   AttemptReviewQuestion,
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
-import { ShareAchievementButton } from "@/components/achievements/share-achievement-button"
+
 
 interface QuizResultsProps {
   attemptId: string
@@ -112,17 +118,39 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
 
   // Case A: instructor has hidden results entirely (showResults === false).
   // If a certificate was auto-generated, show a participation certificate
-  // screen with a share button (LinkedIn, WhatsApp, etc.) instead of the
-  // generic "results coming soon" message.
+  // with the certificate image rendered on canvas + direct social share buttons.
   if (data.showResults === false) {
-    // If a certificate exists, show the participation certificate screen.
     if (data.certificate) {
       const verifyUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate.verificationToken}`
-      const orgName = data.organization?.name || data.event?.title || "Engagio"
+      const orgName = data.organization?.name || "Engagio"
       const orgLogo = data.organization?.logoUrl || null
+      const eventName = data.event?.title ?? "the assessment"
+      const shareText = `I successfully completed ${eventName} and earned a Participation Certificate from ${orgName}! 🎓✨`
+      const shareUrl = verifyUrl
+
+      const shareToSocial = (platform: string) => {
+        const text = encodeURIComponent(shareText)
+        const url = encodeURIComponent(shareUrl)
+        const links: Record<string, string> = {
+          linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
+          whatsapp: `https://wa.me/?text=${text}%20${url}`,
+          facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
+          x: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+        }
+        window.open(links[platform], "_blank", "noopener,noreferrer")
+      }
+
+      const copyLink = () => {
+        navigator.clipboard.writeText(`${shareText} ${shareUrl}`).then(() => {
+          toast.success("Copied to clipboard!")
+        }).catch(() => {
+          toast.error("Failed to copy")
+        })
+      }
+
       return (
         <Shell onBack={onBack}>
-          <Card className="w-full max-w-md overflow-hidden">
+          <Card className="w-full max-w-lg overflow-hidden">
             {/* Org logo header */}
             {orgLogo && (
               <div className="flex items-center justify-center bg-emerald-50 py-4 dark:bg-emerald-950/30">
@@ -141,14 +169,11 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               <CardTitle className="text-xl">Participation Certificate</CardTitle>
               <CardDescription>
                 Congratulations! You&apos;ve successfully completed{" "}
-                <span className="font-semibold text-foreground">
-                  {data.event?.title ?? "the assessment"}
-                </span>
-                .
+                <span className="font-semibold text-foreground">{eventName}</span>.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Certificate details — NO score shown */}
+            <CardContent className="space-y-5">
+              {/* Certificate details — NO score */}
               <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Certificate #</span>
@@ -174,30 +199,65 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                 </div>
               </div>
 
-              {/* Share section — NO score/percentage in the share card */}
+              {/* Social share buttons — direct, no achievement card */}
               <div className="space-y-3">
                 <p className="text-center text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                   Share your certificate
                 </p>
-                <ShareAchievementButton
-                  achievementInput={{
-                    type: "QUIZ_RESULT",
-                    eventId: data.event?.id,
-                    title: `${data.event?.title ?? "Assessment"} · Participation Certificate`,
-                    subtitle: data.organization?.name ?? data.event?.title,
-                    achievementData: {
-                      eventTitle: data.event?.title,
-                      orgName: data.organization?.name,
-                      orgLogoUrl: data.organization?.logoUrl,
-                      certificateNumber: data.certificate.certificateNumber,
-                      verifyUrl,
-                    },
-                    templateId: data.certificate.template as any || "modern",
-                    visibility: "LINK_ONLY",
-                  }}
-                  label="Share on LinkedIn"
-                  className="w-full"
-                />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => shareToSocial("linkedin")}
+                  >
+                    <Linkedin className="size-4 text-[#0A66C2]" />
+                    <span className="text-sm">LinkedIn</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => shareToSocial("whatsapp")}
+                  >
+                    <MessageCircle className="size-4 text-[#25D366]" />
+                    <span className="text-sm">WhatsApp</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => shareToSocial("facebook")}
+                  >
+                    <Facebook className="size-4 text-[#1877F2]" />
+                    <span className="text-sm">Facebook</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => shareToSocial("x")}
+                  >
+                    <Twitter className="size-4 text-slate-600 dark:text-slate-300" />
+                    <span className="text-sm">X</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={copyLink}
+                  >
+                    <Link2 className="size-4 text-emerald-600" />
+                    <span className="text-sm">Copy Link</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => window.open(verifyUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <ExternalLink className="size-4 text-emerald-600" />
+                    <span className="text-sm">Verify</span>
+                  </Button>
+                </div>
+                {/* Share text preview */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-muted-foreground dark:border-slate-800 dark:bg-slate-900">
+                  <span className="font-medium text-foreground">Share text:</span> {shareText}
+                </div>
               </div>
 
               <Button
@@ -586,42 +646,38 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
             </Collapsible>
           )}
 
-          {/* Share achievement CTA — only shown when results are published
-              and visible (showResults=true, published=true) */}
-          {data.published !== false && data.showResults !== false && (
+          {/* Share certificate — direct social buttons, no achievement card */}
+          {data.published !== false && data.showResults !== false && data.certificate && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 text-center dark:border-emerald-900/60 dark:bg-emerald-950/20">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-              Share your achievement
+              Share your certificate
             </p>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Show off your {data.event?.title ?? "quiz"} result with a
-              polished, shareable card.
-            </p>
-            <ShareAchievementButton
-              achievementInput={{
-                type: "QUIZ_RESULT",
-                eventId: data.event?.id,
-                title: data.event?.title
-                  ? `${data.event.title} · Quiz Result`
-                  : "Quiz Result",
-                subtitle: data.organization?.name ?? data.event?.title,
-                score: data.score ?? undefined,
-                totalScore: data.totalMarks ?? undefined,
-                percentage: data.percentage ?? undefined,
-                achievementData: {
-                  eventTitle: data.event?.title,
-                  orgName: data.organization?.name,
-                  orgLogoUrl: data.organization?.logoUrl,
-                  certificateNumber: data.certificate?.certificateNumber,
-                  verifyUrl: data.certificate
-                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate.verificationToken}`
-                    : undefined,
-                },
-                templateId: data.certificate?.template as any || "modern",
-                visibility: "LINK_ONLY",
-              }}
-              className="w-full sm:w-auto"
-            />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
+                window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, "_blank", "noopener,noreferrer")
+              }}>
+                <Linkedin className="size-4 text-[#0A66C2]" /> LinkedIn
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                const text = encodeURIComponent(`I completed ${data.event?.title ?? "the assessment"}! 🎓`)
+                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
+                window.open(`https://wa.me/?text=${text}%20${url}`, "_blank", "noopener,noreferrer")
+              }}>
+                <MessageCircle className="size-4 text-[#25D366]" /> WhatsApp
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
+                navigator.clipboard.writeText(url).then(() => toast.success("Link copied!"))
+              }}>
+                <Link2 className="size-4 text-emerald-600" /> Copy Link
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                window.open(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`, "_blank", "noopener,noreferrer")
+              }}>
+                <ExternalLink className="size-4 text-emerald-600" /> Verify
+              </Button>
+            </div>
           </div>
           )}
 
