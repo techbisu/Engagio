@@ -210,7 +210,6 @@ export async function POST(req: NextRequest) {
             userId,
             role: "PARTICIPANT",
             status: "ACTIVE",
-            joinedAt: new Date(),
           },
         });
       }
