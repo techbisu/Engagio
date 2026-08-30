@@ -73,7 +73,6 @@ interface RegisteredActivity {
 }
 
 interface RegisteredEvent {
-  registration: { id: string; createdAt: string }
   event: {
     id: string
     title: string
