@@ -155,9 +155,23 @@ export async function POST(req: NextRequest) {
     const participantName =
       ctx.userName?.trim() || ctx.userEmail || "Participant"
 
+    // Use the EVENT's org as the achievement's org, not the user's resolved org.
+    // This ensures achievements are correctly associated with the org that
+    // hosted the event, even for external participants.
+    let achievementOrgId = ctx.orgId
+    if (eventId) {
+      const ev = await db.event.findUnique({
+        where: { id: eventId },
+        select: { organizationId: true },
+      })
+      if (ev?.organizationId) {
+        achievementOrgId = ev.organizationId
+      }
+    }
+
     const created = await db.shareableAchievement.create({
       data: {
-        organizationId: ctx.orgId,
+        organizationId: achievementOrgId,
         eventId,
         activityId,
         participantId: ctx.userId,
