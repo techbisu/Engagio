@@ -148,7 +148,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Certificate details */}
+              {/* Certificate details — NO score shown */}
               <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Certificate #</span>
@@ -174,10 +174,10 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                 </div>
               </div>
 
-              {/* Share section */}
+              {/* Share section — NO score/percentage in the share card */}
               <div className="space-y-3">
                 <p className="text-center text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                  Share your achievement
+                  Share your certificate
                 </p>
                 <ShareAchievementButton
                   achievementInput={{
@@ -185,9 +185,6 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                     eventId: data.event?.id,
                     title: `${data.event?.title ?? "Assessment"} · Participation Certificate`,
                     subtitle: data.organization?.name ?? data.event?.title,
-                    score: data.score ?? undefined,
-                    totalScore: data.totalMarks ?? undefined,
-                    percentage: data.percentage ?? undefined,
                     achievementData: {
                       eventTitle: data.event?.title,
                       orgName: data.organization?.name,

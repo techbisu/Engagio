@@ -505,32 +505,11 @@ export function QuizRunner({
   }
 
   // ----- Render: submitted (no results shown) -----
-  if (status === "done" && submitResult && !submitResult.showResults) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 dark:bg-slate-950">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
-              <CheckCircle2 className="size-7 text-emerald-600" />
-            </div>
-            <CardTitle>Quiz submitted successfully</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Your answers have been recorded. Your instructor will share the
-              results soon.
-            </p>
-            <Button onClick={onExit} className="w-full bg-emerald-600 text-white hover:bg-emerald-700">
-              Back to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // ----- Render: results -----
-  if (status === "done" && submitResult && submitResult.showResults && attemptId) {
+  // When showResults is false, the quiz results page will render either:
+  // - A participation certificate screen (if a certificate was auto-generated)
+  // - A generic "submitted" screen (if no certificate)
+  // So we always render QuizResults here — it handles both cases.
+  if (status === "done" && submitResult && attemptId) {
     return <QuizResults attemptId={attemptId} user={user} onBack={onExit} />
   }
 
