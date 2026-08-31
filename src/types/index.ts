@@ -583,6 +583,19 @@ export interface PublicAchievementDto {
   // For OG metadata
   ogTitle: string
   ogDescription: string
+  // Optional linked certificate info — present when the shareable achievement
+  // row is linked to a Certificate (via certificateId). The public share page
+  // uses this to render the certificate image with `CertificateRenderer`.
+  certificate?: {
+    certificateNumber: string
+    verificationToken: string
+    template: string
+    recipientName: string
+    issuedAt: string
+    eventName: string
+    orgName: string | null
+    orgLogoUrl: string | null
+  } | null
 }
 
 export interface OrgAchievementStatsDto {

@@ -26,6 +26,11 @@ type RouteContext = { params: Promise<{ token: string }> }
  *
  * The DTO includes `ogTitle` + `ogDescription` (precomputed) and `imageUrl`
  * so crawlers and the public page can render the card.
+ *
+ * If the row is linked to a certificate (via `certificateId`), the response
+ * also includes a `certificate` object with template + recipient + issuedAt +
+ * verificationToken so the public share page can render the certificate
+ * image using `CertificateRenderer`.
  */
 export async function GET(_req: Request, ctxParams: RouteContext) {
   try {
@@ -70,9 +75,63 @@ export async function GET(_req: Request, ctxParams: RouteContext) {
 
     const dto = toPublicAchievementDto(row, og)
 
+    // If linked to a certificate, fetch the cert + org info so the share
+    // page can render the certificate image (CertificateRenderer canvas).
+    let certificateInfo: {
+      certificateNumber: string
+      verificationToken: string
+      template: string
+      recipientName: string
+      issuedAt: string
+      eventName: string
+      orgName: string | null
+      orgLogoUrl: string | null
+    } | null = null
+
+    if (row.certificateId) {
+      const cert = await db.certificate.findUnique({
+        where: { id: row.certificateId },
+        include: {
+          event: {
+            select: {
+              id: true,
+              title: true,
+              certOrgName: true,
+              organizationId: true,
+            },
+          },
+        },
+      })
+      if (cert && cert.status === "VALID") {
+        let orgLogoUrl: string | null = null
+        let orgName: string | null = cert.event?.certOrgName ?? null
+        if (cert.event?.organizationId) {
+          const org = await db.organization.findUnique({
+            where: { id: cert.event.organizationId },
+            select: { name: true, logoUrl: true },
+          })
+          if (org) {
+            orgLogoUrl = org.logoUrl ?? null
+            if (!orgName) orgName = org.name
+          }
+        }
+        certificateInfo = {
+          certificateNumber: cert.certificateNumber,
+          verificationToken: cert.verificationToken,
+          template: cert.template,
+          recipientName: cert.recipientName,
+          issuedAt: cert.issuedAt.toISOString(),
+          eventName: cert.event?.title ?? row.title ?? "Assessment",
+          orgName,
+          orgLogoUrl,
+        }
+      }
+    }
+
     // Return the raw PublicAchievementDto — the frontend's query is typed as
-    // `api<PublicAchievementDto>(...)`, so no envelope wrapper.
-    return NextResponse.json(dto)
+    // `api<PublicAchievementDto>(...)`, so no envelope wrapper. We tack on
+    // the optional `certificate` field for the share page to use.
+    return NextResponse.json({ ...dto, certificate: certificateInfo })
   } catch (e) {
     console.error("[GET /api/share/[token]] error:", e)
     return NextResponse.json(

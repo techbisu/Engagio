@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  Download,
   ExternalLink,
   Facebook,
   Link2,
@@ -24,6 +25,11 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { api, type PublicAchievementDto } from "./api"
+import {
+  CertificateRenderer,
+  downloadCertificatePng,
+} from "@/components/cert/certificate-renderer"
+import type { CertTemplate } from "@/types"
 
 export interface PublicSharePageProps {
   token: string
@@ -145,6 +151,10 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
   const orgName = data.achievementData?.orgName ?? data.subtitle ?? undefined
   const verifyUrl = data.achievementData?.verifyUrl ?? ""
   const certNumber = data.achievementData?.certificateNumber ?? ""
+  const linkedCert = data.certificate ?? null
+
+  const [certDataUrl, setCertDataUrl] = React.useState<string | null>(null)
+  const [isDownloading, setIsDownloading] = React.useState(false)
 
   const shareText = `I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Participation Certificate! 🎓✨`
 
@@ -165,6 +175,22 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
     navigator.clipboard.writeText(`${shareText} ${url}`).then(() => toast.success("Copied to clipboard!"))
   }
 
+  const handleDownload = () => {
+    if (!certDataUrl) {
+      toast.error("Certificate is still rendering — please wait a moment.")
+      return
+    }
+    setIsDownloading(true)
+    try {
+      downloadCertificatePng(certDataUrl, linkedCert?.certificateNumber ?? certNumber ?? "certificate")
+      toast.success("Certificate downloaded.")
+    } catch {
+      toast.error("Failed to download certificate.")
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Certificate header */}
@@ -179,27 +205,73 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
         </p>
       </div>
 
+      {/* Certificate image — rendered on canvas when linked cert is available */}
+      {linkedCert && (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <CertificateRenderer
+            template={linkedCert.template as CertTemplate}
+            recipientName={linkedCert.recipientName}
+            eventName={linkedCert.eventName}
+            orgName={linkedCert.orgName ?? undefined}
+            certificateNumber={linkedCert.certificateNumber}
+            issuedAt={linkedCert.issuedAt}
+            verificationUrl={
+              typeof window !== "undefined"
+                ? `${window.location.origin}/verify/${linkedCert.verificationToken}`
+                : `/verify/${linkedCert.verificationToken}`
+            }
+            logo={linkedCert.orgLogoUrl ?? null}
+            onRendered={setCertDataUrl}
+            className="w-full"
+          />
+        </div>
+      )}
+
       {/* Certificate details — NO score */}
       <div className="mx-auto max-w-md space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
-        {certNumber && (
+        {(linkedCert?.certificateNumber ?? certNumber) && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Certificate #</span>
-            <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{certNumber}</span>
+            <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+              {linkedCert?.certificateNumber ?? certNumber}
+            </span>
           </div>
         )}
-        {orgName && (
+        {(linkedCert?.orgName ?? orgName) && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Organization</span>
-            <span className="font-medium">{orgName}</span>
+            <span className="font-medium">{linkedCert?.orgName ?? orgName}</span>
           </div>
         )}
-        {data.createdAt && (
+        {linkedCert && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Date</span>
+            <span className="font-medium">
+              {format(new Date(linkedCert.issuedAt), "MMM d, yyyy")}
+            </span>
+          </div>
+        )}
+        {!linkedCert && data.createdAt && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Date</span>
             <span className="font-medium">{format(new Date(data.createdAt), "MMM d, yyyy")}</span>
           </div>
         )}
       </div>
+
+      {/* Download button — only when linked cert image is available */}
+      {linkedCert && (
+        <div className="mx-auto max-w-md">
+          <Button
+            onClick={handleDownload}
+            disabled={isDownloading || !certDataUrl}
+            className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <Download className="size-4" />
+            {isDownloading ? "Preparing…" : "Download PNG"}
+          </Button>
+        </div>
+      )}
 
       {/* Social share buttons */}
       <div className="mx-auto max-w-md space-y-3">

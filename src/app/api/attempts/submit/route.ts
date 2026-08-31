@@ -284,17 +284,31 @@ export async function POST(req: NextRequest) {
         data: { publishedAt: new Date() },
       });
       publishedAt = updated2.publishedAt ? updated2.publishedAt.toISOString() : null;
-
-      // Auto-generate certificate if the event has certAutoGenerate enabled.
-      // (For instant results, eligibility is checked at this point.)
-      try {
-        const { autoGenerateCertificates } = await import("@/lib/cert-service");
-        await autoGenerateCertificates(attempt.eventId);
-      } catch (e) {
-        console.error("[submit] auto-cert-generation error:", e);
-      }
     } else if (updated.publishedAt) {
       publishedAt = updated.publishedAt.toISOString();
+    }
+
+    // ── Auto-generate certificate for THIS participant immediately ──────────
+    // We call generateCertificate directly (not the batch autoGenerateCertificates)
+    // so the cert is created for the current submitter regardless of the
+    // event's `certAutoGenerate` flag (only `certEnabled` matters here).
+    // The eligibility check inside generateCertificate handles the rest.
+    let generatedCert: { certificateNumber: string; verificationToken: string } | null = null;
+    try {
+      const { generateCertificate } = await import("@/lib/cert-service");
+      const certResult = await generateCertificate({
+        eventId: attempt.eventId,
+        userId: session.user.id,
+        attemptId,
+      });
+      if (certResult.certificate) {
+        generatedCert = {
+          certificateNumber: certResult.certificate.certificateNumber,
+          verificationToken: certResult.certificate.verificationToken,
+        };
+      }
+    } catch (e) {
+      console.error("[submit] cert-generation error:", e);
     }
 
     return NextResponse.json({
@@ -307,6 +321,7 @@ export async function POST(req: NextRequest) {
       timeTaken: updated.timeTaken,
       showResults: attempt.quizLink.showResults,
       publishedAt,
+      certificate: generatedCert,
     });
   } catch (error) {
     console.error("[POST /api/attempts/submit] error:", error);

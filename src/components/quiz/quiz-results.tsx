@@ -61,7 +61,7 @@ import type {
   AttemptReviewQuestion,
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
-import { CertificateRenderer } from "@/components/cert/certificate-renderer"
+import { CertificateRenderer, downloadCertificatePng } from "@/components/cert/certificate-renderer"
 import type { CertTemplate } from "@/types"
 
 
@@ -663,39 +663,18 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
             </Collapsible>
           )}
 
-          {/* Share certificate — direct social buttons, no achievement card */}
+          {/* Certificate section — image + download + share buttons */}
           {data.published !== false && data.showResults !== false && data.certificate && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 text-center dark:border-emerald-900/60 dark:bg-emerald-950/20">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-              Share your certificate
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
-                window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, "_blank", "noopener,noreferrer")
-              }}>
-                <Linkedin className="size-4 text-[#0A66C2]" /> LinkedIn
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                const text = encodeURIComponent(`I completed ${data.event?.title ?? "the assessment"}! 🎓`)
-                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
-                window.open(`https://wa.me/?text=${text}%20${url}`, "_blank", "noopener,noreferrer")
-              }}>
-                <MessageCircle className="size-4 text-[#25D366]" /> WhatsApp
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                const url = encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`)
-                navigator.clipboard.writeText(url).then(() => toast.success("Link copied!"))
-              }}>
-                <Link2 className="size-4 text-emerald-600" /> Copy Link
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                window.open(`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${data.certificate!.verificationToken}`, "_blank", "noopener,noreferrer")
-              }}>
-                <ExternalLink className="size-4 text-emerald-600" /> Verify
-              </Button>
-            </div>
-          </div>
+            <CertificateSection
+              certificate={{
+                ...data.certificate,
+                template: data.certificate.template as CertTemplate,
+              }}
+              eventName={data.event?.title ?? "Assessment"}
+              orgName={data.organization?.name ?? null}
+              orgLogo={data.organization?.logoUrl ?? null}
+              shareText={`I completed ${data.event?.title ?? "the assessment"}${data.organization?.name ? ` organized by ${data.organization.name}` : ""} and earned a certificate! 🎓✨`}
+            />
           )}
 
           <Button
@@ -721,6 +700,141 @@ function Shell({
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
         {children}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Certificate section — rendered image + download + share buttons
+// ---------------------------------------------------------------------------
+
+interface CertificateSectionProps {
+  certificate: {
+    id: string
+    certificateNumber: string
+    verificationToken: string
+    template: CertTemplate
+    recipientName: string
+    issuedAt: string
+  }
+  eventName: string
+  orgName: string | null
+  orgLogo: string | null
+  shareText: string
+}
+
+function CertificateSection({ certificate, eventName, orgName, orgLogo, shareText }: CertificateSectionProps) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
+  const [certDataUrl, setCertDataUrl] = useState<string | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const verifyUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${certificate.verificationToken}`
+
+  const handleDownload = async () => {
+    if (!certDataUrl) {
+      toast.error("Certificate is still rendering — please wait a moment.")
+      return
+    }
+    setIsDownloading(true)
+    try {
+      downloadCertificatePng(certDataUrl, certificate.certificateNumber)
+      toast.success("Certificate downloaded.")
+    } catch {
+      toast.error("Failed to download certificate.")
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  const shareToSocial = (platform: string) => {
+    const text = encodeURIComponent(shareText)
+    const url = encodeURIComponent(verifyUrl)
+    const links: Record<string, string> = {
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
+      whatsapp: `https://wa.me/?text=${text}%20${url}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
+      x: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+    }
+    window.open(links[platform], "_blank", "noopener,noreferrer")
+  }
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(`${shareText} ${verifyUrl}`)
+      .then(() => toast.success("Copied to clipboard!"))
+      .catch(() => toast.error("Failed to copy"))
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+      {/* Section header */}
+      <div className="text-center">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+          Share your certificate
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Certificate #{certificate.certificateNumber} · Issued to{" "}
+          <span className="font-semibold text-foreground">{certificate.recipientName}</span>
+        </p>
+      </div>
+
+      {/* Certificate image rendered on canvas */}
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <CertificateRenderer
+          ref={canvasRef}
+          template={certificate.template}
+          recipientName={certificate.recipientName}
+          eventName={eventName}
+          orgName={orgName ?? undefined}
+          certificateNumber={certificate.certificateNumber}
+          issuedAt={certificate.issuedAt}
+          verificationUrl={verifyUrl}
+          logo={orgLogo}
+          onRendered={setCertDataUrl}
+          className="w-full"
+        />
+      </div>
+
+      {/* Download button — full width */}
+      <Button
+        onClick={handleDownload}
+        disabled={isDownloading || !certDataUrl}
+        className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+      >
+        <Download className="size-4" />
+        {isDownloading ? "Preparing…" : "Download PNG"}
+      </Button>
+
+      {/* Social share buttons */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => shareToSocial("linkedin")}>
+          <Linkedin className="size-4 text-[#0A66C2]" /> LinkedIn
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => shareToSocial("whatsapp")}>
+          <MessageCircle className="size-4 text-[#25D366]" /> WhatsApp
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => shareToSocial("facebook")}>
+          <Facebook className="size-4 text-[#1877F2]" /> Facebook
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => shareToSocial("x")}>
+          <Twitter className="size-4 text-slate-600 dark:text-slate-300" /> X
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={copyLink}>
+          <Link2 className="size-4 text-emerald-600" /> Copy Link
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => window.open(verifyUrl, "_blank", "noopener,noreferrer")}
+        >
+          <ExternalLink className="size-4 text-emerald-600" /> Verify
+        </Button>
+      </div>
+
+      {/* Share text preview */}
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5 text-xs text-muted-foreground dark:border-slate-800 dark:bg-slate-900">
+        <span className="font-medium text-foreground">Share text:</span> {shareText}
       </div>
     </div>
   )

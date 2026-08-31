@@ -11,24 +11,33 @@ import {
   Hash,
   ShieldAlert,
   Fingerprint,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 import { BrandLogo } from "@/components/shared/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CertificateRenderer,
+  downloadCertificatePng,
+} from "@/components/cert/certificate-renderer";
+import type { CertTemplate } from "@/types";
 
 interface VerifyResponse {
   verified: boolean;
   revoked?: boolean;
   certificate?: {
     certificateNumber: string;
+    verificationToken: string;
     recipientName: string;
     template: string;
     issuedAt: string;
     status: string;
     eventName: string;
     orgName?: string | null;
+    orgLogoUrl?: string | null;
   };
 }
 
@@ -93,7 +102,7 @@ export function VerifyCertificate({ token, onExit }: VerifyCertificateProps) {
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 py-12 sm:py-20">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           {isLoading ? (
             <VerifyLoading />
           ) : isError ? (
@@ -141,42 +150,89 @@ function VerifyLoading() {
 
 function VerifiedCard({ data }: { data: VerifyResponse }) {
   const cert = data.certificate;
+  const [certDataUrl, setCertDataUrl] = React.useState<string | null>(null);
   if (!cert) return <VerifyNotFound />;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
-      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 px-6 py-8 text-center dark:from-emerald-950/40 dark:to-teal-950/40">
-        <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-emerald-100/60 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/10">
-          <CheckCircle2 className="size-12" />
-        </div>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300 sm:text-3xl">
-          Certificate Verified
-        </h1>
-        <p className="mt-2 text-sm text-emerald-700/80 dark:text-emerald-200/80">
-          This is a valid certificate issued by Engagio.
-        </p>
-      </div>
 
-      <div className="space-y-4 px-6 py-6">
-        <DetailRow icon={User} label="Recipient" value={cert.recipientName} />
-        <DetailRow icon={Fingerprint} label="Event" value={cert.eventName} />
-        <DetailRow
-          icon={Calendar}
-          label="Issued on"
-          value={format(new Date(cert.issuedAt), "MMMM d, yyyy")}
-        />
-        <DetailRow icon={Hash} label="Certificate No." value={cert.certificateNumber} />
-        {cert.orgName && (
+  const verifyUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/verify/${cert.verificationToken}`
+      : `/verify/${cert.verificationToken}`;
+
+  const handleDownload = () => {
+    if (!certDataUrl) {
+      toast.error("Certificate is still rendering — please wait a moment.");
+      return;
+    }
+    downloadCertificatePng(certDataUrl, cert.certificateNumber);
+    toast.success("Certificate downloaded.");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 px-6 py-8 text-center dark:from-emerald-950/40 dark:to-teal-950/40">
+          <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-emerald-100/60 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/10">
+            <CheckCircle2 className="size-12" />
+          </div>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300 sm:text-3xl">
+            Certificate Verified
+          </h1>
+          <p className="mt-2 text-sm text-emerald-700/80 dark:text-emerald-200/80">
+            This is a valid certificate issued by {cert.orgName ?? "Engagio"}.
+          </p>
+        </div>
+
+        {/* Certificate image — rendered on canvas */}
+        <div className="px-4 py-6 sm:px-6">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <CertificateRenderer
+              template={cert.template as CertTemplate}
+              recipientName={cert.recipientName}
+              eventName={cert.eventName}
+              orgName={cert.orgName ?? undefined}
+              certificateNumber={cert.certificateNumber}
+              issuedAt={cert.issuedAt}
+              verificationUrl={verifyUrl}
+              logo={cert.orgLogoUrl ?? null}
+              onRendered={setCertDataUrl}
+              className="w-full"
+            />
+          </div>
+
+          {/* Download button */}
+          <div className="mt-4 flex justify-center">
+            <Button
+              onClick={handleDownload}
+              disabled={!certDataUrl}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              <Download className="size-4" /> Download Certificate
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-6">
+          <DetailRow icon={User} label="Recipient" value={cert.recipientName} />
+          <DetailRow icon={Fingerprint} label="Event" value={cert.eventName} />
           <DetailRow
-            icon={Building2}
-            label="Organization"
-            value={cert.orgName}
+            icon={Calendar}
+            label="Issued on"
+            value={format(new Date(cert.issuedAt), "MMMM d, yyyy")}
           />
-        )}
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-          <ShieldAlert className="size-4 shrink-0" />
-          <span>
-            Verified on {format(new Date(), "MMMM d, yyyy 'at' h:mm a")}
-          </span>
+          <DetailRow icon={Hash} label="Certificate No." value={cert.certificateNumber} />
+          {cert.orgName && (
+            <DetailRow
+              icon={Building2}
+              label="Organization"
+              value={cert.orgName}
+            />
+          )}
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <ShieldAlert className="size-4 shrink-0" />
+            <span>
+              Verified on {format(new Date(), "MMMM d, yyyy 'at' h:mm a")}
+            </span>
+          </div>
         </div>
       </div>
     </div>
