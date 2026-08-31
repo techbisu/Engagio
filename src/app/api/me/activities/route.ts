@@ -9,6 +9,12 @@ import { authOptions } from "@/lib/auth";
  * Returns current and upcoming activities for events the participant has
  * registered for. Only shows LIVE and SCHEDULED activities.
  *
+ * Org scoping: When the `x-org-slug` header is sent (set by the participant
+ * dashboard via the student `api()` helper), only events belonging to that
+ * org are returned. This prevents a participant on org A's dashboard from
+ * seeing events from org B, C, etc. just because they registered or
+ * attempted them previously.
+ *
  * Returns: { events: [{ event: {...}, activities: [...] }] }
  */
 export async function GET(req: NextRequest) {
@@ -20,12 +26,35 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id;
 
+    // ── Resolve the target org from the `x-org-slug` header ──────────────
+    // When present, we filter ALL sources (registrations, attempts, active
+    // quiz links) by this org so the participant dashboard only shows
+    // events/activities for the org they're currently viewing.
+    const targetOrgSlug = req.headers.get("x-org-slug");
+    let targetOrgId: string | null = null;
+    if (targetOrgSlug) {
+      const org = await db.organization.findUnique({
+        where: { slug: targetOrgSlug },
+        select: { id: true },
+      });
+      if (org) {
+        targetOrgId = org.id;
+      }
+      // If the org slug is invalid, we fall back to showing all events
+      // (no filter) so the dashboard isn't accidentally empty.
+    }
+
+    // Build the where-clause for org scoping once.
+    const orgFilter = targetOrgId
+      ? { event: { organizationId: targetOrgId } }
+      : {};
+
     // Find all events the user has registered for OR attempted.
     // We collect unique event IDs from multiple sources and merge them.
     const [registrations, attemptEvents, activeQuizLinks] = await Promise.all([
-      // 1. Events the user has registered for
+      // 1. Events the user has registered for (org-scoped)
       db.registration.findMany({
-        where: { userId },
+        where: { userId, ...orgFilter },
         select: {
           eventId: true,
           event: {
@@ -38,17 +67,19 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: "desc" },
       }),
-      // 2. Events the user has attempted (use groupBy to get unique event IDs
-      //    without the `distinct` + `include` incompatibility on PostgreSQL)
+      // 2. Events the user has attempted (org-scoped)
       db.quizAttempt.findMany({
-        where: { userId },
+        where: { userId, ...orgFilter },
         select: { eventId: true },
       }),
-      // 3. Events with active quiz links (events the user CAN take)
+      // 3. Events with active quiz links (org-scoped — only THIS org's links)
       db.quizLink.findMany({
         where: {
           isActive: true,
-          event: { isActive: true },
+          event: {
+            isActive: true,
+            ...(targetOrgId ? { organizationId: targetOrgId } : {}),
+          },
         },
         select: {
           id: true, slug: true, eventId: true,
@@ -73,7 +104,10 @@ export async function GET(req: NextRequest) {
     let attemptedEvents: { eventId: string; event: any }[] = []
     if (newAttemptEventIds.length > 0) {
       const events = await db.event.findMany({
-        where: { id: { in: newAttemptEventIds } },
+        where: {
+          id: { in: newAttemptEventIds },
+          ...(targetOrgId ? { organizationId: targetOrgId } : {}),
+        },
         select: {
           id: true, title: true, slug: true, image: true,
           startDate: true, endDate: true, isActive: true,

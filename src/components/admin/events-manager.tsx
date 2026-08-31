@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  Award,
   CalendarRange,
   MoreHorizontal,
   Pencil,
@@ -56,6 +57,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn, formatDate, truncate } from "@/lib/utils"
 import { CloudinaryImageUpload } from "@/components/shared/cloudinary-image-upload"
 
@@ -65,7 +73,7 @@ import {
   PaymentConfig,
   type PaymentConfigValue,
 } from "./payment-config"
-import type { EventDto, PaymentMethod } from "@/types"
+import type { EventDto, PaymentMethod, CertTemplate, CertIssueCondition } from "@/types"
 
 interface EventsManagerProps {
   onManageQuestions?: (eventId: string, eventTitle: string) => void
@@ -97,6 +105,13 @@ interface EventFormState {
   qrCodePublicId: string | null // Cloudinary publicId for delete-on-replace
   requireTransactionRef: boolean
   requireScreenshot: boolean
+  // Certificate configuration
+  certEnabled: boolean
+  certTemplate: CertTemplate
+  certIssueCondition: CertIssueCondition
+  certPassingScore: number
+  certAutoGenerate: boolean
+  certOrgName: string
 }
 
 const emptyForm: EventFormState = {
@@ -116,6 +131,13 @@ const emptyForm: EventFormState = {
   qrCodePublicId: null,
   requireTransactionRef: true,
   requireScreenshot: true,
+  // Certificate defaults
+  certEnabled: false,
+  certTemplate: "modern",
+  certIssueCondition: "COMPLETED",
+  certPassingScore: 60,
+  certAutoGenerate: false,
+  certOrgName: "",
 }
 
 export function EventsManager({
@@ -164,6 +186,13 @@ export function EventsManager({
           qrCodePublicId: payload.qrCodePublicId || null,
           requireTransactionRef: payload.requireTransactionRef,
           requireScreenshot: payload.requireScreenshot,
+          // Certificate config
+          certEnabled: payload.certEnabled,
+          certTemplate: payload.certTemplate,
+          certIssueCondition: payload.certIssueCondition,
+          certPassingScore: payload.certPassingScore,
+          certAutoGenerate: payload.certAutoGenerate,
+          certOrgName: payload.certOrgName || null,
         }),
       }),
     onSuccess: () => {
@@ -198,6 +227,14 @@ export function EventsManager({
           qrCodePublicId: payload.qrCodePublicId || null,
           requireTransactionRef: payload.requireTransactionRef,
           requireScreenshot: payload.requireScreenshot,
+          // Certificate config (always sent so toggling certEnabled off
+          // persists immediately).
+          certEnabled: payload.certEnabled,
+          certTemplate: payload.certTemplate,
+          certIssueCondition: payload.certIssueCondition,
+          certPassingScore: payload.certPassingScore,
+          certAutoGenerate: payload.certAutoGenerate,
+          certOrgName: payload.certOrgName || null,
         }),
       }),
     onSuccess: () => {
@@ -262,6 +299,13 @@ export function EventsManager({
       qrCodePublicId: ev.qrCodePublicId ?? null,
       requireTransactionRef: ev.requireTransactionRef ?? true,
       requireScreenshot: ev.requireScreenshot ?? true,
+      // Hydrate cert config from the event DTO
+      certEnabled: ev.certEnabled ?? false,
+      certTemplate: ev.certTemplate ?? "modern",
+      certIssueCondition: ev.certIssueCondition ?? "COMPLETED",
+      certPassingScore: ev.certPassingScore ?? 60,
+      certAutoGenerate: ev.certAutoGenerate ?? false,
+      certOrgName: ev.certOrgName ?? "",
     })
     setErrors({})
     setDialogOpen(true)
@@ -720,6 +764,166 @@ export function EventsManager({
                   }))
                 }
               />
+            </div>
+
+            {/* Certificate configuration */}
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded-md shrink-0",
+                      form.certEnabled
+                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                        : "bg-slate-100 text-slate-500 dark:bg-slate-500/10 dark:text-slate-400"
+                    )}
+                  >
+                    <Award className="size-4" />
+                  </span>
+                  <div>
+                    <h4 className="text-sm font-semibold">Certificate</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {form.certEnabled
+                        ? "Enabled — participants can earn a certificate."
+                        : "Not enabled — toggle on to issue certificates."}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={form.certEnabled}
+                  onCheckedChange={(v) => setForm({ ...form, certEnabled: v })}
+                  aria-label="Enable certificates"
+                />
+              </div>
+
+              {form.certEnabled && (
+                <div className="mt-2 space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  {/* Issue condition */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cert-condition" className="text-xs">
+                      Issue condition
+                    </Label>
+                    <Select
+                      value={form.certIssueCondition}
+                      onValueChange={(v) =>
+                        setForm({ ...form, certIssueCondition: v as CertIssueCondition })
+                      }
+                    >
+                      <SelectTrigger id="cert-condition" className="w-full">
+                        <SelectValue placeholder="Select condition" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PARTICIPATION">
+                          Participation — any submit qualifies
+                        </SelectItem>
+                        <SelectItem value="COMPLETED">
+                          Completed — any completed attempt qualifies
+                        </SelectItem>
+                        <SelectItem value="PASSED">
+                          Passed — must meet passing score
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      {form.certIssueCondition === "PARTICIPATION" &&
+                        "Every participant who submits the quiz earns a certificate, regardless of score."}
+                      {form.certIssueCondition === "COMPLETED" &&
+                        "Certificate is issued once the participant finishes the assessment."}
+                      {form.certIssueCondition === "PASSED" &&
+                        `Certificate requires a score ≥ ${form.certPassingScore}%.`}
+                    </p>
+                  </div>
+
+                  {/* Passing score — only shown for PASSED condition */}
+                  {form.certIssueCondition === "PASSED" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cert-pass" className="text-xs">
+                        Passing score (%)
+                      </Label>
+                      <Input
+                        id="cert-pass"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={form.certPassingScore}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            certPassingScore: Math.max(
+                              0,
+                              Math.min(100, Number(e.target.value) || 0)
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Template */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cert-template" className="text-xs">
+                      Template
+                    </Label>
+                    <Select
+                      value={form.certTemplate}
+                      onValueChange={(v) =>
+                        setForm({ ...form, certTemplate: v as CertTemplate })
+                      }
+                    >
+                      <SelectTrigger id="cert-template" className="w-full">
+                        <SelectValue placeholder="Select template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="modern">Modern</SelectItem>
+                        <SelectItem value="classic">Classic</SelectItem>
+                        <SelectItem value="elegant">Elegant</SelectItem>
+                        <SelectItem value="bold">Bold</SelectItem>
+                        <SelectItem value="minimal">Minimal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Auto-generate toggle */}
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-slate-100 p-2.5 dark:border-slate-800">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cert-auto" className="cursor-pointer text-xs">
+                        Auto-generate on submit
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        When enabled, certificates are issued immediately after
+                        the participant submits (or after admin publishes
+                        results).
+                      </p>
+                    </div>
+                    <Switch
+                      id="cert-auto"
+                      checked={form.certAutoGenerate}
+                      onCheckedChange={(v) =>
+                        setForm({ ...form, certAutoGenerate: v })
+                      }
+                    />
+                  </div>
+
+                  {/* Org name override (optional) */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cert-org-name" className="text-xs">
+                      Organization name on certificate (optional)
+                    </Label>
+                    <Input
+                      id="cert-org-name"
+                      value={form.certOrgName}
+                      onChange={(e) =>
+                        setForm({ ...form, certOrgName: e.target.value })
+                      }
+                      placeholder="Defaults to your organization name"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Override the organization name printed on the certificate.
+                      Leave blank to use the organization's actual name.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

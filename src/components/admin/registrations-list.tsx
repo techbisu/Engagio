@@ -485,7 +485,11 @@ export function RegistrationsList({
               ) : (
                 <dl className="space-y-2.5">
                   {fieldList.map((f) => {
-                    const v = selected.data?.[f.label]
+                    // IMPORTANT: form data is keyed by field ID (not label).
+                    // The table view uses r.data?.[f.id] correctly; this dialog
+                    // previously used f.label which always returned undefined
+                    // and showed em-dashes for every field.
+                    const v = selected.data?.[f.id]
                     return (
                       <div
                         key={f.id}

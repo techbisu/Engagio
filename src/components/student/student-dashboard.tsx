@@ -302,13 +302,22 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                   const Icon = meta.icon
                   const isLive = act.status === "LIVE"
                   return (
-                    <button
+                    <div
                       key={act.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => {
                         if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
                         else if (act.slug) { const s = getOrgSlug(); window.location.href = s ? "/org/" + s + "/participant/dashboard?sub=activity&activity=" + act.slug : "/dashboard?sub=activity&activity=" + act.slug }
                       }}
-                      className="group flex flex-col rounded-lg border border-white/60 bg-white/80 p-4 text-left shadow-sm transition hover:border-emerald-500/40 hover:bg-white hover:shadow-md dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          if (act.quizLink?.slug) onStartQuiz(act.quizLink.slug)
+                          else if (act.slug) { const s = getOrgSlug(); window.location.href = s ? "/org/" + s + "/participant/dashboard?sub=activity&activity=" + act.slug : "/dashboard?sub=activity&activity=" + act.slug }
+                        }
+                      }}
+                      className="group flex flex-col rounded-lg border border-white/60 bg-white/80 p-4 text-left shadow-sm transition hover:border-emerald-500/40 hover:bg-white hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 cursor-pointer"
                     >
                       <div className="mb-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -341,27 +350,29 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
                           {isLive ? "Start Now" : "View"}
                           <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
                         </span>
-<button
+                        <button
+                          type="button"
                           onClick={(e) => {
-                            e.stopPropagation();
-                            const s = getOrgSlug();
-                            const link = act.quizLink?.slug 
+                            e.stopPropagation()
+                            const s = getOrgSlug()
+                            const link = act.quizLink?.slug
                               ? window.location.origin + (s ? "/org/" + s + "/" + (act.eventSlug || "event") + "/quiz/" : "/quiz/") + act.quizLink.slug
-                              : act.slug 
+                              : act.slug
                                 ? window.location.origin + "/activity/" + act.slug
-                                : null;
+                                : null
                             if (link) {
-                              navigator.clipboard.writeText(link);
-                              toast.success("Link copied to clipboard!");
+                              navigator.clipboard.writeText(link)
+                              toast.success("Link copied to clipboard!")
                             }
                           }}
-                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition"
+                          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                           title="Copy activity link"
+                          aria-label="Copy activity link"
                         >
                           <Share2 className="size-3" />
                         </button>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>

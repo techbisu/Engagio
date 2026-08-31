@@ -89,9 +89,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ attempts: data, total: data.length });
     }
 
-    // Participant (or admin without all=) — own attempts only
+    // Participant (or admin without all=) — own attempts only.
+    // When the `x-org-slug` header is sent, filter to that org only so the
+    // participant dashboard only shows attempts for the current org.
+    const targetOrgSlug = req.headers.get("x-org-slug");
+    let targetOrgId: string | null = null;
+    if (targetOrgSlug) {
+      const org = await db.organization.findUnique({
+        where: { slug: targetOrgSlug },
+        select: { id: true },
+      });
+      if (org) targetOrgId = org.id;
+    }
+
     const attempts = await db.quizAttempt.findMany({
-      where: { userId: session.user.id, ...(eventId ? { eventId } : {}) },
+      where: {
+        userId: session.user.id,
+        ...(eventId ? { eventId } : {}),
+        ...(targetOrgId ? { event: { organizationId: targetOrgId } } : {}),
+      },
       orderBy: { startedAt: "desc" },
       take: 200,
       include: {

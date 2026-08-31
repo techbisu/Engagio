@@ -11,11 +11,23 @@ import type {
  * Shared fetch helper for the participant-facing API surface.
  * Always sends JSON content-type, surfaces server error messages,
  * and works with relative Next.js API routes only.
+ *
+ * Also sends the `x-org-slug` header (resolved from localStorage) so the
+ * backend can scope responses to the participant's active organization.
+ * This is important for /api/me/activities so only the current org's
+ * events/activities are returned (not events from every org the user has
+ * ever interacted with).
  */
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  const orgSlug =
+    typeof window !== "undefined" ? localStorage.getItem("engagio-org-slug") : null
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(orgSlug ? { "x-org-slug": orgSlug } : {}),
+      ...(init?.headers || {}),
+    },
   })
   if (!res.ok) {
     const e = await res.json().catch(() => ({}))
