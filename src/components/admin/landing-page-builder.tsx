@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { motion, AnimatePresence } from "framer-motion"
+import ReactMarkdown from "react-markdown"
 import { toast } from "sonner"
 import {
   Layout as LayoutIcon,
@@ -632,7 +633,7 @@ function LandingPagePreview({
 
         {/* Page body — wrap in `dark` to match the live landing page rendering */}
         <div className="dark max-h-[70vh] overflow-y-auto">
-          <div className="mx-auto max-w-5xl bg-slate-950 text-white">
+          <div className="mx-auto max-w-6xl bg-slate-950 text-white">
             <LandingSectionsRenderer sections={visibleSections} />
           </div>
         </div>
@@ -965,18 +966,37 @@ function HeroEditor({ data, onChange }: { data: HeroSectionData; onChange: (next
 
 // ── ABOUT ─────────────────────────────────────────────────────────────────
 function AboutEditor({ data, onChange }: { data: AboutSectionData; onChange: (next: Record<string, unknown>) => void }) {
+  const body = data.body ?? ""
+  const [showPreview, setShowPreview] = React.useState(false)
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor="about-body">Body</Label>
-      <Textarea
-        id="about-body"
-        rows={6}
-        value={data.body ?? ""}
-        onChange={(e) => onChange({ ...data, body: e.target.value })}
-        placeholder="Write a short description about the event. Markdown is supported on the public page."
-      />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="about-body">Body (Markdown)</Label>
+        <button
+          type="button"
+          onClick={() => setShowPreview(!showPreview)}
+          className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+        >
+          {showPreview ? "Edit" : "Preview"}
+        </button>
+      </div>
+      {showPreview ? (
+        <div className="min-h-[150px] rounded-md border bg-white p-3 dark:bg-slate-950">
+          <div className="prose prose-sm prose-slate max-w-none dark:prose-invert prose-headings:scroll-mt-20 prose-a:text-emerald-600 prose-headings:font-semibold prose-p:leading-relaxed prose-li:my-1 prose-img:rounded-lg">
+            {body ? <ReactMarkdown>{body}</ReactMarkdown> : <p className="text-muted-foreground italic">Nothing to preview yet.</p>}
+          </div>
+        </div>
+      ) : (
+        <Textarea
+          id="about-body"
+          rows={6}
+          value={body}
+          onChange={(e) => onChange({ ...data, body: e.target.value })}
+          placeholder="Write a short description about the event. Markdown is supported on the public page."
+        />
+      )}
       <p className="text-xs text-muted-foreground">
-        Tip: Markdown is rendered on the public landing page (headings, lists, links).
+        Tip: Markdown is rendered on the public landing page. Supports **bold**, _italic_, # headings, - lists, [links](url), and more.
       </p>
     </div>
   )
@@ -1634,16 +1654,35 @@ function StatsEditor({ data, onChange }: { data: StatsSectionData; onChange: (ne
 
 // ── CUSTOM ───────────────────────────────────────────────────────────────
 function CustomEditor({ data, onChange }: { data: CustomSectionData; onChange: (next: Record<string, unknown>) => void }) {
+  const body = data.body ?? ""
+  const [showPreview, setShowPreview] = React.useState(false)
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor="custom-body">Markdown body</Label>
-      <Textarea
-        id="custom-body"
-        rows={8}
-        value={data.body ?? ""}
-        onChange={(e) => onChange({ ...data, body: e.target.value })}
-        placeholder="# Heading&#10;&#10;Markdown is rendered on the public page. Supports **bold**, _italic_, lists, links, and code."
-      />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="custom-body">Markdown body</Label>
+        <button
+          type="button"
+          onClick={() => setShowPreview(!showPreview)}
+          className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+        >
+          {showPreview ? "Edit" : "Preview"}
+        </button>
+      </div>
+      {showPreview ? (
+        <div className="min-h-[200px] rounded-md border bg-white p-3 dark:bg-slate-950">
+          <div className="prose prose-sm prose-slate max-w-none dark:prose-invert prose-headings:scroll-mt-20 prose-a:text-emerald-600 prose-headings:font-semibold prose-p:leading-relaxed prose-li:my-1 prose-img:rounded-lg">
+            {body ? <ReactMarkdown>{body}</ReactMarkdown> : <p className="text-muted-foreground italic">Nothing to preview yet.</p>}
+          </div>
+        </div>
+      ) : (
+        <Textarea
+          id="custom-body"
+          rows={8}
+          value={body}
+          onChange={(e) => onChange({ ...data, body: e.target.value })}
+          placeholder="# Heading&#10;&#10;Markdown is rendered on the public page. Supports **bold**, _italic_, lists, links, and code."
+        />
+      )}
     </div>
   )
 }

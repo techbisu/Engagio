@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Enable the @tailwindcss/typography plugin so `prose` classes work for
+ * markdown rendering (landing page About/Custom sections, etc.). */
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

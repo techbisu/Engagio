@@ -154,7 +154,7 @@ function SectionHeading({
   )
 }
 
-const sectionWrap = "mx-auto max-w-4xl w-full px-4 py-10 sm:px-6"
+const sectionWrap = "mx-auto max-w-6xl w-full px-4 py-10 sm:px-6 lg:px-8"
 
 // ── HERO ──────────────────────────────────────────────────────────────────
 function HeroSectionView({ section }: { section: LandingSectionDto }) {
@@ -215,7 +215,7 @@ function AboutSectionView({ section }: { section: LandingSectionDto }) {
       <motion.div {...fadeUp}>
         <SectionHeading title={section.title} subtitle={section.subtitle} />
         {body && (
-          <div className="prose prose-slate mx-auto max-w-2xl dark:prose-invert prose-headings:scroll-mt-20 prose-a:text-emerald-600 prose-strong:text-slate-900 dark:prose-strong:text-slate-100">
+          <div className="prose prose-slate mx-auto max-w-3xl dark:prose-invert prose-headings:scroll-mt-20 prose-a:text-emerald-600 prose-strong:text-slate-900 dark:prose-strong:text-slate-100 prose-headings:font-semibold prose-p:leading-relaxed prose-li:my-1 prose-img:rounded-lg">
             <ReactMarkdown>{body}</ReactMarkdown>
           </div>
         )}
@@ -728,7 +728,7 @@ function CustomSectionView({ section }: { section: LandingSectionDto }) {
     <section className={sectionWrap}>
       <motion.div {...fadeUp}>
         <SectionHeading title={section.title} subtitle={section.subtitle} />
-        <div className="prose prose-slate mx-auto max-w-2xl dark:prose-invert prose-a:text-emerald-600 prose-headings:scroll-mt-20">
+        <div className="prose prose-slate mx-auto max-w-3xl dark:prose-invert prose-a:text-emerald-600 prose-headings:scroll-mt-20 prose-headings:font-semibold prose-p:leading-relaxed prose-li:my-1 prose-img:rounded-lg">
           <ReactMarkdown>{body}</ReactMarkdown>
         </div>
       </motion.div>
