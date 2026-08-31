@@ -55,6 +55,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn, formatDuration } from "@/lib/utils"
+import { shareCertificate } from "@/lib/share-utils"
 import { api } from "@/components/student/api"
 import type {
   AttemptCategoryStat,
@@ -848,16 +849,21 @@ function CertificateSection({ certificate, eventName, eventDescription, orgName,
     }
   }
 
-  const shareToSocial = (platform: string) => {
-    const text = encodeURIComponent(shareText)
-    const url = encodeURIComponent(verifyUrl)
-    const links: Record<string, string> = {
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
-      whatsapp: `https://wa.me/?text=${text}%20${url}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
-      x: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+  const shareToSocial = async (platform: string) => {
+    if (!certDataUrl) {
+      toast.error("Certificate is still rendering — please wait a moment.")
+      return
     }
-    window.open(links[platform], "_blank", "noopener,noreferrer")
+    const fileName = `certificate-${certificate.certificateNumber}.png`
+    await shareCertificate(
+      {
+        imageDataUrl: certDataUrl,
+        fileName,
+        caption: shareText,
+        url: verifyUrl,
+      },
+      platform
+    )
   }
 
   const copyLink = () => {

@@ -30,6 +30,7 @@ import {
   downloadCertificatePng,
 } from "@/components/cert/certificate-renderer"
 import type { CertTemplate } from "@/types"
+import { shareCertificate } from "@/lib/share-utils"
 
 export interface PublicSharePageProps {
   token: string
@@ -158,16 +159,24 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
 
   const shareText = `I'm proud to share that I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Certificate of Participation! 🎓✨`
 
-  const shareToSocial = (platform: string) => {
-    const text = encodeURIComponent(shareText)
-    const url = encodeURIComponent(verifyUrl || (typeof window !== "undefined" ? window.location.href : ""))
-    const links: Record<string, string> = {
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
-      whatsapp: `https://wa.me/?text=${text}%20${url}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
-      x: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+  const shareToSocial = async (platform: string) => {
+    if (!certDataUrl) {
+      toast.error("Certificate is still rendering — please wait a moment.")
+      return
     }
-    window.open(links[platform], "_blank", "noopener,noreferrer")
+    const fileName = linkedCert
+      ? `certificate-${linkedCert.certificateNumber}.png`
+      : "certificate.png"
+    const url = verifyUrl || (typeof window !== "undefined" ? window.location.href : "")
+    await shareCertificate(
+      {
+        imageDataUrl: certDataUrl,
+        fileName,
+        caption: shareText,
+        url,
+      },
+      platform
+    )
   }
 
   const copyLink = () => {

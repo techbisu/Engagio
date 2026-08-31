@@ -1,6 +1,33 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import { db } from "@/lib/db"
-import { publicUrl } from "@/lib/seo"
+import { publicUrl as publicUrlFallback } from "@/lib/seo"
+
+/**
+ * Resolve the current request's origin from the `x-forwarded-host` (Vercel
+ * proxy) or `host` headers. Falls back to the configured publicUrl() when
+ * headers are unavailable (e.g. during static generation).
+ *
+ * IMPORTANT: social crawlers (LinkedIn, Facebook, X, WhatsApp) fetch the
+ * og:image URL. If the URL points to a different domain than the site the
+ * user is on (e.g. engagio.app instead of ips2026.dosedailynews.com), the
+ * crawler can't fetch it and the preview shows nothing. We MUST build the
+ * og:image URL from the actual request host so it's reachable.
+ */
+async function resolveOrigin(): Promise<string> {
+  try {
+    const h = await headers()
+    const host =
+      h.get("x-forwarded-host") ||
+      h.get("host") ||
+      ""
+    const proto = h.get("x-forwarded-proto") || "https"
+    if (host) return `${proto}://${host}`
+  } catch {
+    // headers() not available (build time) — fall through
+  }
+  return publicUrlFallback("")
+}
 
 /**
  * /verify/[token] metadata.
@@ -20,6 +47,7 @@ export async function generateMetadata({
   params: Promise<{ token: string }>
 }): Promise<Metadata> {
   const { token } = await params
+  const origin = await resolveOrigin()
 
   const cert = await db.certificate.findUnique({
     where: { verificationToken: token },
@@ -48,7 +76,7 @@ export async function generateMetadata({
         description: "Verify the authenticity of a certificate issued on Engagio.",
         siteName: "Engagio",
         type: "website",
-        url: publicUrl(`/verify/${token}`),
+        url: `${origin}/verify/${token}`,
       },
       twitter: {
         card: "summary",
@@ -70,8 +98,8 @@ export async function generateMetadata({
   const eventName = cert.event?.title ?? "Assessment"
   const ogTitle = `${cert.recipientName} earned a Certificate of Participation`
   const ogDescription = `${cert.recipientName} successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""}. Verify the authenticity of this certificate on Engagio.`
-  const ogImageUrl = publicUrl(`/api/og/cert/${token}`)
-  const pageUrl = publicUrl(`/verify/${token}`)
+  const ogImageUrl = `${origin}/api/og/cert/${token}`
+  const pageUrl = `${origin}/verify/${token}`
 
   return {
     title: `${cert.recipientName}'s Certificate — Engagio`,
