@@ -35,7 +35,14 @@ export async function GET(
           },
         },
         event: {
-          select: { id: true, title: true, description: true, organizationId: true },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            organizationId: true,
+            certEnabled: true,
+            certIssueCondition: true,
+          },
         },
       },
     });

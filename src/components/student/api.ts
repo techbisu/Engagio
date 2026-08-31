@@ -225,7 +225,14 @@ export interface AttemptReviewPayload {
   /** True iff scoring details are visible to the participant. */
   published?: boolean
   publishedAt?: string | null
-  event?: { id: string; title: string; description?: string | null } | null
+  event?: {
+    id: string
+    title: string
+    description?: string | null
+    organizationId?: string
+    certEnabled?: boolean
+    certIssueCondition?: string
+  } | null
   quizLink?: {
     id: string
     slug?: string

@@ -677,6 +677,20 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
             />
           )}
 
+          {/* Fallback: certs enabled on the event but no cert was generated.
+              Show a helpful note so the participant knows why. */}
+          {data.published !== false && data.showResults !== false && !data.certificate && data.event?.certEnabled && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 text-center dark:border-amber-900/60 dark:bg-amber-950/20">
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                Certificate not available yet
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Your submission has been recorded. The certificate will appear here once
+                issued by the organizer.
+              </p>
+            </div>
+          )}
+
           <Button
             onClick={onBack}
             className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
