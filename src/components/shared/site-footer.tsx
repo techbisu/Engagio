@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Github, Twitter, Linkedin } from 'lucide-react'
+import { Twitter, Linkedin } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/brand-logo'
 import type { ViewName } from '@/types'
 
@@ -47,15 +47,6 @@ export function SiteFooter({ onNavigate }: SiteFooterProps = {}) {
               training, and certifications — from registration to certificate.
             </p>
             <div className="mt-5 flex items-center gap-2">
-              <a
-                href="https://github.com/techbisu/Engagio"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="GitHub"
-                className="grid size-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-600"
-              >
-                <Github className="size-4" />
-              </a>
               <a
                 href="#"
                 aria-label="Twitter / X"
