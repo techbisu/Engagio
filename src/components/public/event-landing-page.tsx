@@ -232,7 +232,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
               {hasCert && (
                 <span className="inline-flex items-center gap-1.5">
                   <Award className="size-4 text-emerald-400" />
-                  Certificate ({event.certPassingScore}% pass)
+                  Certificate
                 </span>
               )}
             </div>
