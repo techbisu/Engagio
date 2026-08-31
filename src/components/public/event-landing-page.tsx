@@ -8,6 +8,9 @@ import {
   ArrowRight,
   Building2,
   Globe,
+  Mail,
+  Phone,
+  ExternalLink,
   Ticket,
   BarChart3,
   Award,
@@ -50,6 +53,9 @@ interface EventData {
       logoUrl: string | null
       primaryColor: string
       description: string | null
+      website: string | null
+      email: string | null
+      phone: string | null
     } | null
   }
   quizLink: {
@@ -326,11 +332,57 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
                         <Building2 className="size-5 text-white/60" />
                       </div>
                     )}
-                    <div>
-                      <p className="font-semibold text-white">{org.name}</p>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-white">{org.name}</p>
                       <p className="text-xs text-white/50">Event Organizer</p>
                     </div>
                   </div>
+
+                  {/* Org description (if available) */}
+                  {org.description && (
+                    <p className="mt-3 text-sm leading-relaxed text-white/70 line-clamp-3">
+                      {org.description}
+                    </p>
+                  )}
+
+                  {/* Contact + website links with beautiful icons */}
+                  {(org.website || org.email || org.phone) && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {org.website && (
+                        <a
+                          href={org.website.startsWith('http') ? org.website : `https://${org.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-white"
+                          title={`Visit ${org.name}'s website`}
+                        >
+                          <Globe className="size-3.5 text-emerald-300 transition group-hover:scale-110" />
+                          <span>Website</span>
+                          <ExternalLink className="size-3 text-white/40 transition group-hover:text-white/70" />
+                        </a>
+                      )}
+                      {org.email && (
+                        <a
+                          href={`mailto:${org.email}`}
+                          className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-white"
+                          title={`Email ${org.email}`}
+                        >
+                          <Mail className="size-3.5 text-emerald-300 transition group-hover:scale-110" />
+                          <span>Email</span>
+                        </a>
+                      )}
+                      {org.phone && (
+                        <a
+                          href={`tel:${org.phone.replace(/\s+/g, '')}`}
+                          className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-white"
+                          title={`Call ${org.phone}`}
+                        >
+                          <Phone className="size-3.5 text-emerald-300 transition group-hover:scale-110" />
+                          <span>Call</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
