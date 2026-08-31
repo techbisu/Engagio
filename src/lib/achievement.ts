@@ -43,8 +43,10 @@ export function buildOgMetadata(params: {
   switch (type) {
     case "QUIZ_RESULT":
     case "KNOWLEDGE_CHECK_RESULT":
+      // For participation certificates (no score), use a completion message
+      // instead of "scored X%". This prevents score leakage on share pages.
       ogTitle =
-        percentage != null
+        percentage != null && percentage > 0
           ? `${participantName} scored ${percentage}% in ${title}`
           : `${participantName} completed ${title}`
       break

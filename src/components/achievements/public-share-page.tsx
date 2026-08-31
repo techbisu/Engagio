@@ -6,25 +6,27 @@ import Link from "next/link"
 import {
   ArrowLeft,
   CalendarDays,
-  Eye,
-  EyeOff,
+  CheckCircle2,
+  ExternalLink,
+  Facebook,
+  Link2,
+  Linkedin,
   Loader2,
   Lock,
-  Sparkles,
-  Trophy,
+  MessageCircle,
+  Twitter,
   Unlink,
 } from "lucide-react"
 import { format } from "date-fns"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ShareAchievementCard } from "./share-achievement-card"
 import { api, type PublicAchievementDto } from "./api"
 
 export interface PublicSharePageProps {
   token: string
-  /** Optional: home handler used by the "back to home" button. */
   onExit?: () => void
 }
 
@@ -38,30 +40,18 @@ type FetchState =
 export function PublicSharePage({ token, onExit }: PublicSharePageProps) {
   const query = useQuery<PublicAchievementDto>({
     queryKey: ["share", "public", token],
-    queryFn: () =>
-      api<PublicAchievementDto>(`/api/share/${token}`, {
-        // Public endpoint — no auth headers needed.
-      }),
+    queryFn: () => api<PublicAchievementDto>(`/api/share/${token}`, {}),
     enabled: !!token,
     retry: false,
     staleTime: 60_000,
   })
 
-  // Derive the UI state from the query result.
   const state: FetchState = React.useMemo(() => {
     if (query.isLoading) return { kind: "loading" }
     if (query.isError) {
-      const status =
-        (query.error as { status?: number } | undefined)?.status ?? 0
-      // If the response was 404 (revoked) vs 403 (private), we want different UI.
-      // We can't always read the status from the Error — so we re-derive from message.
       const msg = query.error instanceof Error ? query.error.message : ""
-      if (/private|403|forbidden/i.test(msg)) {
-        return { kind: "private" }
-      }
-      if (/revok|no longer|404|not found/i.test(msg)) {
-        return { kind: "revoked" }
-      }
+      if (/private|403|forbidden/i.test(msg)) return { kind: "private" }
+      if (/revok|no longer|404|not found/i.test(msg)) return { kind: "revoked" }
       return { kind: "error", status: 0, message: msg || "Couldn't load." }
     }
     const data = query.data
@@ -70,35 +60,19 @@ export function PublicSharePage({ token, onExit }: PublicSharePageProps) {
     return { kind: "ready", data }
   }, [query])
 
-  // Set document.title + meta description dynamically for OG-ish behavior.
   React.useEffect(() => {
     if (state.kind === "ready") {
-      const { ogTitle, ogDescription } = state.data
-      document.title = ogTitle
-        ? `${ogTitle} · Engagio`
-        : `${state.data.participantName}'s Achievement · Engagio`
-      setMetaDescription(
-        ogDescription ||
-          `${state.data.participantName} achieved ${state.data.title} on Engagio.`,
-      )
-      setMetaProperty("og:title", ogTitle || state.data.title)
-      setMetaProperty(
-        "og:description",
-        ogDescription ||
-          `${state.data.participantName} achieved ${state.data.title}.`,
-      )
-      if (state.data.imageUrl) {
-        setMetaProperty("og:image", state.data.imageUrl)
-        setMetaName("twitter:card", "summary_large_image")
-      }
+      const { data } = state
+      document.title = `${data.participantName}'s Certificate · Engagio`
+      setMetaProperty("og:title", `${data.participantName} earned a Participation Certificate`)
+      setMetaProperty("og:description", `${data.participantName} completed ${data.achievementData?.eventTitle ?? data.title}.`)
     } else {
-      document.title = "Shared Achievement · Engagio"
+      document.title = "Shared Certificate · Engagio"
     }
   }, [state])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-emerald-50/40 dark:from-slate-950 dark:via-slate-950 dark:to-emerald-950/20">
-      {/* Top bar */}
       <header className="sticky top-0 z-10 border-b border-slate-200/60 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <button
@@ -107,229 +81,171 @@ export function PublicSharePage({ token, onExit }: PublicSharePageProps) {
             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-3.5" />
-            <span className="hidden sm:inline">Back to Engagio</span>
+            <span className="hidden sm:inline">Back</span>
             <span className="sm:hidden">Back</span>
           </button>
-          <Link
-            href="/login"
-            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-300"
-          >
-            <Sparkles className="size-3.5" />
-            Powered by Engagio
-          </Link>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 items-center justify-center px-4 py-8 sm:py-12">
         <div className="w-full">
           {state.kind === "loading" ? <LoadingState /> : null}
-          {state.kind === "error" ? (
-            <ErrorState message={state.message} onExit={onExit} />
-          ) : null}
-          {state.kind === "private" ? (
-            <PrivateState onExit={onExit} />
-          ) : null}
-          {state.kind === "revoked" ? (
-            <RevokedState onExit={onExit} />
-          ) : null}
-          {state.kind === "ready" ? (
-            <AchievementView data={state.data} onExit={onExit} />
-          ) : null}
+          {state.kind === "error" ? <ErrorState message={state.message} onExit={onExit} /> : null}
+          {state.kind === "private" ? <PrivateState onExit={onExit} /> : null}
+          {state.kind === "revoked" ? <RevokedState onExit={onExit} /> : null}
+          {state.kind === "ready" ? <CertificateView data={state.data} onExit={onExit} /> : null}
         </div>
       </main>
-
-      <footer className="mt-auto border-t border-slate-200/60 px-4 py-4 dark:border-slate-800">
-        <div className="mx-auto max-w-3xl text-center text-[11px] text-muted-foreground">
-          <span>© {new Date().getFullYear()} Engagio · </span>
-          <Link
-            href="/login"
-            className="font-medium text-emerald-700 hover:underline dark:text-emerald-300"
-          >
-            Create your own event
-          </Link>
-        </div>
-      </footer>
     </div>
   )
 }
-
-// ---- Loading / error / empty states ----
 
 function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-20">
       <Loader2 className="size-10 animate-spin text-emerald-600" />
-      <p className="text-sm text-muted-foreground">Loading achievement…</p>
+      <p className="text-sm text-muted-foreground">Loading certificate…</p>
     </div>
   )
 }
 
-function ErrorState({
-  message,
-  onExit,
-}: {
-  message: string
-  onExit?: () => void
-}) {
+function ErrorState({ message, onExit }: { message: string; onExit?: () => void }) {
   return (
-    <CenteredCard
-      icon={<Unlink className="size-8 text-rose-500" />}
-      title="Couldn't load this achievement"
-      subtitle={message}
-    >
-      <Button onClick={() => onExit?.()} variant="outline">
-        Back to Engagio
-      </Button>
-    </CenteredCard>
+    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border bg-white p-8 text-center shadow-sm dark:bg-slate-900">
+      <Unlink className="size-8 text-rose-500" />
+      <h1 className="text-lg font-semibold">Couldn&apos;t load this certificate</h1>
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <Button onClick={() => onExit?.()} variant="outline">Back</Button>
+    </div>
   )
 }
 
 function PrivateState({ onExit }: { onExit?: () => void }) {
   return (
-    <CenteredCard
-      icon={<Lock className="size-8 text-slate-500" />}
-      title="This achievement is private"
-      subtitle="The owner has set this achievement to private. Only they can view it."
-    >
-      <Button onClick={() => onExit?.()} variant="outline">
-        Back to Engagio
-      </Button>
-    </CenteredCard>
+    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border bg-white p-8 text-center shadow-sm dark:bg-slate-900">
+      <Lock className="size-8 text-slate-500" />
+      <h1 className="text-lg font-semibold">This certificate is private</h1>
+      <Button onClick={() => onExit?.()} variant="outline">Back</Button>
+    </div>
   )
 }
 
 function RevokedState({ onExit }: { onExit?: () => void }) {
   return (
-    <CenteredCard
-      icon={<Unlink className="size-8 text-amber-500" />}
-      title="This link is no longer available"
-      subtitle="The owner has revoked this share link, or it doesn't exist anymore."
-    >
-      <Button onClick={() => onExit?.()} variant="outline">
-        Back to Engagio
-      </Button>
-    </CenteredCard>
-  )
-}
-
-function AchievementView({
-  data,
-  onExit,
-}: {
-  data: PublicAchievementDto
-  onExit?: () => void
-}) {
-  return (
-    <div className="space-y-6">
-      {/* Achievement card (use generated PNG if available, else styled card) */}
-      <div className="mx-auto w-full max-w-[420px]">
-        {data.imageUrl ? (
-          <img
-            src={data.imageUrl}
-            alt={`${data.title} — ${data.participantName}`}
-            className="w-full rounded-2xl shadow-xl ring-1 ring-black/5"
-          />
-        ) : (
-          <ShareAchievementCard achievement={data} />
-        )}
-      </div>
-
-      {/* Meta row */}
-      <div className="mx-auto flex max-w-[420px] flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-        {data.participantName && (
-          <Badge variant="outline" className="gap-1">
-            <Trophy className="size-3 text-emerald-600" />
-            {data.participantName}
-          </Badge>
-        )}
-        {data.createdAt && (
-          <Badge variant="outline" className="gap-1">
-            <CalendarDays className="size-3" />
-            {format(new Date(data.createdAt), "MMM d, yyyy")}
-          </Badge>
-        )}
-        {data.visibility === "LINK_ONLY" && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-          >
-            <EyeOff className="size-3" />
-            Link only
-          </Badge>
-        )}
-        {data.visibility === "PUBLIC" && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-          >
-            <Eye className="size-3" />
-            Public
-          </Badge>
-        )}
-      </div>
-
-      {/* CTAs */}
-      <div className="mx-auto flex max-w-[420px] flex-col gap-2 sm:flex-row sm:justify-center">
-        {data.achievementData?.eventTitle && (
-          <Button variant="outline" onClick={() => onExit?.()}>
-            <Trophy className="size-4" />
-            View Event
-          </Button>
-        )}
-        <Link href="/login" className="sm:inline-flex">
-          <Button
-            className={cn(
-              "w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto",
-            )}
-          >
-            <Sparkles className="size-4" />
-            Create your own event with Engagio
-          </Button>
-        </Link>
-      </div>
+    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border bg-white p-8 text-center shadow-sm dark:bg-slate-900">
+      <Unlink className="size-8 text-amber-500" />
+      <h1 className="text-lg font-semibold">This link is no longer available</h1>
+      <Button onClick={() => onExit?.()} variant="outline">Back</Button>
     </div>
   )
 }
 
-function CenteredCard({
-  icon,
-  title,
-  subtitle,
-  children,
-}: {
-  icon: React.ReactNode
-  title: string
-  subtitle?: string
-  children?: React.ReactNode
-}) {
+function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?: () => void }) {
+  const eventName = data.achievementData?.eventTitle ?? data.title ?? "the assessment"
+  const orgName = data.achievementData?.orgName ?? data.subtitle ?? undefined
+  const verifyUrl = data.achievementData?.verifyUrl ?? ""
+  const certNumber = data.achievementData?.certificateNumber ?? ""
+
+  const shareText = `I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Participation Certificate! 🎓✨`
+
+  const shareToSocial = (platform: string) => {
+    const text = encodeURIComponent(shareText)
+    const url = encodeURIComponent(verifyUrl || (typeof window !== "undefined" ? window.location.href : ""))
+    const links: Record<string, string> = {
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
+      whatsapp: `https://wa.me/?text=${text}%20${url}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
+      x: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+    }
+    window.open(links[platform], "_blank", "noopener,noreferrer")
+  }
+
+  const copyLink = () => {
+    const url = verifyUrl || (typeof window !== "undefined" ? window.location.href : "")
+    navigator.clipboard.writeText(`${shareText} ${url}`).then(() => toast.success("Copied to clipboard!"))
+  }
+
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border bg-white p-8 text-center shadow-sm dark:bg-slate-900">
-      <div className="grid size-16 place-items-center rounded-full bg-slate-50 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-        {icon}
+    <div className="space-y-6">
+      {/* Certificate header */}
+      <div className="mx-auto max-w-md text-center">
+        <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
+          <CheckCircle2 className="size-7 text-emerald-600" />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight">Participation Certificate</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{data.participantName}</span> successfully completed{" "}
+          <span className="font-semibold text-foreground">{eventName}</span>
+        </p>
       </div>
-      <div className="space-y-1">
-        <h1 className="text-lg font-semibold">{title}</h1>
-        {subtitle ? (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
-        ) : null}
+
+      {/* Certificate details — NO score */}
+      <div className="mx-auto max-w-md space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+        {certNumber && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Certificate #</span>
+            <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{certNumber}</span>
+          </div>
+        )}
+        {orgName && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Organization</span>
+            <span className="font-medium">{orgName}</span>
+          </div>
+        )}
+        {data.createdAt && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Date</span>
+            <span className="font-medium">{format(new Date(data.createdAt), "MMM d, yyyy")}</span>
+          </div>
+        )}
       </div>
-      {children ? <div className="mt-2">{children}</div> : null}
+
+      {/* Social share buttons */}
+      <div className="mx-auto max-w-md space-y-3">
+        <p className="text-center text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+          Share this certificate
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Button variant="outline" className="gap-2" onClick={() => shareToSocial("linkedin")}>
+            <Linkedin className="size-4 text-[#0A66C2]" />
+            <span className="text-sm">LinkedIn</span>
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => shareToSocial("whatsapp")}>
+            <MessageCircle className="size-4 text-[#25D366]" />
+            <span className="text-sm">WhatsApp</span>
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => shareToSocial("facebook")}>
+            <Facebook className="size-4 text-[#1877F2]" />
+            <span className="text-sm">Facebook</span>
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => shareToSocial("x")}>
+            <Twitter className="size-4 text-slate-600 dark:text-slate-300" />
+            <span className="text-sm">X</span>
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={copyLink}>
+            <Link2 className="size-4 text-emerald-600" />
+            <span className="text-sm">Copy Link</span>
+          </Button>
+          {verifyUrl && (
+            <Button variant="outline" className="gap-2" onClick={() => window.open(verifyUrl, "_blank", "noopener,noreferrer")}>
+              <ExternalLink className="size-4 text-emerald-600" />
+              <span className="text-sm">Verify</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-md text-center">
+        <Button onClick={() => onExit?.()} variant="outline" className="w-full">
+          <ArrowLeft className="size-4" /> Back
+        </Button>
+      </div>
     </div>
   )
 }
 
 // ---- Meta tag helpers ----
-
-function setMetaName(name: string, content: string) {
-  let el = document.querySelector(`meta[name="${name}"]`)
-  if (!el) {
-    el = document.createElement("meta")
-    el.setAttribute("name", name)
-    document.head.appendChild(el)
-  }
-  el.setAttribute("content", content)
-}
-
 function setMetaProperty(property: string, content: string) {
   let el = document.querySelector(`meta[property="${property}"]`)
   if (!el) {
@@ -338,8 +254,4 @@ function setMetaProperty(property: string, content: string) {
     document.head.appendChild(el)
   }
   el.setAttribute("content", content)
-}
-
-function setMetaDescription(content: string) {
-  setMetaName("description", content)
 }
