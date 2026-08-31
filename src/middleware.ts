@@ -202,7 +202,9 @@ export function middleware(request: NextRequest) {
   }
 
   // Custom domain (not a subdomain of BASE_DOMAIN)
-  if (cleanHost && cleanHost !== BASE_DOMAIN && !cleanHost.startsWith("localhost")) {
+  // BUT skip Vercel preview subdomains (*.vercel.app) and localhost —
+  // these are deployment previews, not custom org domains.
+  if (cleanHost && cleanHost !== BASE_DOMAIN && !cleanHost.startsWith("localhost") && !cleanHost.endsWith(".vercel.app")) {
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set("x-engagio-org-host", cleanHost)
 
