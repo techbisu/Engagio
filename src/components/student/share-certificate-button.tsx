@@ -243,7 +243,7 @@ function CertificateShareContent({
       ? `${window.location.origin}/verify/${cert.verificationToken}`
       : `/verify/${cert.verificationToken}`
 
-  const shareText = `I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Participation Certificate! 🎓✨`
+  const shareText = `I'm proud to share that I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Certificate of Participation! 🎓✨`
 
   const shareToSocial = (platform: string) => {
     const text = encodeURIComponent(shareText)

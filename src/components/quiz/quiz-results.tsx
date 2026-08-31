@@ -723,7 +723,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               eventDescription={data.event?.description ?? null}
               orgName={data.organization?.name ?? null}
               orgLogo={data.organization?.logoUrl ?? null}
-              shareText={`I completed ${data.event?.title ?? "the assessment"}${data.organization?.name ? ` organized by ${data.organization.name}` : ""} and earned a certificate! 🎓✨`}
+              shareText={`I'm proud to share that I successfully completed ${data.event?.title ?? "the assessment"}${data.organization?.name ? ` organized by ${data.organization.name}` : ""} and earned a Certificate of Participation! 🎓✨`}
             />
           )}
 

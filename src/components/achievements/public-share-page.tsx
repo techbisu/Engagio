@@ -156,7 +156,7 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
   const [certDataUrl, setCertDataUrl] = React.useState<string | null>(null)
   const [isDownloading, setIsDownloading] = React.useState(false)
 
-  const shareText = `I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Participation Certificate! 🎓✨`
+  const shareText = `I'm proud to share that I successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""} and earned a Certificate of Participation! 🎓✨`
 
   const shareToSocial = (platform: string) => {
     const text = encodeURIComponent(shareText)
