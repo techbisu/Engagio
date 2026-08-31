@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ShareAchievementButton } from "@/components/achievements/share-achievement-button"
+import { ShareCertificateButton } from "@/components/student/share-certificate-button"
 
 import { api } from "./api"
 import type { AttemptListResponse, AttemptListItem } from "./api"
@@ -665,23 +665,9 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                 </td>
                 <td className="px-4 py-3 text-center">
                   {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && a.published !== false ? (
-                    <ShareAchievementButton
-                      achievementInput={{
-                        type: "QUIZ_RESULT",
-                        eventId: a.event?.id,
-                        title: a.event?.title
-                          ? `${a.event.title} · Quiz Result`
-                          : "Quiz Result",
-                        subtitle: a.event?.title ?? undefined,
-                        score: a.score ?? undefined,
-                        totalScore: a.totalMarks ?? undefined,
-                        percentage: a.percentage ?? undefined,
-                        achievementData: {
-                          eventTitle: a.event?.title,
-                        },
-                        templateId: "modern",
-                        visibility: "LINK_ONLY",
-                      }}
+                    <ShareCertificateButton
+                      attemptId={a.id}
+                      eventName={a.event?.title}
                       label=""
                       size="sm"
                       variant="outline"
@@ -747,23 +733,9 @@ function AttemptsTable({ attempts }: { attempts: AttemptListItem[] }) {
                 </span>
               </div>
               {(a.status === "COMPLETED" || a.status === "TIMEOUT" || a.status === "CHEAT_DETECTED") && a.published !== false && (
-                <ShareAchievementButton
-                  achievementInput={{
-                    type: "QUIZ_RESULT",
-                    eventId: a.event?.id,
-                    title: a.event?.title
-                      ? `${a.event.title} · Quiz Result`
-                      : "Quiz Result",
-                    subtitle: a.event?.title ?? undefined,
-                    score: a.score ?? undefined,
-                    totalScore: a.totalMarks ?? undefined,
-                    percentage: a.percentage ?? undefined,
-                    achievementData: {
-                      eventTitle: a.event?.title,
-                    },
-                    templateId: "modern",
-                    visibility: "LINK_ONLY",
-                  }}
+                <ShareCertificateButton
+                  attemptId={a.id}
+                  eventName={a.event?.title}
                   label="Share"
                   size="sm"
                   variant="outline"

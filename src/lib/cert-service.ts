@@ -60,16 +60,27 @@ export async function checkCertEligibility(
       // Any completed attempt qualifies
       return { eligible: true, reason: "Assessment completed", attemptId: best.id }
     case "PASSED":
-      if (best.passed === true && (best.percentage ?? 0) >= event.certPassingScore) {
+      // The `passed` field on the attempt is computed at submit time using
+      // `quizLink.passThreshold` (the pass mark the admin configured on the
+      // quiz link). If the admin set passThreshold = 0, every submit passes
+      // and every participant earns a certificate.
+      //
+      // We previously ALSO checked `(best.percentage ?? 0) >= event.certPassingScore`
+      // here, but that's a separate field that defaults to 60 and is NOT the
+      // same as the quiz link's passThreshold. Checking both meant that a
+      // quiz with passThreshold=0 would still require percentage >= 60 to
+      // earn a cert, which contradicted the admin's intent. Now we trust
+      // `best.passed` alone — it already reflects the quiz link's pass mark.
+      if (best.passed === true) {
         return {
           eligible: true,
-          reason: `Passed with ${best.percentage}% (required: ${event.certPassingScore}%)`,
+          reason: `Passed (quiz pass mark met)`,
           attemptId: best.id,
         }
       }
       return {
         eligible: false,
-        reason: `Score ${best.percentage}% below passing score ${event.certPassingScore}%`,
+        reason: `Did not pass the quiz (pass mark not met)`,
       }
     default:
       return { eligible: false, reason: `Unknown condition: ${event.certIssueCondition}` }

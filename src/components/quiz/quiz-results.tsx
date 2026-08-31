@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
   AlertTriangle,
   ArrowLeft,
+  Award,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -75,12 +76,51 @@ const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
 export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [generatedCert, setGeneratedCert] = useState<{
+    id: string
+    certificateNumber: string
+    verificationToken: string
+    template: string
+    recipientName: string
+    issuedAt: string
+  } | null>(null)
+  const [isGeneratingCert, setIsGeneratingCert] = useState(false)
+  const [certError, setCertError] = useState<string | null>(null)
 
   const { data, isLoading, isError, error } = useQuery<AttemptReviewPayload>({
     queryKey: ["attempt", attemptId],
     queryFn: () => api<AttemptReviewPayload>(`/api/attempts/${attemptId}`),
     enabled: !!attemptId,
   })
+
+  // Generate the cert on demand. Called by the "Generate & Share Certificate"
+  // button when no cert exists yet but the event has certs enabled.
+  const handleGenerateCert = async () => {
+    setIsGeneratingCert(true)
+    setCertError(null)
+    try {
+      const res = await api<{ certificate: typeof generatedCert | null; reason?: string }>(
+        `/api/attempts/${attemptId}/generate-cert`,
+        { method: "POST" }
+      )
+      if (res.certificate) {
+        setGeneratedCert(res.certificate)
+        toast.success("Certificate generated! Share it below.")
+      } else {
+        // Cert not generated — show the reason from the server.
+        setCertError(
+          res.reason ||
+            "Certificate could not be generated. Please contact the organizer."
+        )
+      }
+    } catch (e) {
+      setCertError(
+        e instanceof Error ? e.message : "Failed to generate certificate."
+      )
+    } finally {
+      setIsGeneratingCert(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -663,12 +703,20 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
             </Collapsible>
           )}
 
-          {/* Certificate section — image + download + share buttons */}
-          {data.published !== false && data.showResults !== false && data.certificate && (
+          {/* Certificate section — image + download + share buttons.
+              Shows when the cert already exists (generated at submit or by
+              the lazy generation in the GET endpoint) OR when the user just
+              generated it via the "Share your participation certificate"
+              button below. */}
+          {data.published !== false && data.showResults !== false && (data.certificate || generatedCert) && (
             <CertificateSection
-              certificate={{
-                ...data.certificate,
-                template: data.certificate.template as CertTemplate,
+              certificate={(generatedCert ?? data.certificate) as {
+                id: string
+                certificateNumber: string
+                verificationToken: string
+                template: CertTemplate
+                recipientName: string
+                issuedAt: string
               }}
               eventName={data.event?.title ?? "Assessment"}
               orgName={data.organization?.name ?? null}
@@ -677,25 +725,53 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
             />
           )}
 
-          {/* Fallback: certs enabled on the event but no cert was generated.
-              This only shows when the lazy cert generation in the GET endpoint
-              also failed (e.g., PASSED condition not met). Give the user a
-              clear, specific message + a retry button. */}
-          {data.published !== false && data.showResults !== false && !data.certificate && data.event?.certEnabled && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 text-center dark:border-amber-900/60 dark:bg-amber-950/20">
-              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                Certificate not available
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {data.event?.certIssueCondition === "PASSED"
-                  ? `You need a passing score to earn a certificate. Your score: ${percentage}%.`
-                  : "Your submission has been recorded. The certificate will be issued by the organizer."}
-              </p>
-              {data.event?.certIssueCondition === "PASSED" && (
+          {/* "Share your participation certificate" button.
+              Shows when no cert exists yet but the event has certs enabled.
+              On click, calls POST /api/attempts/[id]/generate-cert to
+              generate the cert on demand, then the CertificateSection above
+              appears with the cert image + share buttons. */}
+          {data.published !== false && data.showResults !== false && !data.certificate && !generatedCert && data.event?.certEnabled && (
+            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 text-center dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              <div>
+                <Award className="mx-auto size-8 text-emerald-600 dark:text-emerald-400" />
+                <p className="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  Share your participation certificate
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Try again to improve your score.
+                  You&apos;ve completed the assessment. Generate and share your certificate on social media.
+                </p>
+              </div>
+              <Button
+                onClick={handleGenerateCert}
+                disabled={isGeneratingCert}
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                {isGeneratingCert ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Generating…
+                  </>
+                ) : (
+                  <>
+                    <Award className="size-4" /> Generate & Share Certificate
+                  </>
+                )}
+              </Button>
+              {certError && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  {certError}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Fallback: certs NOT enabled on the event at all.
+              This only shows when the event has certEnabled = false — there's
+              no way to get a cert. */}
+          {data.published !== false && data.showResults !== false && !data.certificate && !generatedCert && !data.event?.certEnabled && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4 text-center dark:border-slate-800 dark:bg-slate-900/40">
+              <p className="text-sm font-medium text-muted-foreground">
+                Certificates are not enabled for this event.
+              </p>
             </div>
           )}
 
