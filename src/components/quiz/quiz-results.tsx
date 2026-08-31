@@ -568,9 +568,6 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               <p className={cn("mt-1 text-3xl font-bold tabular-nums", statusMeta.color)}>
                 {percentage}%
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Pass mark: {passThreshold}%
-              </p>
             </div>
           </div>
 

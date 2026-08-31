@@ -15,7 +15,6 @@ import {
   Layers,
   Maximize,
   ShieldAlert,
-  Target,
   Lock,
   ScanFace,
 } from "lucide-react"
@@ -209,11 +208,6 @@ export function QuizLandingPublic({
                 icon={Clock}
                 label="Time limit"
                 value={meta.timeLimit > 0 ? `${meta.timeLimit} min` : "No limit"}
-              />
-              <SummaryItem
-                icon={Target}
-                label="Pass mark"
-                value={`${meta.passThreshold}%`}
               />
               <SummaryItem
                 icon={Layers}

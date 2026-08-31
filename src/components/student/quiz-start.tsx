@@ -14,7 +14,6 @@ import {
   Maximize,
   PlayCircle,
   ShieldAlert,
-  Target,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -318,11 +317,6 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
               icon={Clock}
               label="Time limit"
               value={meta.timeLimit > 0 ? `${meta.timeLimit} min` : "No limit"}
-            />
-            <SummaryItem
-              icon={Target}
-              label="Pass mark"
-              value={`${meta.passThreshold}%`}
             />
             <SummaryItem
               icon={Layers}
