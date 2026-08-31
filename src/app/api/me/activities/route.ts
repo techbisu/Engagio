@@ -125,8 +125,8 @@ export async function GET(req: NextRequest) {
           where: { eventId, status: { in: ["LIVE", "SCHEDULED"] } },
           select: {
             id: true, type: true, title: true, description: true,
-            status: true, slug: true, scheduledAt: true, endsAt: true,
-            isAcceptingResponses: true, quizLinkId: true,
+            status: true, slug: true, startsAt: true, endsAt: true,
+            isEnabled: true, quizLinkId: true,
             _count: { select: { questions: true, participations: true } },
           },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -147,9 +147,9 @@ export async function GET(req: NextRequest) {
           ...activities.map((a) => ({
             id: a.id, type: a.type, title: a.title, description: a.description,
             status: a.status, slug: a.slug,
-            scheduledAt: a.scheduledAt?.toISOString() ?? null,
+            scheduledAt: a.startsAt?.toISOString() ?? null,
             endsAt: a.endsAt?.toISOString() ?? null,
-            isAcceptingResponses: a.isAcceptingResponses,
+            isAcceptingResponses: a.isEnabled,
             questionCount: a._count.questions,
             participantCount: a._count.participations,
             quizLink: a.quizLinkId ? quizLinkMap.get(a.quizLinkId) : null,
