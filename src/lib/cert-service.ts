@@ -122,9 +122,15 @@ export async function generateCertificate(opts: {
     return { certificate: null, created: false, reason: "Certificates not enabled" }
   }
 
-  // Check for existing certificate (idempotent)
-  const existing = await db.certificate.findUnique({
-    where: { eventId_userId: { eventId, userId } },
+  // Check for existing certificate (idempotent).
+  // NOTE: the Certificate model has @@index([eventId]) + @@index([userId])
+  // but NO @@unique([eventId, userId]) compound constraint, so we use
+  // findFirst (not findUnique) to look up an existing cert for this
+  // (eventId, userId) pair. Using findUnique with `eventId_userId` would
+  // throw a Prisma validation error on the server.
+  const existing = await db.certificate.findFirst({
+    where: { eventId, userId, status: "VALID" },
+    orderBy: { issuedAt: "desc" },
   })
 
   if (existing && !regenerate) {
