@@ -41,9 +41,9 @@ export async function GET(req: NextRequest) {
         description: true,
         status: true,
         slug: true,
-        scheduledAt: true,
+        startsAt: true,
         endsAt: true,
-        isAcceptingResponses: true,
+        isEnabled: true,
         quizLinkId: true,
         _count: {
           select: {
@@ -80,9 +80,9 @@ export async function GET(req: NextRequest) {
       description: a.description,
       status: a.status,
       slug: a.slug,
-      scheduledAt: a.scheduledAt?.toISOString() ?? null,
+      scheduledAt: a.startsAt?.toISOString() ?? null,
       endsAt: a.endsAt?.toISOString() ?? null,
-      isAcceptingResponses: a.isAcceptingResponses,
+      isAcceptingResponses: a.isEnabled,
       questionCount: a._count.questions,
       participantCount: a._count.participations,
       quizLink: a.quizLinkId

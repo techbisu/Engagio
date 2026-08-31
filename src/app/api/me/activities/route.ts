@@ -163,7 +163,10 @@ export async function GET(req: NextRequest) {
             slug: ql.slug,
             scheduledAt: null, endsAt: null,
             isAcceptingResponses: true,
-            questionCount: 0, participantCount: 0,
+            // Use the quiz link's questionCount (random subset size) if set,
+            // otherwise the total event question count.
+            questionCount: ql.questionCount > 0 ? ql.questionCount : 0,
+            participantCount: 0,
             quizLink: ql,
           })),
         ]

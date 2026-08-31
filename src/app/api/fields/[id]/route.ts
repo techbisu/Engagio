@@ -190,7 +190,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 /**
  * DELETE /api/fields/[id] — delete a registration field (admin only).
  */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {

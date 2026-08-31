@@ -181,7 +181,7 @@ export async function GET(
         question: q.question,
         options,
         matchPairs,
-        correctAnswer: type === "MCQ" || type === "TRUE_FALSE" ? q.correctAnswer : null,
+        correctIndex: type === "MCQ" || type === "TRUE_FALSE" ? q.correctAnswer : null,
         correctText: q.correctText ?? null,
         codeLanguage: q.codeLanguage ?? null,
         // What the participant chose (shape depends on type).

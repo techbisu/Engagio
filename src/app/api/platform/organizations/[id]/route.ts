@@ -36,12 +36,22 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       const plan = await db.plan.findUnique({ where: { id: planId } })
       if (plan) {
         data.planId = planId
-        // Create or update subscription
-        await db.subscription.upsert({
+        // Create or update subscription — use findFirst + update/create
+        // because Subscription.organizationId is NOT a unique field (only @@index).
+        const existingSub = await db.subscription.findFirst({
           where: { organizationId: id },
-          update: { planId, status: "ACTIVE" },
-          create: { organizationId: id, planId, status: "ACTIVE" },
+          select: { id: true },
         })
+        if (existingSub) {
+          await db.subscription.update({
+            where: { id: existingSub.id },
+            data: { planId, status: "ACTIVE" },
+          })
+        } else {
+          await db.subscription.create({
+            data: { organizationId: id, planId, status: "ACTIVE" },
+          })
+        }
         invalidatePlanCache(id)
       }
     }
