@@ -192,66 +192,67 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
               {registeredEvents.map(({ event, activities }) => {
                 const liveCount = activities.filter(a => a.status === "LIVE").length
                 const upcomingCount = activities.filter(a => a.status === "SCHEDULED").length
-                const orgSlug = event.organization?.slug
+                const quizActivities = activities.filter(a => a.quizLink?.slug)
                 return (
                   <div
                     key={event.id}
-                    className="flex flex-col gap-2 rounded-lg border p-4 transition hover:border-emerald-500/40 hover:shadow-sm"
+                    className="flex min-w-0 flex-col gap-2 overflow-hidden rounded-lg border p-4 transition hover:border-emerald-500/40 hover:shadow-sm"
                   >
+                    {/* Title row */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{event.title}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2 text-sm font-semibold leading-snug" title={event.title}>
+                          {event.title}
+                        </p>
                         {event.organization && (
-                          <p className="truncate text-xs text-muted-foreground">{event.organization.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {event.organization.name}
+                          </p>
                         )}
                       </div>
                       {liveCount > 0 && (
-                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        <Badge className="shrink-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                           <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> {liveCount} LIVE
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+
+                    {/* Meta row */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       {activities.length > 0 && <span>{activities.length} activities</span>}
                       {upcomingCount > 0 && <span>· {upcomingCount} upcoming</span>}
                       <span>· {new Date(event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                     </div>
-                    {/* Show quiz link info + Start button for each quiz link */}
-                    {activities.filter(a => a.quizLink?.slug).length > 0 && (
+
+                    {/* Quiz link cards with Start button */}
+                    {quizActivities.length > 0 && (
                       <div className="space-y-1.5 pt-1">
-                        {activities.filter(a => a.quizLink?.slug).map(a => (
-                          <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900/60">
-                            <div className="min-w-0">
+                        {quizActivities.map(a => (
+                          <div
+                            key={a.id}
+                            className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900/60"
+                          >
+                            <div className="min-w-0 flex-1">
                               <p className="truncate text-xs font-medium">{a.title || "Quiz"}</p>
-                              {a.quizLink?.questionCount !== undefined && a.quizLink.questionCount > 0 && (
-                                <p className="text-[10px] text-muted-foreground">{a.quizLink.questionCount} questions</p>
-                              )}
-                              {a.quizLink?.timeLimit !== undefined && a.quizLink.timeLimit > 0 && (
-                                <p className="text-[10px] text-muted-foreground">{a.quizLink.timeLimit} min</p>
-                              )}
+                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground">
+                                {a.quizLink?.questionCount !== undefined && a.quizLink.questionCount > 0 && (
+                                  <span>{a.quizLink.questionCount} Qs</span>
+                                )}
+                                {a.quizLink?.timeLimit !== undefined && a.quizLink.timeLimit > 0 && (
+                                  <span>· {a.quizLink.timeLimit} min</span>
+                                )}
+                              </div>
                             </div>
                             <Button
                               size="sm"
                               className="shrink-0 bg-emerald-600 text-white text-xs hover:bg-emerald-700"
                               onClick={() => onStartQuiz(a.quizLink!.slug)}
                             >
-                              Start Quiz
+                              Start
                             </Button>
                           </div>
                         ))}
                       </div>
-                    )}
-                    {orgSlug && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs"
-                        onClick={() => {
-                          window.location.href = `/org/${orgSlug}/participant/dashboard`
-                        }}
-                      >
-                        Go to Dashboard
-                      </Button>
                     )}
                   </div>
                 )
@@ -285,15 +286,17 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: Stude
               )}
               <div className="mb-4 flex items-center gap-3">
                 {featured.event.organization?.logoUrl ? (
-                  <img src={featured.event.organization.logoUrl} alt="" className="size-8 rounded-lg" />
+                  <img src={featured.event.organization.logoUrl} alt="" className="size-8 shrink-0 rounded-lg" />
                 ) : (
-                  <div className="grid size-8 place-items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
                     <Building2 className="size-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                 )}
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">{featured.event.title}</h3>
-                  <p className="text-sm text-muted-foreground">{featured.event.organization?.name}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-lg font-bold leading-tight text-foreground" title={featured.event.title}>
+                    {featured.event.title}
+                  </h3>
+                  <p className="truncate text-sm text-muted-foreground">{featured.event.organization?.name}</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -678,16 +678,24 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
           )}
 
           {/* Fallback: certs enabled on the event but no cert was generated.
-              Show a helpful note so the participant knows why. */}
+              This only shows when the lazy cert generation in the GET endpoint
+              also failed (e.g., PASSED condition not met). Give the user a
+              clear, specific message + a retry button. */}
           {data.published !== false && data.showResults !== false && !data.certificate && data.event?.certEnabled && (
             <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 text-center dark:border-amber-900/60 dark:bg-amber-950/20">
               <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                Certificate not available yet
+                Certificate not available
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Your submission has been recorded. The certificate will appear here once
-                issued by the organizer.
+                {data.event?.certIssueCondition === "PASSED"
+                  ? `You need a passing score to earn a certificate. Your score: ${percentage}%.`
+                  : "Your submission has been recorded. The certificate will be issued by the organizer."}
               </p>
+              {data.event?.certIssueCondition === "PASSED" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Try again to improve your score.
+                </p>
+              )}
             </div>
           )}
 

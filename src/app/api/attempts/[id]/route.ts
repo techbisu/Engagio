@@ -256,7 +256,7 @@ export async function GET(
       : null;
 
     // Fetch certificate for this user+event (if auto-generated).
-    const certificate = await db.certificate.findFirst({
+    let certificate = await db.certificate.findFirst({
       where: { eventId: attempt.eventId, userId: attempt.userId, status: "VALID" },
       select: {
         id: true,
@@ -267,6 +267,42 @@ export async function GET(
         issuedAt: true,
       },
     });
+
+    // ── Lazy cert generation ──────────────────────────────────────────────
+    // If no cert exists yet but the event has certs enabled and the attempt
+    // is completed, generate it on the fly. This handles the case where the
+    // submit route's cert generation failed (or the event's certEnabled flag
+    // was toggled on after the attempt was submitted). The eligibility check
+    // inside generateCertificate handles the rest (PARTICIPATION → any
+    // completed attempt qualifies).
+    if (!certificate && attempt.event.certEnabled && attempt.status !== "IN_PROGRESS") {
+      try {
+        const { generateCertificate } = await import("@/lib/cert-service");
+        const certResult = await generateCertificate({
+          eventId: attempt.eventId,
+          userId: attempt.userId,
+          attemptId: attempt.id,
+        });
+        if (certResult.certificate) {
+          // Re-query with the same select shape so the response is consistent.
+          certificate = await db.certificate.findFirst({
+            where: { eventId: attempt.eventId, userId: attempt.userId, status: "VALID" },
+            select: {
+              id: true,
+              certificateNumber: true,
+              verificationToken: true,
+              template: true,
+              recipientName: true,
+              issuedAt: true,
+            },
+          });
+        } else {
+          console.log("[GET /api/attempts/[id]] lazy cert not generated:", certResult.reason);
+        }
+      } catch (e) {
+        console.error("[GET /api/attempts/[id]] lazy cert-generation error:", e);
+      }
+    }
 
     // Fetch org info for the share card (logo, name, colors).
     const orgInfo = attempt.event.organizationId
