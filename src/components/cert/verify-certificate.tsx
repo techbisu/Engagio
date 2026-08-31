@@ -36,6 +36,7 @@ interface VerifyResponse {
     issuedAt: string;
     status: string;
     eventName: string;
+    eventDescription?: string | null;
     orgName?: string | null;
     orgLogoUrl?: string | null;
   };
@@ -189,6 +190,7 @@ function VerifiedCard({ data }: { data: VerifyResponse }) {
               template={cert.template as CertTemplate}
               recipientName={cert.recipientName}
               eventName={cert.eventName}
+              eventDescription={cert.eventDescription ?? null}
               orgName={cert.orgName ?? undefined}
               certificateNumber={cert.certificateNumber}
               issuedAt={cert.issuedAt}

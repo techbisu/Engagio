@@ -14,6 +14,10 @@ export interface CertificateRendererProps {
   template: CertTemplate;
   recipientName: string;
   eventName: string;
+  /** Optional short description of the event/assessment, shown beneath the
+   *  event name in place of the old signature block. Professional context
+   *  for the recipient (e.g. "A 50-question pharmacy knowledge assessment"). */
+  eventDescription?: string | null;
   orgName?: string | null;
   signeeName?: string | null;
   signeeTitle?: string | null;
@@ -171,27 +175,33 @@ function drawClassic(
     660,
   );
 
-  // Signature area (bottom-left)
-  const sigX = 160;
-  const sigY = 740;
-  if (images.signee) {
-    const sw = 220;
-    const sh = Math.min(80, images.signee.height * (sw / images.signee.width));
-    ctx.drawImage(images.signee, sigX, sigY - sh, sw, sh);
-  }
-  ctx.strokeStyle = "#475569";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(sigX, sigY);
-  ctx.lineTo(sigX + 220, sigY);
-  ctx.stroke();
-  ctx.fillStyle = "#0f172a";
-  ctx.font = '600 20px Georgia, serif';
+  // Event description block (bottom-left) — replaces the old signature block.
+  // Shows a short professional description of the event/assessment for context.
+  const descX = 140;
+  const descY = 715;
+  const descMaxWidth = 360;
   ctx.textAlign = "left";
-  ctx.fillText(p.signeeName || "Authorized Signatory", sigX, sigY + 28);
-  ctx.fillStyle = "#64748b";
-  ctx.font = '16px Georgia, serif';
-  ctx.fillText(p.signeeTitle || "", sigX, sigY + 52);
+  if (p.eventDescription) {
+    const descLines = wrapText(ctx, p.eventDescription, descMaxWidth);
+    ctx.fillStyle = "#64748b";
+    ctx.font = 'italic 14px Georgia, serif';
+    let y = descY;
+    for (const line of descLines) {
+      ctx.fillText(line, descX, y);
+      y += 18;
+    }
+  } else {
+    // Fallback when no description: show the org name + "Participation Certificate"
+    ctx.fillStyle = "#64748b";
+    ctx.font = 'italic 14px Georgia, serif';
+    ctx.fillText(
+      p.orgName
+        ? `Organized by ${p.orgName}`
+        : "This certificate is awarded in recognition of successful participation.",
+      descX,
+      descY,
+    );
+  }
 
   // Org name (bottom-center)
   if (p.orgName) {
@@ -317,26 +327,26 @@ function drawModern(
     660,
   );
 
-  // Signature area (bottom-left)
-  const sigX = 80;
-  const sigY = 740;
-  if (images.signee) {
-    const sw = 200;
-    const sh = Math.min(70, images.signee.height * (sw / images.signee.width));
-    ctx.drawImage(images.signee, sigX, sigY - sh, sw, sh);
-  }
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(sigX, sigY);
-  ctx.lineTo(sigX + 200, sigY);
-  ctx.stroke();
-  ctx.fillStyle = "#0f172a";
-  ctx.font = '600 18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(p.signeeName || "Authorized Signatory", sigX, sigY + 26);
+  // Event description block (bottom-left) — replaces the old signature block.
+  // Shows a short professional description of the event/assessment for context.
+  const descX = 80;
+  const descY = 720;
+  const descMaxWidth = 360;
+  ctx.textAlign = "left";
   ctx.fillStyle = "#64748b";
-  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(p.signeeTitle || "", sigX, sigY + 48);
+  ctx.font = 'italic 15px "Segoe UI", system-ui, sans-serif';
+  if (p.eventDescription) {
+    const descLines = wrapText(ctx, p.eventDescription, descMaxWidth);
+    drawLeftLines(ctx, descLines, descX, descY, 20);
+  } else {
+    ctx.fillText(
+      p.orgName
+        ? `Organized by ${p.orgName}`
+        : "Awarded in recognition of successful participation.",
+      descX,
+      descY,
+    );
+  }
 
   // QR bottom-right
   if (images.qr) {
@@ -457,37 +467,40 @@ function drawElegant(
     685,
   );
 
-  // Signature area (bottom-left)
-  const sigX = 180;
-  const sigY = 760;
-  if (images.signee) {
-    const sw = 200;
-    const sh = Math.min(70, images.signee.height * (sw / images.signee.width));
-    ctx.drawImage(images.signee, sigX, sigY - sh, sw, sh);
-  }
-  ctx.strokeStyle = "#92400e";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(sigX, sigY);
-  ctx.lineTo(sigX + 200, sigY);
-  ctx.stroke();
-  ctx.fillStyle = "#1c1917";
-  ctx.font = '600 18px Georgia, serif';
+  // Event description block (bottom-left) — replaces the old signature block.
+  // Shows a short professional description of the event/assessment for context.
+  const descX = 180;
+  const descY = 745;
+  const descMaxWidth = 380;
   ctx.textAlign = "left";
-  ctx.fillText(p.signeeName || "Authorized Signatory", sigX, sigY + 26);
   ctx.fillStyle = "#78716c";
-  ctx.font = '14px Georgia, serif';
-  ctx.fillText(p.signeeTitle || "", sigX, sigY + 48);
+  ctx.font = 'italic 14px Georgia, serif';
+  if (p.eventDescription) {
+    const descLines = wrapText(ctx, p.eventDescription, descMaxWidth);
+    let y = descY;
+    for (const line of descLines) {
+      ctx.fillText(line, descX, y);
+      y += 18;
+    }
+  } else {
+    ctx.fillText(
+      p.orgName
+        ? `Organized by ${p.orgName}`
+        : "Awarded in recognition of successful participation.",
+      descX,
+      descY,
+    );
+  }
 
   // Org name (bottom-right area)
   if (p.orgName) {
     ctx.fillStyle = "#92400e";
     ctx.font = '600 16px Georgia, serif';
     ctx.textAlign = "right";
-    ctx.fillText(p.orgName, W - 350, sigY + 26);
+    ctx.fillText(p.orgName, W - 350, 760);
     ctx.fillStyle = "#78716c";
     ctx.font = '12px Georgia, serif';
-    ctx.fillText("Organization", W - 350, sigY + 48);
+    ctx.fillText("Organization", W - 350, 778);
   }
 
   // QR (bottom-right, in small white card)
@@ -659,26 +672,30 @@ function drawBold(
     670,
   );
 
-  // Signature area (bottom-left)
-  const sigX = 80;
-  const sigY = 750;
-  if (images.signee) {
-    const sw = 200;
-    const sh = Math.min(70, images.signee.height * (sw / images.signee.width));
-    ctx.drawImage(images.signee, sigX, sigY - sh, sw, sh);
+  // Event description block (bottom-left) — replaces the old signature block.
+  // Shows a short professional description of the event/assessment for context.
+  const descX = 80;
+  const descY = 735;
+  const descMaxWidth = 380;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = 'italic 15px "Segoe UI", system-ui, sans-serif';
+  if (p.eventDescription) {
+    const descLines = wrapText(ctx, p.eventDescription, descMaxWidth);
+    let y = descY;
+    for (const line of descLines) {
+      ctx.fillText(line, descX, y);
+      y += 20;
+    }
+  } else {
+    ctx.fillText(
+      p.orgName
+        ? `Organized by ${p.orgName}`
+        : "Awarded in recognition of successful participation.",
+      descX,
+      descY,
+    );
   }
-  ctx.strokeStyle = "#475569";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(sigX, sigY);
-  ctx.lineTo(sigX + 200, sigY);
-  ctx.stroke();
-  ctx.fillStyle = "#ffffff";
-  ctx.font = '600 18px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(p.signeeName || "Authorized Signatory", sigX, sigY + 26);
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(p.signeeTitle || "", sigX, sigY + 48);
 
   // QR in white card (bottom-right)
   if (images.qr) {
@@ -783,27 +800,30 @@ function drawMinimal(
     670,
   );
 
-  // Signature area (bottom-left)
-  const sigX = 90;
-  const sigY = 740;
-  if (images.signee) {
-    const sw = 180;
-    const sh = Math.min(60, images.signee.height * (sw / images.signee.width));
-    ctx.drawImage(images.signee, sigX, sigY - sh, sw, sh);
-  }
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(sigX, sigY);
-  ctx.lineTo(sigX + 180, sigY);
-  ctx.stroke();
-  ctx.fillStyle = "#0f172a";
-  ctx.font = '500 16px "Segoe UI", system-ui, sans-serif';
+  // Event description block (bottom-left) — replaces the old signature block.
+  // Shows a short professional description of the event/assessment for context.
+  const descX = 90;
+  const descY = 725;
+  const descMaxWidth = 360;
   ctx.textAlign = "left";
-  ctx.fillText(p.signeeName || "Authorized Signatory", sigX, sigY + 24);
   ctx.fillStyle = "#94a3b8";
-  ctx.font = '12px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(p.signeeTitle || "", sigX, sigY + 44);
+  ctx.font = 'italic 13px "Segoe UI", system-ui, sans-serif';
+  if (p.eventDescription) {
+    const descLines = wrapText(ctx, p.eventDescription, descMaxWidth);
+    let y = descY;
+    for (const line of descLines) {
+      ctx.fillText(line, descX, y);
+      y += 18;
+    }
+  } else {
+    ctx.fillText(
+      p.orgName
+        ? `Organized by ${p.orgName}`
+        : "Awarded in recognition of successful participation.",
+      descX,
+      descY,
+    );
+  }
 
   // QR (bottom-right, no card)
   if (images.qr) {

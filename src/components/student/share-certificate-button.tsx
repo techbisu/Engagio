@@ -101,6 +101,7 @@ export function ShareCertificateButton({
   const orgName = data?.organization?.name ?? null
   const orgLogo = data?.organization?.logoUrl ?? null
   const resolvedEventName = eventName ?? data?.event?.title ?? "Assessment"
+  const resolvedEventDescription = data?.event?.description ?? null
 
   // If no cert exists but the event has certs enabled, generate it on demand.
   const handleGenerate = async () => {
@@ -167,6 +168,7 @@ export function ShareCertificateButton({
                 template: cert.template as CertTemplate,
               }}
               eventName={resolvedEventName}
+              eventDescription={resolvedEventDescription}
               orgName={orgName}
               orgLogo={orgLogo}
             />
@@ -216,6 +218,7 @@ export function ShareCertificateButton({
 function CertificateShareContent({
   cert,
   eventName,
+  eventDescription,
   orgName,
   orgLogo,
 }: {
@@ -228,6 +231,7 @@ function CertificateShareContent({
     issuedAt: string
   }
   eventName: string
+  eventDescription?: string | null
   orgName: string | null
   orgLogo: string | null
 }) {
@@ -284,6 +288,7 @@ function CertificateShareContent({
           template={cert.template}
           recipientName={cert.recipientName}
           eventName={eventName}
+          eventDescription={eventDescription ?? null}
           orgName={orgName ?? undefined}
           certificateNumber={cert.certificateNumber}
           issuedAt={cert.issuedAt}

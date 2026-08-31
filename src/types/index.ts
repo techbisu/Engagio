@@ -593,6 +593,7 @@ export interface PublicAchievementDto {
     recipientName: string
     issuedAt: string
     eventName: string
+    eventDescription: string | null
     orgName: string | null
     orgLogoUrl: string | null
   } | null

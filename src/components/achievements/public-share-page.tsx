@@ -212,6 +212,7 @@ function CertificateView({ data, onExit }: { data: PublicAchievementDto; onExit?
             template={linkedCert.template as CertTemplate}
             recipientName={linkedCert.recipientName}
             eventName={linkedCert.eventName}
+            eventDescription={linkedCert.eventDescription ?? null}
             orgName={linkedCert.orgName ?? undefined}
             certificateNumber={linkedCert.certificateNumber}
             issuedAt={linkedCert.issuedAt}

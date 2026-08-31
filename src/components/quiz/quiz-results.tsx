@@ -247,6 +247,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                   template={data.certificate.template as CertTemplate}
                   recipientName={data.certificate.recipientName}
                   eventName={data.event?.title ?? "Assessment"}
+                  eventDescription={data.event?.description ?? null}
                   orgName={data.organization?.name ?? undefined}
                   certificateNumber={data.certificate.certificateNumber}
                   issuedAt={data.certificate.issuedAt}
@@ -719,6 +720,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
                 issuedAt: string
               }}
               eventName={data.event?.title ?? "Assessment"}
+              eventDescription={data.event?.description ?? null}
               orgName={data.organization?.name ?? null}
               orgLogo={data.organization?.logoUrl ?? null}
               shareText={`I completed ${data.event?.title ?? "the assessment"}${data.organization?.name ? ` organized by ${data.organization.name}` : ""} and earned a certificate! 🎓✨`}
@@ -817,12 +819,13 @@ interface CertificateSectionProps {
     issuedAt: string
   }
   eventName: string
+  eventDescription?: string | null
   orgName: string | null
   orgLogo: string | null
   shareText: string
 }
 
-function CertificateSection({ certificate, eventName, orgName, orgLogo, shareText }: CertificateSectionProps) {
+function CertificateSection({ certificate, eventName, eventDescription, orgName, orgLogo, shareText }: CertificateSectionProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
   const [certDataUrl, setCertDataUrl] = useState<string | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -883,6 +886,7 @@ function CertificateSection({ certificate, eventName, orgName, orgLogo, shareTex
           template={certificate.template}
           recipientName={certificate.recipientName}
           eventName={eventName}
+          eventDescription={eventDescription ?? null}
           orgName={orgName ?? undefined}
           certificateNumber={certificate.certificateNumber}
           issuedAt={certificate.issuedAt}

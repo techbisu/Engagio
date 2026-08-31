@@ -84,6 +84,7 @@ export async function GET(_req: Request, ctxParams: RouteContext) {
       recipientName: string
       issuedAt: string
       eventName: string
+      eventDescription: string | null
       orgName: string | null
       orgLogoUrl: string | null
     } | null = null
@@ -96,6 +97,7 @@ export async function GET(_req: Request, ctxParams: RouteContext) {
             select: {
               id: true,
               title: true,
+              description: true,
               certOrgName: true,
               organizationId: true,
             },
@@ -122,6 +124,7 @@ export async function GET(_req: Request, ctxParams: RouteContext) {
           recipientName: cert.recipientName,
           issuedAt: cert.issuedAt.toISOString(),
           eventName: cert.event?.title ?? row.title ?? "Assessment",
+          eventDescription: cert.event?.description ?? null,
           orgName,
           orgLogoUrl,
         }

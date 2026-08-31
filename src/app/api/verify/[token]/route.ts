@@ -32,6 +32,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
           select: {
             id: true,
             title: true,
+            description: true,
             certOrgName: true,
             organizationId: true,
           },
@@ -72,6 +73,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
         issuedAt: cert.issuedAt.toISOString(),
         status: cert.status,
         eventName: cert.event?.title ?? "Untitled event",
+        eventDescription: cert.event?.description ?? null,
         orgName,
         orgLogoUrl,
       },
