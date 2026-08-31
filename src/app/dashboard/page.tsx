@@ -38,6 +38,10 @@ function DashboardPageInner() {
   const searchParams = useSearchParams()
   const { user, signOutEverything } = useCurrentUser()
   const setLiveActivity = useAppStore((s) => s.setLiveActivity)
+  // Read the current org slug from the app store (populated by the org
+  // switcher / localStorage). Passed to StudentDashboard so the API calls
+  // are scoped to this org only.
+  const currentOrgSlug = useAppStore((s) => s.currentOrgSlug)
 
   const sub = searchParams.get("sub") ?? ""
   const quizSlugParam = searchParams.get("quiz") ?? ""
@@ -161,6 +165,7 @@ function DashboardPageInner() {
         user={user}
         onStartQuiz={handleStartQuiz}
         onViewLeaderboard={handleViewLeaderboard}
+        orgSlug={currentOrgSlug ?? undefined}
       />
     </StudentShell>
   )

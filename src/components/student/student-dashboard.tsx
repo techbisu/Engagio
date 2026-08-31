@@ -54,6 +54,11 @@ interface StudentDashboardProps {
   user: SafeUser
   onStartQuiz: (slug: string) => void
   onViewLeaderboard: (slug: string) => void
+  /** The current org slug (from the URL route param). Passed to the API as
+   *  ?org= so the backend scopes events/activities to this org only.
+   *  Also included in query keys so TanStack Query re-fetches when the org
+   *  changes. */
+  orgSlug?: string
 }
 
 // ─── Types for registered events with activities ───────────────────────────
@@ -103,21 +108,26 @@ const ACTIVITY_TYPE_META: Record<string, { label: string; icon: React.ComponentT
   PRE_POST_ASSESSMENT: { label: "Assessment", icon: FileQuestion, color: "text-teal-600" },
 }
 
-export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard }: StudentDashboardProps) {
+export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard, orgSlug }: StudentDashboardProps) {
   const [slugInput, setSlugInput] = React.useState("")
   const [leaderboardInput, setLeaderboardInput] = React.useState("")
 
+  // Build the org-scoped query string. When orgSlug is present, the API
+  // filters events/activities/attempts to this org only. We also include
+  // orgSlug in the query key so TanStack Query re-fetches when the org
+  // changes (e.g. user switches org via the org switcher).
+  const orgQuery = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : ""
+
   const { data, isLoading, isError, error } = useQuery<AttemptListResponse>({
-    // Include user.id in the key so the cache is per-user (avoids showing
-    // a previous user's attempts after sign-out + sign-in as someone else).
-    queryKey: ["attempts", "list", user.id],
-    queryFn: () => api<AttemptListResponse>("/api/attempts/list"),
+    // Include user.id + orgSlug in the key so the cache is per-user + per-org.
+    queryKey: ["attempts", "list", user.id, orgSlug ?? "no-org"],
+    queryFn: () => api<AttemptListResponse>(`/api/attempts/list${orgQuery}`),
   })
 
   // Fetch registered events with their current/upcoming activities
   const { data: registeredData } = useQuery<{ events: RegisteredEvent[] }>({
-    queryKey: ["me", "activities", user.id],
-    queryFn: () => api<{ events: RegisteredEvent[] }>("/api/me/activities"),
+    queryKey: ["me", "activities", user.id, orgSlug ?? "no-org"],
+    queryFn: () => api<{ events: RegisteredEvent[] }>(`/api/me/activities${orgQuery}`),
     staleTime: 60_000,
   })
   const registeredEvents = registeredData?.events ?? []

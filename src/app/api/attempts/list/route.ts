@@ -90,9 +90,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Participant (or admin without all=) — own attempts only.
-    // When the `x-org-slug` header is sent, filter to that org only so the
-    // participant dashboard only shows attempts for the current org.
-    const targetOrgSlug = req.headers.get("x-org-slug");
+    // When the org slug is provided (via ?org= query param OR x-org-slug
+    // header), filter to that org only so the participant dashboard only
+    // shows attempts for the current org.
+    //
+    // The query param (?org=slug) takes priority because it's set explicitly
+    // by the StudentDashboard component from the URL route param — no race
+    // condition with localStorage. The header (x-org-slug) is a fallback.
+    const listUrl = new URL(req.url);
+    const targetOrgSlug =
+      listUrl.searchParams.get("org") || req.headers.get("x-org-slug");
     let targetOrgId: string | null = null;
     if (targetOrgSlug) {
       const org = await db.organization.findUnique({

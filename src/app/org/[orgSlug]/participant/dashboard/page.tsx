@@ -171,6 +171,7 @@ function ParticipantDashboardInner() {
         user={user}
         onStartQuiz={handleStartQuiz}
         onViewLeaderboard={handleViewLeaderboard}
+        orgSlug={orgSlug}
       />
     </StudentShell>
   )

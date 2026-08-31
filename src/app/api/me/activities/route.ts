@@ -26,11 +26,17 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id;
 
-    // ── Resolve the target org from the `x-org-slug` header ──────────────
+    // ── Resolve the target org from the `x-org-slug` header OR `?org=` query ─
     // When present, we filter ALL sources (registrations, attempts, active
     // quiz links) by this org so the participant dashboard only shows
     // events/activities for the org they're currently viewing.
-    const targetOrgSlug = req.headers.get("x-org-slug");
+    //
+    // The query param (?org=slug) takes priority because it's set explicitly
+    // by the StudentDashboard component from the URL route param — no race
+    // condition with localStorage. The header (x-org-slug) is a fallback
+    // for API calls that don't pass the query param.
+    const url = new URL(req.url);
+    const targetOrgSlug = url.searchParams.get("org") || req.headers.get("x-org-slug");
     let targetOrgId: string | null = null;
     if (targetOrgSlug) {
       const org = await db.organization.findUnique({
