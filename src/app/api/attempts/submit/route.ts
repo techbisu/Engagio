@@ -294,6 +294,7 @@ export async function POST(req: NextRequest) {
     // event's `certAutoGenerate` flag (only `certEnabled` matters here).
     // The eligibility check inside generateCertificate handles the rest.
     let generatedCert: { certificateNumber: string; verificationToken: string } | null = null;
+    let certReason: string | null = null;
     try {
       const { generateCertificate } = await import("@/lib/cert-service");
       const certResult = await generateCertificate({
@@ -306,6 +307,10 @@ export async function POST(req: NextRequest) {
           certificateNumber: certResult.certificate.certificateNumber,
           verificationToken: certResult.certificate.verificationToken,
         };
+      } else {
+        // Log the reason so admins can debug why no cert was issued
+        certReason = certResult.reason;
+        console.log("[submit] cert not generated:", certResult.reason);
       }
     } catch (e) {
       console.error("[submit] cert-generation error:", e);
@@ -322,6 +327,7 @@ export async function POST(req: NextRequest) {
       showResults: attempt.quizLink.showResults,
       publishedAt,
       certificate: generatedCert,
+      certReason, // null if cert was generated, otherwise the reason it wasn't
     });
   } catch (error) {
     console.error("[POST /api/attempts/submit] error:", error);
