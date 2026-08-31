@@ -153,7 +153,7 @@ export function EventLandingPage({ eventSlug, user, onNavigate, onStartQuiz, onS
   const hasCert = event.certEnabled
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-white">
+    <div className="dark min-h-screen flex flex-col bg-slate-950 text-white">
       {/* HERO SECTION */}
       <section className="relative min-h-[80vh] flex items-end overflow-hidden">
         {event.image ? (

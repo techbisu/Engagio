@@ -81,12 +81,12 @@ export function QuizLandingPublic({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+      <div className="dark flex min-h-screen flex-col bg-slate-950 text-white">
         <SiteHeader session={null} onNavigate={navigate} onSignOut={() => {}} />
         <main className="flex flex-1 items-center justify-center px-4 py-12">
           <div className="flex flex-col items-center gap-3">
             <div className="size-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            <p className="text-sm font-medium text-slate-400">
               Loading quiz…
             </p>
           </div>
@@ -98,7 +98,7 @@ export function QuizLandingPublic({
 
   if (notFound || !meta) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+      <div className="dark flex min-h-screen flex-col bg-slate-950 text-white">
         <SiteHeader session={null} onNavigate={navigate} onSignOut={() => {}} />
         <main className="flex flex-1 items-center justify-center px-4 py-12">
           <Card className="w-full max-w-md">
@@ -135,7 +135,7 @@ export function QuizLandingPublic({
     meta.requireFullscreen
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="dark flex min-h-screen flex-col bg-slate-950 text-white">
       <SiteHeader session={null} onNavigate={navigate} onSignOut={() => {}} />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
         <button

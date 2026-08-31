@@ -101,9 +101,9 @@ export function OrgLandingPage({ orgSlug, user, onNavigate, onOpenEvent }: OrgLa
   const org = data.organization
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="dark min-h-screen flex flex-col bg-slate-950 text-white">
       {/* Header with org branding */}
-      <header className="border-b" style={{ borderColor: `${org.primaryColor}30` }}>
+      <header className="border-b border-white/10" style={{ borderColor: `${org.primaryColor}30` }}>
         <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
           <div className="flex items-center gap-4">
             {org.logoUrl ? (
@@ -118,25 +118,26 @@ export function OrgLandingPage({ orgSlug, user, onNavigate, onOpenEvent }: OrgLa
             )}
             <div>
               <h1 className="text-xl font-bold" style={{ color: org.primaryColor }}>{org.name}</h1>
-              {org.industry && <p className="text-sm text-muted-foreground">{org.industry}</p>}
+              {org.industry && <p className="text-sm text-white/50">{org.industry}</p>}
             </div>
             <div className="ml-auto flex items-center gap-2">
               {user && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className="border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                   onClick={() => { window.location.href = '/dashboard' }}
                 >
                   My Dashboard
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => onNavigate('landing')}>
+              <Button variant="ghost" size="sm" onClick={() => onNavigate('landing')} className="text-white hover:bg-white/10 hover:text-white">
                 <BrandLogo size="sm" />
               </Button>
             </div>
           </div>
           {org.description && (
-            <p className="mt-3 text-sm text-muted-foreground max-w-2xl">{org.description}</p>
+            <p className="mt-3 text-sm text-white/60 max-w-2xl">{org.description}</p>
           )}
         </div>
       </header>
@@ -144,39 +145,39 @@ export function OrgLandingPage({ orgSlug, user, onNavigate, onOpenEvent }: OrgLa
       {/* Events list */}
       <main className="flex-1 mx-auto max-w-5xl w-full px-4 py-8 sm:px-6">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold">Events</h2>
-          <p className="text-sm text-muted-foreground">Browse and participate in available events.</p>
+          <h2 className="text-2xl font-bold text-white">Events</h2>
+          <p className="text-sm text-white/50">Browse and participate in available events.</p>
         </div>
 
         {data.events.length === 0 ? (
-          <Card>
+          <Card className="border-white/10 bg-white/5">
             <CardContent className="py-12 text-center">
-              <Calendar className="mx-auto mb-3 size-10 text-muted-foreground" />
-              <p className="text-muted-foreground">No active events yet. Check back later.</p>
+              <Calendar className="mx-auto mb-3 size-10 text-white/40" />
+              <p className="text-white/50">No active events yet. Check back later.</p>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {data.events.map((event, i) => (
               <motion.div key={event.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: i * 0.05 }}>
-                <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => event.slug && onOpenEvent(event.slug)}>
+                <Card className="overflow-hidden border-white/10 bg-white/5 hover:border-emerald-500/30 hover:bg-white/10 transition-shadow cursor-pointer" onClick={() => event.slug && onOpenEvent(event.slug)}>
                   {event.image && (
-                    <div className="aspect-[16/7] w-full bg-muted overflow-hidden">
+                    <div className="aspect-[16/7] w-full bg-white/5 overflow-hidden">
                       <img src={event.image} alt={event.title} className="size-full object-cover" />
                     </div>
                   )}
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-lg">{event.title}</h3>
+                      <h3 className="font-semibold text-lg text-white">{event.title}</h3>
                       <RegistrationBadge eventId={event.id} isSignedIn={!!user} />
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{event.description}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <p className="mt-1 text-sm text-white/60 line-clamp-2">{event.description}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-white/50">
                       {event.questionCount > 0 && (<span className="flex items-center gap-1"><FileQuestion className="size-3.5" />{event.questionCount} questions</span>)}
                       {event.timeLimit > 0 && (<span className="flex items-center gap-1"><Clock className="size-3.5" />{event.timeLimit} min</span>)}
                       <span className="flex items-center gap-1"><Calendar className="size-3.5" />{new Date(event.startDate).toLocaleDateString()}</span>
                     </div>
-                    <Button className="mt-4 w-full" style={{ background: `linear-gradient(135deg, ${org.primaryColor}, ${org.secondaryColor})` }} onClick={(e) => { e.stopPropagation(); if (event.slug) onOpenEvent(event.slug) }}>
+                    <Button className="mt-4 w-full text-white" style={{ background: `linear-gradient(135deg, ${org.primaryColor}, ${org.secondaryColor})` }} onClick={(e) => { e.stopPropagation(); if (event.slug) onOpenEvent(event.slug) }}>
                       View Event <ArrowRight className="size-4" />
                     </Button>
                   </CardContent>
@@ -187,8 +188,8 @@ export function OrgLandingPage({ orgSlug, user, onNavigate, onOpenEvent }: OrgLa
         )}
       </main>
 
-      <footer className="border-t py-4 text-center text-xs text-muted-foreground">
-        Powered by <span className="font-medium">Engagio</span> · Engage. Learn. Connect.
+      <footer className="border-t border-white/10 py-4 text-center text-xs text-white/40">
+        Powered by <span className="font-medium text-white/60">Engagio</span> · Engage. Learn. Connect.
       </footer>
     </div>
   )
