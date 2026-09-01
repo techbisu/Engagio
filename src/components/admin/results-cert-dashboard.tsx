@@ -436,6 +436,25 @@ export function ResultsCertDashboard() {
       toast.error(e instanceof Error ? e.message : "Failed to clean up stale attempts"),
   })
 
+  // --- Reset a participant's attempts (admin action) ---
+  const resetAttemptsMutation = useMutation({
+    mutationFn: (args: { userId: string; eventId: string; quizLinkId?: string }) =>
+      api<{ reset: number; emailSent: boolean; message: string }>(
+        "/api/attempts/reset",
+        { method: "POST", body: JSON.stringify(args) }
+      ),
+    onSuccess: (data) => {
+      toast.success(data.message, {
+        description: data.emailSent ? "Email notification sent to the participant." : undefined,
+      })
+      qc.invalidateQueries({ queryKey: ["attempts", "all"] })
+      qc.invalidateQueries({ queryKey: ["certificates", "admin"] })
+      qc.invalidateQueries({ queryKey: ["analytics"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to reset attempts"),
+  })
+
   const generateSingleMutation = useMutation({
     mutationFn: (args: {
       userId: string
@@ -808,6 +827,15 @@ export function ResultsCertDashboard() {
                     setRevokeTarget(cert)
                   }}
                   onReinstate={(certId) => reinstateMutation.mutate(certId)}
+                  onResetAttempts={(row) => {
+                    if (row.userId && eventDetailQuery.data) {
+                      resetAttemptsMutation.mutate({
+                        userId: row.userId,
+                        eventId: eventDetailQuery.data.id,
+                      })
+                    }
+                  }}
+                  pendingResetId={resetAttemptsMutation.isPending ? "pending" : undefined}
                   pendingPublishId={
                     publishMutation.isPending
                       ? publishMutation.variables?.attemptId
@@ -1107,11 +1135,13 @@ interface ParticipantsTableProps {
   onGenerate: (row: ParticipantRow) => void
   onRevoke: (cert: CertificateDto) => void
   onReinstate: (certId: string) => void
+  onResetAttempts: (row: ParticipantRow) => void
   pendingPublishId?: string
   pendingUnpublishId?: string
   pendingGenerateId?: string
   pendingRevokeId?: string
   pendingReinstateId?: string
+  pendingResetId?: string
 }
 
 function ParticipantsTable(props: ParticipantsTableProps) {
@@ -1124,11 +1154,13 @@ function ParticipantsTable(props: ParticipantsTableProps) {
     onGenerate,
     onRevoke,
     onReinstate,
+    onResetAttempts,
     pendingPublishId,
     pendingUnpublishId,
     pendingGenerateId,
     pendingRevokeId,
     pendingReinstateId,
+    pendingResetId,
   } = props
 
   return (
@@ -1213,11 +1245,13 @@ function ParticipantsTable(props: ParticipantsTableProps) {
                       onGenerate={() => onGenerate(r)}
                       onRevoke={() => r.certificate && onRevoke(r.certificate)}
                       onReinstate={() => r.certificate && onReinstate(r.certificate.id)}
+                      onResetAttempts={() => onResetAttempts(r)}
                       pendingPublish={pendingPublishId === r.attempt?.id}
                       pendingUnpublish={pendingUnpublishId === r.attempt?.id}
                       pendingGenerate={pendingGenerateId === r.userId}
                       pendingRevoke={pendingRevokeId === r.certificate?.id}
                       pendingReinstate={pendingReinstateId === r.certificate?.id}
+                      pendingReset={!!pendingResetId}
                     />
                   </TableCell>
                 </TableRow>
@@ -1416,11 +1450,13 @@ interface RowActionsProps {
   onGenerate: () => void
   onRevoke: () => void
   onReinstate: () => void
+  onResetAttempts: () => void
   pendingPublish?: boolean
   pendingUnpublish?: boolean
   pendingGenerate?: boolean
   pendingRevoke?: boolean
   pendingReinstate?: boolean
+  pendingReset?: boolean
 }
 
 function RowActions(props: RowActionsProps) {
@@ -1433,11 +1469,13 @@ function RowActions(props: RowActionsProps) {
     onGenerate,
     onRevoke,
     onReinstate,
+    onResetAttempts,
     pendingPublish,
     pendingUnpublish,
     pendingGenerate,
     pendingRevoke,
     pendingReinstate,
+    pendingReset,
   } = props
 
   return (
@@ -1546,6 +1584,19 @@ function RowActions(props: RowActionsProps) {
             Reinstate certificate
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={onResetAttempts}
+          disabled={pendingReset}
+          className="text-amber-700 focus:text-amber-700"
+        >
+          {pendingReset ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RotateCcw className="size-4" />
+          )}
+          Reset attempts
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

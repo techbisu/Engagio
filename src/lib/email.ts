@@ -516,6 +516,49 @@ export async function sendPasswordResetEmail(params: {
 }
 
 
+/**
+ * Send an "attempts reset" notification email to a participant.
+ * Called when an admin resets a participant's quiz attempts so they can
+ * retake the quiz.
+ */
+export async function sendAttemptResetEmail(params: {
+  to: string
+  participantName: string
+  eventTitle: string
+  quizUrl: string
+  resetBy?: string
+}): Promise<SendEmailResult> {
+  const { to, participantName, eventTitle, quizUrl, resetBy } = params
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Hi <strong style="color:${BRAND.text};">${escapeHtml(participantName)}</strong>,
+    </p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Good news! Your quiz attempts for <strong style="color:${BRAND.text};">${escapeHtml(eventTitle)}</strong>
+      have been reset${resetBy ? ` by the organizer` : ""}. You can now retake the quiz.
+    </p>
+    ${statTileHtml("Quiz", escapeHtml(eventTitle), BRAND.primary)}
+  `
+
+  const html = renderEmailLayout({
+    preheader: `Your quiz attempts for ${eventTitle} have been reset`,
+    title: "Quiz Attempts Reset 🔄",
+    intro: `Hi ${participantName}, you can now retake the quiz.`,
+    bodyHtml,
+    cta: { label: "Retake Quiz →", url: quizUrl },
+  })
+
+  return sendEmail({
+    to,
+    subject: `Your quiz attempts have been reset — ${eventTitle}`,
+    html,
+    text: `Hi ${participantName},\n\nYour quiz attempts for ${eventTitle} have been reset${resetBy ? " by the organizer" : ""}. You can now retake the quiz at: ${quizUrl}\n\n— The Engagio Team`,
+    tag: "attempt-reset",
+  })
+}
+
+
 /* ────────────────────────────────────────────────────────────────────────
    Utilities & status helpers
    ──────────────────────────────────────────────────────────────────────── */
