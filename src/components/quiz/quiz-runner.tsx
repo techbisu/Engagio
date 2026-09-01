@@ -135,11 +135,19 @@ export function QuizRunner({
         setTotalMarks(data.totalMarks)
         setSecondsLeft((data.timeLimit || timeLimit) * 60)
         setSecurity(data.security ?? DEFAULT_SECURITY)
-        // If AI proctor is enabled, open the camera gate before activating.
+        // If AI proctor is enabled, open the camera gate and DON'T activate
+        // the quiz yet — the quiz will activate when the proctor is ready.
         if (data.security?.aiProctor) {
           setCameraGateOpen(true)
+          // Status stays "loading" — the quiz won't start until the proctor
+          // is ready (handled by a useEffect below).
+        } else {
+          // No AI proctor → start immediately.
+          if (!requireFullscreen) {
+            setTimerStarted(true)
+          }
+          setStatus("active")
         }
-        setStatus("active")
       } catch (e) {
         if (cancelled) return
         setError(e instanceof Error ? e.message : "Failed to start quiz")
@@ -167,17 +175,40 @@ export function QuizRunner({
     onAutoSubmit: handleAutoSubmit,
   })
 
-  // ----- AI proctor — only mounted when security.aiProctor is true AND the
-  //       participant has granted camera permission (camera gate closed).
-  //       There is no bypass — if the user denies camera access, they are
-  //       returned to the dashboard, so we don't need a `proctorBypassed` flag.
+  // ----- AI proctor — enabled as soon as the camera gate opens (or quiz is
+  //       active without a gate). The hook handles sequential init internally:
+  //       camera → model → detect → calibrate → ready. The quiz only starts
+  //       when initPhase === "ready" (handled by the useEffect below).
   const aiProctor = useAiProctor({
     enabled:
-      security.aiProctor && !cameraGateOpen && status === "active",
+      security.aiProctor && (cameraGateOpen || status === "active"),
     faceDetection: security.aiProctorFaceDetection,
     multiFace: security.aiProctorMultiFace,
     lookAway: security.aiProctorLookAway,
   })
+
+  // ----- When the proctor is ready, close the gate and start the quiz -----
+  // The proctor reports "ready" via initPhase after calibration completes.
+  // We use a callback ref pattern to transition without setState-in-effect.
+  const prevPhaseRef = useRef<string>("")
+  useEffect(() => {
+    const phase = aiProctor.initPhase
+    // Only fire when phase transitions TO "ready" while gate is open
+    if (cameraGateOpen && phase === "ready" && prevPhaseRef.current !== "ready") {
+      // Use setTimeout to defer the state updates out of the effect
+      setTimeout(() => {
+        setCameraGateOpen(false)
+        if (!requireFullscreen) {
+          setTimerStarted(true)
+        }
+        setStatus("active")
+        toast.success("AI proctoring active", {
+          description: "Camera access granted. Stay visible to the camera.",
+        })
+      }, 0)
+    }
+    prevPhaseRef.current = phase
+  }, [cameraGateOpen, aiProctor.initPhase, requireFullscreen])
 
   // If the proctor hook reports a camera error after the gate was closed,
   // surface it as a non-blocking toast.
@@ -448,17 +479,9 @@ export function QuizRunner({
 
   // ----- Camera gate handlers (AI proctor permission flow) -----
   // When AI proctor is enabled, the participant MUST grant camera permission.
-  // There is NO "Continue without AI proctor" bypass — if the user denies
-  // camera access or cancels, they are returned to the dashboard. This is a
-  // strict requirement: AI security cannot be optional when the quiz link
-  // has `aiProctor: true`.
-  const handleCameraGranted = () => {
-    setCameraGateOpen(false)
-    toast.success("AI proctoring active", {
-      description: "Camera access granted. Stay visible to the camera.",
-    })
-  }
-
+  // The gate stays open until the proctor's initPhase === "ready".
+  // The CameraPermissionGate component now shows the init phase status
+  // (requesting camera, loading model, calibrating) so the user sees progress.
   const handleCameraError = () => {
     // The proctor hook will set `aiProctor.error` — keep the gate open so the
     // user can retry or choose to go back.
@@ -466,7 +489,6 @@ export function QuizRunner({
 
   const handleReturnToDashboard = () => {
     // User chose NOT to grant camera permission — return them to the dashboard.
-    // This is the only exit path other than granting camera access.
     onExit()
   }
 
@@ -951,9 +973,10 @@ export function QuizRunner({
           the participant must grant camera access to proceed, OR choose to go
           back to the dashboard. There is no "continue without proctor" option
           because AI security is a strict requirement when enabled. */}
-      {cameraGateOpen && status === "active" && (
+      {cameraGateOpen && (
         <CameraPermissionGate
-          onGranted={handleCameraGranted}
+          initPhase={aiProctor.initPhase}
+          proctorError={aiProctor.error}
           onError={handleCameraError}
           onBack={handleReturnToDashboard}
         />
@@ -1061,42 +1084,33 @@ export function QuizRunner({
 // camera access to proceed — the only alternative is to go back.
 // ---------------------------------------------------------------------------
 function CameraPermissionGate({
-  onGranted,
+  initPhase,
+  proctorError,
   onError,
   onBack,
 }: {
-  onGranted: () => void
+  initPhase: "idle" | "requesting-camera" | "loading-model" | "calibrating" | "ready" | "error"
+  proctorError: string | null
   onError: () => void
   onBack: () => void
 }) {
-  const [checking, setChecking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // The proctor hook auto-starts when enabled. We just show the appropriate
+  // UI based on initPhase. The user doesn't need to click anything — the
+  // browser will prompt for camera permission automatically.
 
-  const requestCamera = async () => {
-    setChecking(true)
-    setError(null)
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Camera API not supported in this browser")
-      }
-      // Request the stream just to confirm permission. The useAiProctor hook
-      // will re-request it (browser caches the grant) when the gate closes.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240, facingMode: "user" },
-        audio: false,
-      })
-      // Stop tracks immediately — the hook will reopen its own stream.
-      stream.getTracks().forEach((t) => t.stop())
-      onGranted()
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : "Failed to access camera"
-      setError(msg)
-      onError()
-    } finally {
-      setChecking(false)
-    }
+  // Map initPhase to user-visible status
+  const phaseInfo: Record<string, { label: string; description: string }> = {
+    "idle": { label: "Starting…", description: "Preparing AI security." },
+    "requesting-camera": { label: "Camera permission required", description: "Please allow camera access in your browser." },
+    "loading-model": { label: "Loading AI model…", description: "Downloading face detection model. This takes a few seconds." },
+    "calibrating": { label: "Calibrating…", description: "Establishing your baseline position. Please look at the screen." },
+    "ready": { label: "Ready!", description: "AI proctoring is active. Starting quiz…" },
+    "error": { label: "Setup failed", description: proctorError || "An error occurred during setup." },
   }
+
+  const info = phaseInfo[initPhase] || phaseInfo["idle"]
+  const isError = initPhase === "error"
+  const isWorking = initPhase === "requesting-camera" || initPhase === "loading-model" || initPhase === "calibrating"
 
   return (
     <div
@@ -1111,57 +1125,63 @@ function CameraPermissionGate({
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
-            <Camera className="size-8 text-emerald-600" />
+            {isWorking ? (
+              <Loader2 className="size-8 animate-spin text-emerald-600" />
+            ) : isError ? (
+              <AlertTriangle className="size-8 text-amber-600" />
+            ) : (
+              <Camera className="size-8 text-emerald-600" />
+            )}
           </div>
-          <CardTitle className="text-xl">Camera access required</CardTitle>
+          <CardTitle className="text-xl">{info.label}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-center">
           <p className="text-sm text-muted-foreground">
-            This quiz uses <span className="font-semibold text-foreground">AI proctoring</span>.
-            Your camera will be used to verify your identity and detect potential
-            academic dishonesty. No video is recorded or transmitted — all
-            analysis runs locally in your browser.
+            {info.description}
           </p>
-          <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-              Face presence is checked periodically.
-            </li>
-            <li className="flex items-start gap-2">
-              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-              Multiple faces in frame trigger an alert.
-            </li>
-            <li className="flex items-start gap-2">
-              <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-              Looking away from the screen is logged.
-            </li>
-          </ul>
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              {error}
-            </p>
+          {initPhase === "idle" && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                This quiz uses <span className="font-semibold text-foreground">AI proctoring</span>.
+                Your camera will be used to verify your identity and detect potential
+                academic dishonesty. No video is recorded or transmitted — all
+                analysis runs locally in your browser.
+              </p>
+              <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                  Face presence is checked periodically.
+                </li>
+                <li className="flex items-start gap-2">
+                  <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                  Multiple faces in frame trigger an alert.
+                </li>
+                <li className="flex items-start gap-2">
+                  <Eye className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                  Looking away from the screen is logged.
+                </li>
+              </ul>
+            </>
           )}
-          <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-            <strong>Required:</strong> You must grant camera access to take this
-            quiz. If you cancel, you will be returned to the dashboard.
-          </div>
+          {isError && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              {proctorError}
+            </div>
+          )}
+          {(initPhase === "idle" || isError) && (
+            <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              <strong>Required:</strong> You must grant camera access to take this
+              quiz. If you cancel, you will be returned to the dashboard.
+            </div>
+          )}
           <div className="space-y-2">
-            <Button
-              onClick={requestCamera}
-              disabled={checking}
-              className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              {checking ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Camera className="size-4" />
-              )}
-              {checking ? "Requesting…" : "Grant camera access"}
-            </Button>
+            {/* The proctor hook auto-starts — no button needed once it's working.
+                Only show the back button. */}
             <Button
               onClick={onBack}
               variant="outline"
               className="w-full gap-1.5"
+              disabled={isWorking}
             >
               <ArrowLeft className="size-4" /> Back to Dashboard
             </Button>

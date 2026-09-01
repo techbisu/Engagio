@@ -213,12 +213,26 @@ export interface EmailLayoutProps {
   bodyHtml: string
   /** Footer note overrides the default "Powered by Engagio" line. */
   footerNote?: string
+  /** Optional organization branding — replaces the "Engagio" text with
+   *  the org's name in bold + uses the org's primary color. */
+  orgBranding?: {
+    name: string
+    logoUrl?: string | null
+    primaryColor?: string | null
+  }
 }
 
 export function renderEmailLayout(props: EmailLayoutProps): string {
-  const { preheader = "", title, intro, cta, bodyHtml, footerNote } = props
+  const { preheader = "", title, intro, cta, bodyHtml, footerNote, orgBranding } = props
   const safePreheader = escapeHtml(preheader)
   const safeTitle = escapeHtml(title)
+
+  // Use org primary color if provided, otherwise default indigo
+  const primary = orgBranding?.primaryColor || BRAND.primary
+
+  // Brand mark: always use org name as bold text heading (no logo image —
+  // logo images are often low-res and look bad in email clients)
+  const brandMark = `<span style="font-weight:800;font-size:20px;letter-spacing:-0.02em;color:${primary};">${escapeHtml(orgBranding?.name || "Engagio")}</span>`
 
   return `<!doctype html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -242,7 +256,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
             <tr>
               <td align="center" style="padding:0 0 16px 0;">
                 <div style="display:inline-block;padding:8px 16px;background:white;border-radius:999px;border:1px solid ${BRAND.border};">
-                  <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;background:linear-gradient(135deg,${BRAND.primary},${BRAND.accent});-webkit-background-clip:text;background-clip:text;color:transparent;">Engagio</span>
+                  ${brandMark}
                 </div>
               </td>
             </tr>
@@ -250,7 +264,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
             <tr>
               <td style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};overflow:hidden;">
                 <!-- Gradient header -->
-                <div style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});padding:28px 32px;color:white;">
+                <div style="background:linear-gradient(135deg,${primary},${BRAND.primaryDark});padding:28px 32px;color:white;">
                   <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">${safeTitle}</h1>
                 </div>
 
@@ -281,7 +295,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
 
             <tr>
               <td style="padding:16px 0 0 0;text-align:center;font-size:11px;color:${BRAND.subtle};">
-                You are receiving this because someone used Engagio with this email address.<br />
+                You are receiving this because someone used ${escapeHtml(orgBranding?.name || "Engagio")} with this email address.<br />
                 If this wasn't you, you can safely ignore this email.
               </td>
             </tr>
@@ -349,8 +363,9 @@ export async function sendCertificateIssuedEmail(params: {
   eventTitle: string
   certificateNumber: string
   verifyUrl: string
+  orgBranding?: { name: string; logoUrl?: string | null; primaryColor?: string | null }
 }): Promise<SendEmailResult> {
-  const { participantName, eventTitle, certificateNumber, verifyUrl } = params
+  const { participantName, eventTitle, certificateNumber, verifyUrl, orgBranding } = params
 
   const bodyHtml = `
     <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
@@ -367,6 +382,7 @@ export async function sendCertificateIssuedEmail(params: {
     intro: `Hi ${participantName}, great work — you've earned it.`,
     bodyHtml,
     cta: { label: "View Certificate →", url: verifyUrl },
+    orgBranding,
   })
 
   return sendEmail({
