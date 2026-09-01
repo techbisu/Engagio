@@ -100,8 +100,11 @@ export async function generateCertificate(opts: {
   issuedBy?: string // admin userId
   manualOverride?: boolean
   regenerate?: boolean
+  /** Base URL for email links (e.g. https://ips2026.dosedailynews.com).
+   *  If not provided, falls back to NEXTAUTH_URL. */
+  baseUrl?: string
 }): Promise<{ certificate: CertificateDto | null; created: boolean; reason: string }> {
-  const { eventId, userId, attemptId, issuedBy, manualOverride = false, regenerate = false } = opts
+  const { eventId, userId, attemptId, issuedBy, manualOverride = false, regenerate = false, baseUrl } = opts
 
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -211,13 +214,13 @@ export async function generateCertificate(opts: {
   // Fire-and-forget — we don't want email failures to block cert generation.
   if (user.email) {
     try {
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000"
+      const emailBaseUrl = baseUrl || process.env.NEXTAUTH_URL || "http://localhost:3000"
       await sendCertificateIssuedEmail({
         to: user.email,
         participantName: recipientName,
         eventTitle: event.title,
         certificateNumber: cert.certificateNumber,
-        verifyUrl: `${baseUrl}/verify/${cert.verificationToken}`,
+        verifyUrl: `${emailBaseUrl}/verify/${cert.verificationToken}`,
       })
     } catch (e) {
       console.error("[cert-service] Failed to send certificate email:", e)
@@ -339,7 +342,7 @@ export async function sendPublishNotifications(opts: {
         participantName: user.name || user.email,
         eventTitle: event?.title || "your assessment",
         percentage: attempt.percentage,
-        resultUrl: `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard`,
+        resultUrl: `${baseUrl || process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard`,
       })
       if (result.sent) {
         sent++

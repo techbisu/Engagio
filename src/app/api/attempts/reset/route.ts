@@ -165,8 +165,11 @@ export async function POST(req: NextRequest) {
     // Send email notification
     let emailSent = false;
     if (user?.email) {
-      // Build the quiz URL
-      const baseUrl = process.env.NEXTAUTH_URL || "https://engagio.app";
+      // Build the quiz URL using the request's host (org domain) instead of
+      // NEXTAUTH_URL which may point to the Vercel/engagio.app domain.
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+      const proto = req.headers.get("x-forwarded-proto") || "https";
+      const baseUrl = host ? `${proto}://${host}` : (process.env.NEXTAUTH_URL || "https://engagio.app");
       const quizUrl = quizSlug
         ? `${baseUrl}/quiz/${quizSlug}`
         : `${baseUrl}/dashboard`;

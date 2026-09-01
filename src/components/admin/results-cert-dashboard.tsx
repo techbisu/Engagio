@@ -2049,7 +2049,7 @@ function Timeline({ row, event }: { row: ParticipantRow; event?: EventDto }) {
     detail: cert
       ? `${format(parseISO(cert.issuedAt), "MMM d, yyyy")} · ${cert.certificateNumber}${
           cert.manualOverride ? " (manual override)" : ""
-        }`
+        }${!submitted && hasCert ? " · From a previous attempt" : ""}`
       : certEligible && submitted
       ? "Eligible — generate from the actions menu"
       : "Not eligible",

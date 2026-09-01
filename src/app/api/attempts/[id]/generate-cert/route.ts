@@ -57,10 +57,15 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
     // Generate (or fetch existing) certificate. The eligibility check inside
     // generateCertificate handles certEnabled + certIssueCondition.
+    // Resolve the base URL from the request host for email links (org domain)
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+    const proto = req.headers.get("x-forwarded-proto") || "https";
+    const emailBaseUrl = host ? `${proto}://${host}` : undefined;
     const certResult = await generateCertificate({
       eventId: attempt.eventId,
       userId: session.user.id,
       attemptId: attempt.id,
+      baseUrl: emailBaseUrl,
     });
 
     if (!certResult.certificate) {
