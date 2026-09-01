@@ -188,7 +188,9 @@ export function AdminShell({
   React.useEffect(() => {
     const slug = getOrgSlug()
     if (!slug) return
-    fetch("/api/organizations/current")
+    fetch("/api/organizations/current", {
+      headers: slug ? { "x-org-slug": slug } : undefined,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.id) setCurrentOrgId(data.id)
