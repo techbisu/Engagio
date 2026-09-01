@@ -6,18 +6,16 @@ import { toast } from "sonner"
  * Web Share API helpers for sharing the certificate image + caption text
  * to social platforms.
  *
- * The native Web Share API (`navigator.share`) on mobile browsers supports
- * sharing FILES (images) + text + URL together — opening the OS share sheet
- * so the user can pick WhatsApp / Facebook / X / LinkedIn / etc. This is the
- * ONLY reliable way to attach an image to a WhatsApp share (the `wa.me/?text=`
- * URL scheme does NOT support image attachments).
- *
- * On desktop browsers that don't support `navigator.share` with files, we
- * fall back to:
- *   1. Auto-downloading the PNG to the user's device (so they can attach it
- *      manually).
- *   2. Opening the platform-specific share URL with the caption text + URL.
- *   3. Showing a toast: "Image downloaded! Attach it to your message."
+ * STRATEGY (in order of preference):
+ * 1. navigator.share({ files, text, url }) — opens the OS share sheet with
+ *    the cert image attached + caption text + URL. Best UX. Mobile only.
+ * 2. navigator.share({ text, url }) — opens the OS share sheet WITHOUT the
+ *    image but WITH the caption text + URL. The share URL has og:image so
+ *    the platform's preview card shows the cert image. Mobile + some desktop.
+ * 3. Platform-specific share URL (LinkedIn/WhatsApp/Facebook/X) — opens the
+ *    platform's share intent with caption + URL. The URL's og:image shows
+ *    the cert image in the preview card. Desktop fallback.
+ * 4. Last resort: download the image + copy caption to clipboard.
  */
 
 export interface ShareImageParams {
@@ -41,8 +39,7 @@ async function dataUrlToFile(dataUrl: string, fileName: string): Promise<File> {
 }
 
 /**
- * Trigger a browser download of the PNG (fallback for desktop browsers
- * that don't support `navigator.share` with files).
+ * Trigger a browser download of the PNG.
  */
 export function downloadImage(dataUrl: string, fileName: string): void {
   const a = document.createElement("a")
@@ -54,15 +51,19 @@ export function downloadImage(dataUrl: string, fileName: string): void {
 }
 
 /**
- * Check whether the current browser supports `navigator.share` with files.
- * Mobile browsers (Chrome Android, Safari iOS) support this. Most desktop
- * browsers do NOT.
+ * Check whether the current browser supports navigator.share.
  */
-export function canShareFiles(): boolean {
+function hasNavigatorShare(): boolean {
+  return typeof navigator !== "undefined" && "share" in navigator
+}
+
+/**
+ * Check whether the current browser supports navigator.share with files.
+ */
+function canShareFiles(): boolean {
   if (typeof navigator === "undefined") return false
   if (!("share" in navigator) || !("canShare" in navigator)) return false
   try {
-    // canShare with a dummy PNG file to check support
     const dummy = new File(["test"], "test.png", { type: "image/png" })
     return navigator.canShare({ files: [dummy] })
   } catch {
@@ -71,31 +72,7 @@ export function canShareFiles(): boolean {
 }
 
 /**
- * Share the certificate image + caption + URL using the native Web Share
- * API. On success, opens the OS share sheet (WhatsApp / Facebook / X /
- * LinkedIn / etc. — user picks). Returns true if shared, false if the user
- * cancelled or the API isn't available.
- */
-export async function shareViaWebApi(params: ShareImageParams): Promise<boolean> {
-  try {
-    const file = await dataUrlToFile(params.imageDataUrl, params.fileName)
-    await navigator.share({
-      files: [file],
-      text: params.caption,
-      url: params.url,
-      title: "Certificate of Participation",
-    })
-    return true
-  } catch (e: any) {
-    // AbortError = user cancelled — don't show an error.
-    if (e?.name === "AbortError") return false
-    throw e
-  }
-}
-
-/**
- * Open a platform-specific share URL in a new window. Used as a fallback
- * when `navigator.share` with files isn't available.
+ * Open a platform-specific share URL in a new window.
  */
 export function openShareUrl(
   platform: string,
@@ -119,68 +96,85 @@ export function openShareUrl(
 /**
  * Share the certificate image + caption + URL.
  *
- * Tries the native Web Share API first (best UX — attaches the image to
- * WhatsApp / Facebook / etc. on mobile). Falls back to downloading the
- * image + opening the platform-specific share URL (desktop browsers).
+ * Tries multiple strategies in order:
+ * 1. Web Share API with files (mobile — image attached to OS share sheet)
+ * 2. Web Share API with text+url only (mobile — caption + URL, no image but
+ *    the og:image preview card shows when the link is shared)
+ * 3. Platform-specific share URL (desktop — opens LinkedIn/WhatsApp/etc.
+ *    share intent with caption + URL, og:image preview card shows)
+ * 4. Last resort: download image + copy caption to clipboard
  *
  * @param platform "whatsapp" | "linkedin" | "facebook" | "x" | "native"
- *                  ("native" = just open the OS share sheet, let the user
- *                  pick the platform)
  */
 export async function shareCertificate(
   params: ShareImageParams,
   platform: string = "native"
 ): Promise<void> {
-  // ── Path 1: Web Share API with file support (mobile browsers) ────────
-  // This is the ONLY way to attach the image to a WhatsApp share. It opens
-  // the native OS share sheet where the user picks WhatsApp / Facebook /
-  // X / LinkedIn / etc.
-  if (canShareFiles()) {
+  // ── Path 1: Web Share API with file support (mobile, best UX) ─────────
+  if (canShareFiles() && params.imageDataUrl) {
     try {
-      const shared = await shareViaWebApi(params)
-      if (shared) {
-        toast.success("Shared successfully!")
-        return
-      }
-      // User cancelled (AbortError) — don't fall through to the fallback.
+      const file = await dataUrlToFile(params.imageDataUrl, params.fileName)
+      await navigator.share({
+        files: [file],
+        text: params.caption,
+        url: params.url,
+        title: "Certificate of Participation",
+      })
+      toast.success("Shared successfully!")
       return
-    } catch (e) {
-      // The Web Share API with files failed (e.g. the image fetch failed,
-      // File creation failed, or the browser silently rejected). Fall
-      // through to the URL-based fallback below so the user still gets
-      // a working share button instead of "nothing happens".
-      console.error("[share-utils] Web Share API with files failed, falling back:", e)
+    } catch (e: any) {
+      if (e?.name === "AbortError") return // user cancelled
+      // File share failed — fall through to Path 2/3
+      console.error("[share-utils] share with files failed, trying text-only:", e)
     }
   }
 
-  // ── Path 2: Fallback for desktop browsers OR when Web Share with files failed ─
-  // 1. Download the PNG so the user can manually attach it.
-  // 2. Open the platform-specific share URL with caption + URL.
-  // 3. Show a toast telling the user to attach the downloaded image.
-  try {
-    downloadImage(params.imageDataUrl, params.fileName)
-  } catch (e) {
-    console.error("[share-utils] downloadImage failed:", e)
-  }
-
-  if (platform === "native") {
-    // No native share sheet on desktop — just download + copy caption.
+  // ── Path 2: Web Share API with text + URL only (mobile, no image file) ─
+  // The og:image on the verify page will show the cert image in the preview
+  // card when the link is shared on the platform.
+  if (hasNavigatorShare()) {
     try {
-      await navigator.clipboard.writeText(`${params.caption} ${params.url}`)
-      toast.success("Image downloaded + caption copied to clipboard!", {
-        description: "Attach the image to your post and paste the caption.",
+      await navigator.share({
+        text: params.caption,
+        url: params.url,
+        title: "Certificate of Participation",
       })
-    } catch {
-      toast.success("Image downloaded!", {
-        description: "Attach it to your post. Caption text copied separately.",
-      })
+      toast.success("Shared successfully!")
+      return
+    } catch (e: any) {
+      if (e?.name === "AbortError") return // user cancelled
+      console.error("[share-utils] share with text only failed:", e)
     }
+  }
+
+  // ── Path 3: Platform-specific share URL (desktop fallback) ────────────
+  // Opens the platform's share intent with caption + URL. The og:image
+  // preview card shows when the link is shared.
+  if (platform !== "native") {
+    openShareUrl(platform, params.caption, params.url)
+    toast.success("Share window opened!", {
+      description: `The certificate image will appear in the preview when you paste the link.`,
+    })
     return
   }
 
-  // Open the platform-specific share URL
-  openShareUrl(platform, params.caption, params.url)
-  toast.success("Image downloaded + share window opened!", {
-    description: `Attach the downloaded image to your ${platform} post/message.`,
-  })
+  // ── Path 4: Last resort — download image + copy caption ───────────────
+  if (params.imageDataUrl) {
+    try {
+      downloadImage(params.imageDataUrl, params.fileName)
+    } catch (e) {
+      console.error("[share-utils] downloadImage failed:", e)
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(`${params.caption} ${params.url}`)
+    toast.success("Caption + link copied to clipboard!", {
+      description: "Paste it into your post. The certificate image will show in the preview.",
+    })
+  } catch {
+    toast.success("Link copied!", {
+      description: "Paste it into your post. The certificate image will show in the preview.",
+    })
+  }
 }
