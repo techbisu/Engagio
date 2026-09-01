@@ -51,7 +51,14 @@ export async function generateMetadata({
 
   const cert = await db.certificate.findUnique({
     where: { verificationToken: token },
-    include: {
+    select: {
+      id: true,
+      recipientName: true,
+      certificateNumber: true,
+      verificationToken: true,
+      certificateUrl: true,
+      issuedAt: true,
+      template: true,
       event: {
         select: {
           id: true,
@@ -98,7 +105,13 @@ export async function generateMetadata({
   const eventName = cert.event?.title ?? "Assessment"
   const ogTitle = `${cert.recipientName} earned a Certificate of Participation`
   const ogDescription = `${cert.recipientName} successfully completed ${eventName}${orgName ? ` organized by ${orgName}` : ""}. Verify the authenticity of this certificate on Engagio.`
-  const ogImageUrl = `${origin}/api/og/cert/${token}`
+
+  // Use the Cloudinary URL (uploaded by the client after canvas rendering)
+  // as the og:image. This is a real CDN URL that social crawlers can fetch.
+  // Falls back to the server-side /api/og/cert/[token] endpoint if the cert
+  // PNG hasn't been uploaded to Cloudinary yet (e.g., the participant hasn't
+  // viewed the cert page yet).
+  const ogImageUrl = cert.certificateUrl || `${origin}/api/og/cert/${token}`
   const pageUrl = `${origin}/verify/${token}`
 
   return {

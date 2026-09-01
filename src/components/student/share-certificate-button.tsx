@@ -33,6 +33,7 @@ import type { CertTemplate } from "@/types"
 import { api } from "@/components/student/api"
 import type { AttemptReviewPayload } from "@/components/student/api"
 import { shareCertificate } from "@/lib/share-utils"
+import { useCertUpload } from "@/components/cert/use-cert-upload"
 
 export interface ShareCertificateButtonProps {
   attemptId: string
@@ -238,6 +239,7 @@ function CertificateShareContent({
 }) {
   const [certDataUrl, setCertDataUrl] = React.useState<string | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
+  const { uploadCert } = useCertUpload(cert.id)
 
   const verifyUrl =
     typeof window !== "undefined"
@@ -300,7 +302,10 @@ function CertificateShareContent({
           issuedAt={cert.issuedAt}
           verificationUrl={verifyUrl}
           logo={orgLogo}
-          onRendered={setCertDataUrl}
+          onRendered={(dataUrl) => {
+            setCertDataUrl(dataUrl)
+            uploadCert(dataUrl)
+          }}
           className="w-full"
         />
       </div>

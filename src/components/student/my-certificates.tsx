@@ -39,7 +39,7 @@ import {
   CertificateRenderer,
   downloadCertificatePng,
 } from "@/components/cert/certificate-renderer";
-import { ShareAchievementButton } from "@/components/achievements/share-achievement-button";
+import { ShareCertificateButton } from "@/components/student/share-certificate-button";
 
 interface MyCertsResponse {
   certificates: CertificateDto[];
@@ -354,22 +354,9 @@ function ViewCertificateDialog({
           >
             <Download className="size-4" /> Download PNG
           </Button>
-          <ShareAchievementButton
-            achievementInput={{
-              type: "CERTIFICATE_EARNED",
-              eventId: cert.eventId,
-              title: cert.event?.title
-                ? `${cert.event.title} · Certificate`
-                : "Certificate Earned",
-              subtitle: cert.event?.title ?? undefined,
-              achievementData: {
-                eventTitle: cert.event?.title,
-                certificateNumber: cert.certificateNumber,
-                certificateVerifyUrl: verifyUrl,
-              },
-              templateId: "professional",
-              visibility: "PUBLIC",
-            }}
+          <ShareCertificateButton
+            attemptId={cert.attemptId ?? ""}
+            eventName={cert.event?.title}
             label="Share Certificate"
             size="sm"
           />

@@ -64,6 +64,7 @@ import type {
 } from "@/components/student/api"
 import type { SafeUser } from "@/types"
 import { CertificateRenderer, downloadCertificatePng } from "@/components/cert/certificate-renderer"
+import { useCertUpload } from "@/components/cert/use-cert-upload"
 import type { CertTemplate } from "@/types"
 
 
@@ -827,6 +828,7 @@ function CertificateSection({ certificate, eventName, eventDescription, orgName,
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
   const [certDataUrl, setCertDataUrl] = useState<string | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
+  const { uploadCert } = useCertUpload(certificate.id)
 
   const verifyUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${certificate.verificationToken}`
 
@@ -895,7 +897,12 @@ function CertificateSection({ certificate, eventName, eventDescription, orgName,
           issuedAt={certificate.issuedAt}
           verificationUrl={verifyUrl}
           logo={orgLogo}
-          onRendered={setCertDataUrl}
+          onRendered={(dataUrl) => {
+            setCertDataUrl(dataUrl)
+            // Auto-upload to Cloudinary for og:image + sharing (background task,
+            // errors are silently logged — the cert still renders + downloads).
+            uploadCert(dataUrl)
+          }}
           className="w-full"
         />
       </div>
