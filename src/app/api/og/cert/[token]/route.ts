@@ -17,9 +17,15 @@ import { renderCertOgByToken } from "@/lib/cert-og";
  * works on Vercel). This avoids the next/og + Satori runtime issues that
  * were causing 500 errors on Vercel's serverless environment.
  *
+ * Uses the Node.js runtime (NOT edge) because it uses Prisma + sharp.
+ * sharp is in serverExternalPackages and works on Vercel.
+ *
  * Cache for 1 hour (social crawlers re-fetch periodically; the cert content
  * is immutable so caching is safe).
  */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ token: string }> }
