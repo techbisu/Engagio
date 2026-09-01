@@ -38,8 +38,13 @@ async function cleanupStaleAttempts(
 ) {
   const now = new Date();
 
-  // In "eager" mode, mark ALL IN_PROGRESS attempts as TIMEOUT immediately.
-  // In "stale" mode, only mark attempts older than the threshold.
+  // In "eager" mode, DELETE ALL IN_PROGRESS attempts immediately — the user
+  // is starting a new attempt, so they've abandoned the old one. We DELETE
+  // (not mark as TIMEOUT) because an abandoned attempt should NOT count
+  // toward maxAttempts. Only COMPLETED/TIMEOUT/CHEAT_DETECTED count.
+  //
+  // In "stale" mode, mark old IN_PROGRESS attempts as TIMEOUT (for analytics
+  // accuracy). This is used by the background cleanup endpoint.
   const where: any = {
     userId,
     quizLinkId,
@@ -54,13 +59,20 @@ async function cleanupStaleAttempts(
   }
 
   try {
-    await db.quizAttempt.updateMany({
-      where,
-      data: {
-        status: "TIMEOUT",
-        completedAt: now,
-      },
-    });
+    if (mode === "eager") {
+      // DELETE abandoned IN_PROGRESS attempts so they don't count toward
+      // maxAttempts. This is the key fix — the user can always retake.
+      await db.quizAttempt.deleteMany({ where });
+    } else {
+      // For background cleanup, mark as TIMEOUT (keeps audit trail)
+      await db.quizAttempt.updateMany({
+        where,
+        data: {
+          status: "TIMEOUT",
+          completedAt: now,
+        },
+      });
+    }
   } catch (e) {
     console.error("[cleanupStaleAttempts] error:", e);
   }

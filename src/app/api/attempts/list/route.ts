@@ -60,6 +60,9 @@ export async function GET(req: NextRequest) {
           !a.quizLink.publishResults || a.publishedAt !== null;
         return {
           id: a.id,
+          userId: a.userId,
+          eventId: a.eventId,
+          quizLinkId: a.quizLinkId,
           status: a.status,
           score: a.score,
           totalMarks: a.totalMarks,
