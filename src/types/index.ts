@@ -215,6 +215,11 @@ export interface QuizLinkDto {
   // Email + leaderboard are independent of result visibility
   emailOnPublish: boolean
   leaderboardEnabled: boolean
+  // Results page display toggles
+  showScore: boolean
+  showCategory: boolean
+  showAntiCheat: boolean
+  showReviewAnswers: boolean
   passThreshold: number
   // Security toggles
   requireFullscreen: boolean

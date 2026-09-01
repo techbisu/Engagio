@@ -29,6 +29,10 @@ export async function GET(
             maxAttempts: true,
             passThreshold: true,
             showResults: true,
+            showScore: true,
+            showCategory: true,
+            showAntiCheat: true,
+            showReviewAnswers: true,
             requireFullscreen: true,
             publishResults: true,
             eventId: true,
@@ -278,10 +282,15 @@ export async function GET(
     if (!certificate && attempt.event.certEnabled && attempt.status !== "IN_PROGRESS") {
       try {
         const { generateCertificate } = await import("@/lib/cert-service");
+        // Resolve the base URL from the request host for email links (org domain)
+        const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+        const proto = req.headers.get("x-forwarded-proto") || "https";
+        const emailBaseUrl = host ? `${proto}://${host}` : undefined;
         const certResult = await generateCertificate({
           eventId: attempt.eventId,
           userId: attempt.userId,
           attemptId: attempt.id,
+          baseUrl: emailBaseUrl,
         });
         if (certResult.certificate) {
           // Re-query with the same select shape so the response is consistent.

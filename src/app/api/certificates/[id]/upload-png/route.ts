@@ -93,8 +93,12 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
         certificateNumber: true,
         certificatePublicId: true,
         eventId: true,
+        event: {
+          select: {
+            organizationId: true,
+          },
+        },
       },
-      include: { event: { select: { organizationId: true } } },
     });
 
     if (!cert) {

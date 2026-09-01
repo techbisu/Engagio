@@ -29,7 +29,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
   SheetTitle,
+  SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet"
 import {
@@ -66,6 +68,7 @@ import { ActivitiesPanel } from "./activities/activities-panel"
 import { LandingPageBuilder } from "./landing-page-builder"
 import { AuditLogPanel } from "./audit-log-panel"
 import { OrgSwitcher } from "@/components/organization/org-switcher"
+import { OrgSettings } from "@/components/organization/org-settings"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { getOrgSlug, ROLE_LABEL, type OrgRole } from "@/components/organization/api"
 
@@ -180,10 +183,14 @@ export function AdminShell({
 
   // Fetch the current org ID for the audit log panel.
   const [currentOrgId, setCurrentOrgId] = React.useState<string | null>(null)
+  // Org settings dialog state
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
   React.useEffect(() => {
     const slug = getOrgSlug()
     if (!slug) return
-    fetch("/api/organizations/current")
+    fetch("/api/organizations/current", {
+      headers: slug ? { "x-org-slug": slug } : undefined,
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.id) setCurrentOrgId(data.id)
@@ -357,7 +364,7 @@ export function AdminShell({
           <OrgSwitcher
             onSwitch={onOrgSwitch}
             onCreate={onOpenOrgOnboarding}
-            onOpenSettings={onOpenOrgSettings}
+            onOpenSettings={() => setSettingsOpen(true)}
             className="hidden sm:flex"
           />
 
@@ -398,7 +405,7 @@ export function AdminShell({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {onOpenOrgSettings && (
-                <DropdownMenuItem onClick={onOpenOrgSettings}>
+                <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
                   <SettingsIcon className="size-4" /> Organization settings
                 </DropdownMenuItem>
               )}
@@ -556,6 +563,23 @@ export function AdminShell({
           </p>
         </div>
       </footer>
+
+      {/* Organization Settings dialog */}
+      {settingsOpen && currentOrgId && (
+        <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto p-0">
+            <SheetHeader className="px-6 py-4 border-b">
+              <SheetTitle>Organization Settings</SheetTitle>
+              <SheetDescription>
+                Manage your organization details, branding, members, and audit history.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="px-6 py-4">
+              <OrgSettings orgId={currentOrgId} canEdit={true} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   )
 }

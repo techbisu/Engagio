@@ -9,6 +9,10 @@ type RouteContext = { params: Promise<{ slug: string }> };
  * Public-ish leaderboard for a quiz link. Returns the top 20 completed
  * attempts ranked by score (desc) then timeTaken (asc).
  *
+ * Leaderboard enable check:
+ * - If `quizLink.leaderboardEnabled === false`: return 403 with a clear
+ *   message so the client can show "Leaderboard is disabled for this quiz".
+ *
  * Publishing behaviour:
  * - If `quizLink.publishResults === false` (instant results): always return
  *   the leaderboard.
@@ -32,12 +36,30 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
         id: true,
         slug: true,
         publishResults: true,
+        leaderboardEnabled: true,
         event: { select: { id: true, title: true } },
       },
     });
 
     if (!quizLink) {
       return NextResponse.json({ error: "Quiz link not found" }, { status: 404 });
+    }
+
+    // ── Leaderboard disabled check ───────────────────────────────────────
+    // If the admin has disabled the leaderboard for this quiz link, return
+    // 403 so the client can show a "Leaderboard is disabled" message.
+    if (quizLink.leaderboardEnabled === false) {
+      return NextResponse.json(
+        {
+          error: "Leaderboard is disabled for this quiz",
+          leaderboardDisabled: true,
+          quizLink: { slug: quizLink.slug, event: quizLink.event },
+          leaderboard: [],
+          published: false,
+          totalAttempts: 0,
+        },
+        { status: 403 }
+      );
     }
 
     const totalAttempts = await db.quizAttempt.count({

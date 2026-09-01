@@ -10,6 +10,74 @@ import {
   getUserAgent,
 } from "@/lib/utils";
 
+/**
+ * Clean up stale IN_PROGRESS attempts for this user + quiz link.
+ *
+ * When a participant starts a quiz but never submits (closes the tab, loses
+ * connection, battery dies, etc.), the attempt stays IN_PROGRESS forever.
+ * This function marks old IN_PROGRESS attempts as TIMEOUT so:
+ *   1. They don't block the max-attempts check (allowing retakes)
+ *   2. Analytics don't show inflated "In Progress" numbers
+ *
+ * Two cleanup modes:
+ *   1. "eager" — marks ALL IN_PROGRESS attempts as TIMEOUT immediately,
+ *      regardless of age. Used when the user is explicitly trying to start
+ *      a NEW attempt (they've clearly abandoned the old one).
+ *   2. "stale" — marks IN_PROGRESS attempts as TIMEOUT only if they're older
+ *      than the stale threshold. Used for background cleanup.
+ *
+ * Stale threshold:
+ *   - Has a time limit: timeLimit + 10 min grace
+ *   - No time limit: 24 hours
+ */
+async function cleanupStaleAttempts(
+  userId: string,
+  quizLinkId: string,
+  timeLimit: number,
+  mode: "eager" | "stale" = "stale"
+) {
+  const now = new Date();
+
+  // In "eager" mode, DELETE ALL IN_PROGRESS attempts immediately — the user
+  // is starting a new attempt, so they've abandoned the old one. We DELETE
+  // (not mark as TIMEOUT) because an abandoned attempt should NOT count
+  // toward maxAttempts. Only COMPLETED/TIMEOUT/CHEAT_DETECTED count.
+  //
+  // In "stale" mode, mark old IN_PROGRESS attempts as TIMEOUT (for analytics
+  // accuracy). This is used by the background cleanup endpoint.
+  const where: any = {
+    userId,
+    quizLinkId,
+    status: "IN_PROGRESS",
+  };
+
+  if (mode === "stale") {
+    const staleThreshold = timeLimit > 0
+      ? new Date(now.getTime() - (timeLimit + 10) * 60 * 1000)
+      : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    where.startedAt = { lt: staleThreshold };
+  }
+
+  try {
+    if (mode === "eager") {
+      // DELETE abandoned IN_PROGRESS attempts so they don't count toward
+      // maxAttempts. This is the key fix — the user can always retake.
+      await db.quizAttempt.deleteMany({ where });
+    } else {
+      // For background cleanup, mark as TIMEOUT (keeps audit trail)
+      await db.quizAttempt.updateMany({
+        where,
+        data: {
+          status: "TIMEOUT",
+          completedAt: now,
+        },
+      });
+    }
+  } catch (e) {
+    console.error("[cleanupStaleAttempts] error:", e);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ── Rate limit: 20 quiz starts per minute per IP ──────────────────
@@ -77,6 +145,14 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // ── Clean up IN_PROGRESS attempts (eager mode) ───────────────────────
+    // Before checking max attempts, mark ALL existing IN_PROGRESS attempts
+    // as TIMEOUT. The user is explicitly trying to start a NEW attempt, so
+    // they've clearly abandoned any previous IN_PROGRESS one (closed tab,
+    // lost connection, etc.). This prevents stuck attempts from blocking
+    // retakes — the user can always start fresh.
+    await cleanupStaleAttempts(session.user.id, quizLinkId, quizLink.timeLimit, "eager");
 
     // Max attempts check
     if (quizLink.maxAttempts > 0) {

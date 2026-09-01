@@ -175,7 +175,7 @@ export async function GET(req: NextRequest) {
         // Fetch ALL active quiz links for this event
         const quizLinksForEvent = await db.quizLink.findMany({
           where: { eventId, isActive: true },
-          select: { id: true, slug: true, timeLimit: true, passThreshold: true, questionCount: true },
+          select: { id: true, slug: true, timeLimit: true, passThreshold: true, questionCount: true, leaderboardEnabled: true },
         })
         const quizLinkMap = new Map(quizLinksForEvent.map((ql) => [ql.id, ql]))
 

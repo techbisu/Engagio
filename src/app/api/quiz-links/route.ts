@@ -21,6 +21,10 @@ export function toQuizLinkDto(link: any): QuizLinkDto {
     publishResults: link.publishResults,
     emailOnPublish: link.emailOnPublish ?? true,
     leaderboardEnabled: link.leaderboardEnabled ?? true,
+    showScore: link.showScore ?? true,
+    showCategory: link.showCategory ?? true,
+    showAntiCheat: link.showAntiCheat ?? true,
+    showReviewAnswers: link.showReviewAnswers ?? true,
     passThreshold: link.passThreshold,
     // Security toggles
     requireFullscreen: link.requireFullscreen,
@@ -76,6 +80,10 @@ const BOOLEAN_TOGGLES = [
   "publishResults",
   "emailOnPublish",
   "leaderboardEnabled",
+  "showScore",
+  "showCategory",
+  "showAntiCheat",
+  "showReviewAnswers",
   "isActive",
 ] as const;
 
@@ -192,6 +200,10 @@ export async function POST(req: NextRequest) {
         typeof body.emailOnPublish === "boolean" ? body.emailOnPublish : true,
       leaderboardEnabled:
         typeof body.leaderboardEnabled === "boolean" ? body.leaderboardEnabled : true,
+      showScore: typeof body.showScore === "boolean" ? body.showScore : true,
+      showCategory: typeof body.showCategory === "boolean" ? body.showCategory : true,
+      showAntiCheat: typeof body.showAntiCheat === "boolean" ? body.showAntiCheat : true,
+      showReviewAnswers: typeof body.showReviewAnswers === "boolean" ? body.showReviewAnswers : true,
       passThreshold:
         typeof passThreshold === "number" && passThreshold >= 0 && passThreshold <= 100
           ? Math.floor(passThreshold)

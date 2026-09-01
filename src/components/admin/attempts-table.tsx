@@ -22,6 +22,9 @@ import {
   ScanFace,
   Send,
   Lock,
+  RefreshCw,
+  RotateCcw,
+  Loader2,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -240,6 +243,46 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
       toast.error(e instanceof Error ? e.message : "Failed to unpublish"),
   })
 
+  // ---- Cleanup stale IN_PROGRESS attempts ----
+  const cleanupMutation = useMutation({
+    mutationFn: () =>
+      api<{ cleaned: number; details: { byTimeLimit: number; byAge: number } }>(
+        "/api/attempts/cleanup",
+        { method: "POST" }
+      ),
+    onSuccess: (data) => {
+      if (data.cleaned > 0) {
+        toast.success(`Cleaned up ${data.cleaned} stale attempt${data.cleaned === 1 ? "" : "s"}!`, {
+          description: `${data.details.byTimeLimit} timed out, ${data.details.byAge} abandoned (24h+)`,
+        })
+      } else {
+        toast.success("No stale attempts found — all clean!")
+      }
+      queryClient.invalidateQueries({ queryKey: ["attempts", "all"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to clean up stale attempts"),
+  })
+
+  // ---- Reset a participant's attempts (with email notification) ----
+  const [resetTarget, setResetTarget] = React.useState<QuizAttemptDto | null>(null)
+  const resetMutation = useMutation({
+    mutationFn: (args: { userId: string; eventId: string }) =>
+      api<{ reset: number; emailSent: boolean; message: string }>(
+        "/api/attempts/reset",
+        { method: "POST", body: JSON.stringify(args) }
+      ),
+    onSuccess: (data) => {
+      toast.success(data.message, {
+        description: data.emailSent ? "Email notification sent to the participant." : undefined,
+      })
+      setResetTarget(null)
+      queryClient.invalidateQueries({ queryKey: ["attempts", "all"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to reset attempts"),
+  })
+
   // Bulk-publish the unpublished completed attempts in the current filtered set.
   const unpublishedCompleted = filtered.filter(
     (a) =>
@@ -364,9 +407,26 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
               Publish {unpublishedCompleted.length} unpublished
             </Button>
           )}
-          <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+          <Button
+            variant="outline"
+            onClick={exportCsv}
+            disabled={filtered.length === 0}
+          >
             <Download className="size-4" />
             Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => cleanupMutation.mutate()}
+            disabled={cleanupMutation.isPending}
+            title="Mark old IN_PROGRESS attempts as TIMEOUT (participants who started but never submitted)"
+          >
+            {cleanupMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            Cleanup Stale
           </Button>
         </div>
       </div>
@@ -643,6 +703,19 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
                           <Eye className="size-4" />
                           <span className="sr-only">View details</span>
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setResetTarget(a)
+                          }}
+                          title="Reset this participant's attempts + send email notification"
+                        >
+                          <RotateCcw className="size-4" />
+                          <span className="sr-only">Reset attempts</span>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )
@@ -695,6 +768,51 @@ export function AttemptsTable({ eventId, preselectedSlug }: AttemptsTableProps) 
         publishPending={publishMutation.isPending}
         unpublishPending={unpublishMutation.isPending}
       />
+
+      {/* Reset attempts confirmation dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={(o) => !o && setResetTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="size-5 text-amber-600" />
+              Reset Attempts
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete ALL attempts for{" "}
+              <span className="font-semibold text-foreground">
+                {resetTarget?.user?.name || resetTarget?.user?.email || "this participant"}
+              </span>
+              {" "}for this event, including any generated certificates. The participant
+              will receive an email notification and can retake the quiz.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setResetTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+              disabled={resetMutation.isPending}
+              onClick={() => {
+                if (resetTarget?.userId && resetTarget?.eventId) {
+                  resetMutation.mutate({
+                    userId: resetTarget.userId,
+                    eventId: resetTarget.eventId,
+                  })
+                }
+              }}
+            >
+              {resetMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
+              Reset & Notify
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -922,110 +1040,6 @@ function AttemptDetailDialog({
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Per-question answers */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">Answers breakdown</p>
-            <span className="text-xs text-muted-foreground">
-              {order.length} question{order.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : questions && questions.length > 0 ? (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {order.map((qid, idx) => {
-                const q = questions.find((x) => x.id === qid)
-                if (!q) {
-                  return (
-                    <div
-                      key={qid || idx}
-                      className="rounded-lg border p-3 text-xs text-muted-foreground"
-                    >
-                      Question {idx + 1} is no longer available.
-                    </div>
-                  )
-                }
-                const selIdx = answers[qid]
-                const sel =
-                  typeof selIdx === "number" ? q.options[selIdx] : undefined
-                const isCorrect = typeof selIdx === "number" && selIdx === q.correctAnswer
-                const isUnanswered = selIdx == null
-                return (
-                  <div
-                    key={q.id}
-                    className="rounded-lg border p-3 space-y-1.5"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                        {idx + 1}
-                      </span>
-                      <p className="text-sm font-medium flex-1">{q.question}</p>
-                      {isUnanswered ? (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600 dark:bg-slate-500/10 dark:text-slate-400">
-                          Skipped
-                        </Badge>
-                      ) : isCorrect ? (
-                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                          <Check className="size-3" /> Correct
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
-                          <X className="size-3" /> Wrong
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="grid gap-1 pl-7">
-                      {q.options.map((opt, i) => {
-                        const isSel = i === selIdx
-                        const isAns = i === q.correctAnswer
-                        return (
-                          <div
-                            key={i}
-                            className={cn(
-                              "flex items-center gap-2 rounded px-2 py-1 text-xs",
-                              isAns
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                                : isSel
-                                ? "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <span className="font-mono font-semibold">
-                              {LETTERS[i]}.
-                            </span>
-                            <span className="flex-1">{opt}</span>
-                            {isAns && <Check className="size-3" />}
-                            {isSel && !isAns && <X className="size-3" />}
-                          </div>
-                        )
-                      })}
-                      {isUnanswered && (
-                        <p className="text-xs italic text-muted-foreground pl-1">
-                          No answer recorded.
-                        </p>
-                      )}
-                      {!isUnanswered && !isCorrect && sel && (
-                        <p className="text-xs text-muted-foreground pl-1">
-                          Selected: <span className="font-medium">{LETTERS[selIdx as number]}. {sel}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No question data available for this event.
-            </div>
-          )}
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">

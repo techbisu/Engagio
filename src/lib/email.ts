@@ -208,10 +208,8 @@ export interface EmailLayoutProps {
   preheader?: string
   title: string
   intro?: string
-  /** Optional primary call to action rendered as a gradient button. */
   cta?: { label: string; url: string }
   bodyHtml: string
-  /** Footer note overrides the default "Powered by Engagio" line. */
   footerNote?: string
   /** Optional organization branding — replaces the "Engagio" text with
    *  the org's name in bold + uses the org's primary color. */
@@ -283,7 +281,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
                         </div>
                         <p style="margin:8px 0 24px 0;font-size:12px;line-height:1.5;color:${BRAND.subtle};text-align:center;word-break:break-all;">
                           Or copy and paste this link:<br />
-                          <a href="${escapeHtml(cta.url)}" style="color:${BRAND.primary};text-decoration:underline;">${escapeHtml(cta.url)}</a>
+                          <a href="${escapeHtml(cta.url)}" style="color:${primary};text-decoration:underline;">${escapeHtml(cta.url)}</a>
                         </p>`
                       : ""
                   }
@@ -535,9 +533,67 @@ export async function sendPasswordResetEmail(params: {
 }
 
 
+/**
+ * Send an "attempts reset" notification email to a participant.
+ * Called when an admin resets a participant's quiz attempts so they can
+ * retake the quiz.
+ */
+export async function sendAttemptResetEmail(params: {
+  to: string
+  participantName: string
+  eventTitle: string
+  quizUrl: string
+  resetBy?: string
+  orgBranding?: { name: string; logoUrl?: string | null; primaryColor?: string | null }
+}): Promise<SendEmailResult> {
+  const { to, participantName, eventTitle, quizUrl, resetBy, orgBranding } = params
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Hi <strong style="color:${BRAND.text};">${escapeHtml(participantName)}</strong>,
+    </p>
+    <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
+      Good news! Your quiz attempts for <strong style="color:${BRAND.text};">${escapeHtml(eventTitle)}</strong>
+      have been reset${resetBy ? ` by the organizer` : ""}. You can now retake the quiz.
+    </p>
+    ${statTileHtml("Quiz", escapeHtml(eventTitle), BRAND.primary)}
+  `
+
+  const html = renderEmailLayout({
+    preheader: `Your quiz attempts for ${eventTitle} have been reset`,
+    title: "Quiz Attempts Reset 🔄",
+    intro: `Hi ${participantName}, you can now retake the quiz.`,
+    bodyHtml,
+    cta: { label: "Retake Quiz →", url: quizUrl },
+    orgBranding,
+  })
+
+  return sendEmail({
+    to,
+    subject: `Your quiz attempts have been reset — ${eventTitle}`,
+    html,
+    text: `Hi ${participantName},\n\nYour quiz attempts for ${eventTitle} have been reset${resetBy ? " by the organizer" : ""}. You can now retake the quiz at: ${quizUrl}\n\n— The Engagio Team`,
+    tag: "attempt-reset",
+  })
+}
+
+
 /* ────────────────────────────────────────────────────────────────────────
    Utilities & status helpers
    ──────────────────────────────────────────────────────────────────────── */
+
+/** Darken/lighten a hex color by a percentage (-100 to 100). */
+function shadeColor(hex: string, percent: number): string {
+  try {
+    const num = parseInt(hex.replace("#", ""), 16)
+    const r = Math.max(0, Math.min(255, (num >> 16) + Math.round(2.55 * percent)))
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + Math.round(2.55 * percent)))
+    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + Math.round(2.55 * percent)))
+    return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")
+  } catch {
+    return hex
+  }
+}
 
 export interface EmailStatus {
   configured: boolean
