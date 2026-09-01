@@ -152,6 +152,16 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
     ).length
   }, [attemptsData, meta])
 
+  // Check for stuck IN_PROGRESS attempts (participant started but never submitted)
+  const stuckAttempt = React.useMemo(() => {
+    if (!attemptsData?.attempts || !meta) return null
+    return attemptsData.attempts.find(
+      (a) =>
+        a.quizLink?.slug === meta.quizLink.slug &&
+        a.status === "IN_PROGRESS",
+    ) ?? null
+  }, [attemptsData, meta])
+
   const maxAttempts = meta?.maxAttempts ?? 0
   const remaining =
     maxAttempts > 0 ? Math.max(0, maxAttempts - usedAttempts) : Infinity
@@ -343,6 +353,25 @@ export function QuizStart({ slug, user, onBegin, onBack }: QuizStartProps) {
               </div>
             </div>
           </div>
+
+          {/* Stuck attempt detection — show if the user has an IN_PROGRESS attempt */}
+          {stuckAttempt && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+              <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="flex-1 text-sm">
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  Unfinished attempt detected
+                </p>
+                <p className="text-amber-700 dark:text-amber-300">
+                  You have a quiz attempt in progress from{" "}
+                  {stuckAttempt.startedAt
+                    ? new Date(stuckAttempt.startedAt).toLocaleString()
+                    : "earlier"}
+                  . Click "Start" below to abandon it and begin a new attempt.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Attempts info */}
           {maxAttempts > 0 && (
