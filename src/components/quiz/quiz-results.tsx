@@ -548,7 +548,8 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
         </CardHeader>
 
         <CardContent className="space-y-6 pt-6">
-          {/* Score + Percentage */}
+          {/* Score + Percentage — only show if quizLink.showScore !== false */}
+          {data.quizLink?.showScore !== false && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg border bg-card p-4 text-center">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -571,8 +572,10 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               </p>
             </div>
           </div>
+          )}
 
-          {/* Progress bar */}
+          {/* Progress bar — only show if score is visible */}
+          {data.quizLink?.showScore !== false && (
           <div className="space-y-2">
             <Progress
               value={percentage}
@@ -597,6 +600,7 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               </div>
             )}
           </div>
+          )}
 
           {/* Meta row */}
           <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -621,12 +625,13 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
 
           <Separator />
 
-          {/* Performance by Category */}
-          {categoryStats.length > 0 && (
+          {/* Performance by Category — only show if quizLink.showCategory !== false */}
+          {data.quizLink?.showCategory !== false && categoryStats.length > 0 && (
             <CategoryBreakdown stats={categoryStats} />
           )}
 
-          {/* Anti-cheat summary */}
+          {/* Anti-cheat summary — only show if quizLink.showAntiCheat !== false */}
+          {data.quizLink?.showAntiCheat !== false && (
           <div>
             <p className="mb-3 text-sm font-semibold">Anti-cheat summary</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -680,9 +685,10 @@ export function QuizResults({ attemptId, user, onBack }: QuizResultsProps) {
               )}
             </div>
           </div>
+          )}
 
-          {/* Review answers */}
-          {questions.length > 0 && (
+          {/* Review answers — only show if quizLink.showReviewAnswers !== false */}
+          {data.quizLink?.showReviewAnswers !== false && questions.length > 0 && (
             <Collapsible open={reviewOpen} onOpenChange={setReviewOpen}>
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="w-full">

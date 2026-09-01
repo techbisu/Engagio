@@ -134,6 +134,11 @@ interface LinkFormState {
   // Independent of result visibility:
   emailOnPublish: boolean
   leaderboardEnabled: boolean
+  // Results page display toggles
+  showScore: boolean
+  showCategory: boolean
+  showAntiCheat: boolean
+  showReviewAnswers: boolean
   timeLimit: number
   maxAttempts: number
   questionCount: number
@@ -171,6 +176,10 @@ const emptyForm: LinkFormState = {
   publishResults: false,
   emailOnPublish: true,
   leaderboardEnabled: true,
+  showScore: true,
+  showCategory: true,
+  showAntiCheat: true,
+  showReviewAnswers: true,
   timeLimit: 30,
   maxAttempts: 1,
   questionCount: 0,
@@ -203,6 +212,10 @@ function buildPayload(form: LinkFormState) {
     publishResults: form.publishResults,
     emailOnPublish: form.emailOnPublish,
     leaderboardEnabled: form.leaderboardEnabled,
+    showScore: form.showScore,
+    showCategory: form.showCategory,
+    showAntiCheat: form.showAntiCheat,
+    showReviewAnswers: form.showReviewAnswers,
     questionCount: form.questionCount,
     timeLimit: form.timeLimit,
     maxAttempts: form.maxAttempts,
@@ -365,6 +378,10 @@ export function LinksManager({
       publishResults: l.publishResults,
       emailOnPublish: l.emailOnPublish ?? true,
       leaderboardEnabled: l.leaderboardEnabled ?? true,
+      showScore: l.showScore ?? true,
+      showCategory: l.showCategory ?? true,
+      showAntiCheat: l.showAntiCheat ?? true,
+      showReviewAnswers: l.showReviewAnswers ?? true,
       timeLimit: l.timeLimit,
       maxAttempts: l.maxAttempts,
       questionCount: l.questionCount,
@@ -982,6 +999,73 @@ export function LinksManager({
                   checked={form.leaderboardEnabled}
                   onCheckedChange={(v) => setForm({ ...form, leaderboardEnabled: v })}
                   aria-label="Enable leaderboard"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Results page display toggles */}
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Results Page Sections
+              </p>
+
+              {/* Show Score */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Show score & percentage</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Display the Score and Percentage cards on the results page.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.showScore}
+                  onCheckedChange={(v) => setForm({ ...form, showScore: v })}
+                  aria-label="Show score"
+                />
+              </div>
+
+              {/* Show Category */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Show performance by category</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Display the category breakdown chart on the results page.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.showCategory}
+                  onCheckedChange={(v) => setForm({ ...form, showCategory: v })}
+                  aria-label="Show category"
+                />
+              </div>
+
+              {/* Show Anti-Cheat */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Show anti-cheat summary</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Display the anti-cheat metrics (tab switches, copy attempts, etc.) on the results page.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.showAntiCheat}
+                  onCheckedChange={(v) => setForm({ ...form, showAntiCheat: v })}
+                  aria-label="Show anti-cheat"
+                />
+              </div>
+
+              {/* Show Review Answers */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Show review answers</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                    Allow participants to review their answers (correct/wrong) on the results page.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.showReviewAnswers}
+                  onCheckedChange={(v) => setForm({ ...form, showReviewAnswers: v })}
+                  aria-label="Show review answers"
                 />
               </div>
             </div>

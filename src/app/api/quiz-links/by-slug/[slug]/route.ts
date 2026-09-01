@@ -122,6 +122,10 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       quizLinkQuestionCount: link.questionCount,
       publishResults: link.publishResults,
       leaderboardEnabled: link.leaderboardEnabled ?? true,
+      showScore: link.showScore ?? true,
+      showCategory: link.showCategory ?? true,
+      showAntiCheat: link.showAntiCheat ?? true,
+      showReviewAnswers: link.showReviewAnswers ?? true,
       // Registration gate: if true, the caller must fill out the event's
       // registration form (GET /api/events/[id]/fields) before /attempts/start
       // will accept them.

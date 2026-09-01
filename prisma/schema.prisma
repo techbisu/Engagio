@@ -228,6 +228,12 @@ model QuizLink {
   // NEW: enable the public leaderboard for this quiz link.
   // Independent of result visibility.
   leaderboardEnabled Boolean  @default(true)
+  // ---- Results page display toggles (per-quiz-link) ----
+  // Admin can hide specific sections of the post-quiz results page.
+  showScore           Boolean  @default(true) // Show Score + Percentage cards
+  showCategory        Boolean  @default(true) // Show "Performance by Category"
+  showAntiCheat       Boolean  @default(true) // Show "Anti-cheat summary"
+  showReviewAnswers   Boolean  @default(true) // Show "Review answers" collapsible
   passThreshold   Int      @default(40) // percentage
 
   // ---- Security toggles (all per-quiz-link) ----
