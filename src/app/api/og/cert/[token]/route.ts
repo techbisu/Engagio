@@ -12,6 +12,9 @@ import { renderCertOgByToken } from "@/lib/cert-og";
  * og:image to this URL so the platform shows the certificate image in the
  * preview card.
  *
+ * Uses @vercel/og (ImageResponse) which is preconfigured for Vercel's
+ * serverless environment — no native binary issues.
+ *
  * Cache for 1 hour (social crawlers re-fetch periodically; the cert content
  * is immutable so caching is safe).
  */
@@ -28,21 +31,25 @@ export async function GET(
       );
     }
 
-    const png = await renderCertOgByToken(token);
-    if (!png) {
+    const imageResponse = await renderCertOgByToken(token);
+    if (!imageResponse) {
       return NextResponse.json(
         { error: "Certificate not found" },
         { status: 404 }
       );
     }
 
-    return new NextResponse(png, {
+    // imageResponse is an ImageResponse (a Response object) from @vercel/og.
+    // Add caching headers by cloning and augmenting.
+    const headers = new Headers(imageResponse.headers);
+    headers.set(
+      "Cache-Control",
+      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
+    );
+
+    return new Response(imageResponse.body, {
       status: 200,
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
-        "Content-Length": String(png.length),
-      },
+      headers,
     });
   } catch (e) {
     console.error("[GET /api/og/cert/[token]] error:", e);

@@ -7,24 +7,18 @@
  * og:title / og:description meta tags (added by generateMetadata on the
  * verify page), and renders the preview card.
  *
- * This is a SIMPLIFIED version of the certificate — not the full canvas
- * template. The full certificate image is rendered client-side by
- * CertificateRenderer (which uses the <canvas> element). Social crawlers
- * can't run client JS, so we render a static PNG here with satori + resvg.
+ * Uses @vercel/og (ImageResponse) — Vercel's official OG image library that
+ * is preconfigured for their serverless environment (handles Satori + native
+ * Resvg binaries internally). This replaces the previous satori + @resvg/resvg-js
+ * approach which returned 500 on Vercel because the native resvg binary
+ * wasn't compatible with the serverless runtime.
  */
 
-import satori from "satori"
-import { Resvg } from "@resvg/resvg-js"
+import { ImageResponse } from "@vercel/og"
 import { db } from "@/lib/db"
-import { DEJAVU_SANS, DEJAVU_SANS_BOLD } from "@/lib/font-data"
 
 const W = 1200
 const H = 630
-
-const fonts = [
-  { name: "DejaVu Sans", data: Buffer.from(DEJAVU_SANS, "base64"), weight: 400 as const, style: "normal" as const },
-  { name: "DejaVu Sans", data: Buffer.from(DEJAVU_SANS_BOLD, "base64"), weight: 700 as const, style: "normal" as const },
-]
 
 export interface CertOgParams {
   recipientName: string
@@ -40,16 +34,16 @@ export interface CertOgParams {
 function paletteFor(templateName?: string) {
   switch (templateName) {
     case "classic":
-      return { bg: "#ffffff", border: "#065f46", accent: "#065f46", text: "#0f172a", muted: "#475569", ribbon: "#10b981" }
+      return { bg: "#ffffff", border: "#065f46", accent: "#065f46", text: "#0f172a", muted: "#475569" }
     case "elegant":
-      return { bg: "#fefce8", border: "#92400e", accent: "#92400e", text: "#1c1917", muted: "#78716c", ribbon: "#d97706" }
+      return { bg: "#fefce8", border: "#92400e", accent: "#92400e", text: "#1c1917", muted: "#78716c" }
     case "bold":
-      return { bg: "#0f172a", border: "#10b981", accent: "#10b981", text: "#ffffff", muted: "#cbd5e1", ribbon: "#10b981" }
+      return { bg: "#0f172a", border: "#10b981", accent: "#10b981", text: "#ffffff", muted: "#cbd5e1" }
     case "minimal":
-      return { bg: "#ffffff", border: "#e2e8f0", accent: "#0f172a", text: "#0f172a", muted: "#94a3b8", ribbon: "#0f172a" }
+      return { bg: "#ffffff", border: "#e2e8f0", accent: "#0f172a", text: "#0f172a", muted: "#94a3b8" }
     case "modern":
     default:
-      return { bg: "#ffffff", border: "#065f46", accent: "#065f46", text: "#0f172a", muted: "#64748b", ribbon: "#10b981" }
+      return { bg: "#ffffff", border: "#065f46", accent: "#065f46", text: "#0f172a", muted: "#64748b" }
   }
 }
 
@@ -62,165 +56,158 @@ function fmtDate(iso: string): string {
 }
 
 /**
- * Render the certificate OG image as a PNG Buffer.
+ * Render the certificate OG image as an ImageResponse (PNG).
  *
  * Layout (1200×630):
  *   - Outer border (4px) in the template accent color
- *   - Top-left ribbon: "CERTIFICATE OF PARTICIPATION"
+ *   - Top-left ribbon: "🎓 CERTIFICATE OF PARTICIPATION"
  *   - Center: recipient name (large), event name (medium), event description (small, italic)
  *   - Bottom row: org name (left), certificate number + date (right)
  */
-export async function renderCertOgImage(params: CertOgParams): Promise<Buffer> {
+export function renderCertOgResponse(params: CertOgParams): ImageResponse {
   const p = paletteFor(params.templateName)
   const desc = (params.eventDescription || "").trim()
   const orgName = (params.orgName || "").trim()
 
-  // Truncate long descriptions for the OG card (satori doesn't wrap text
-  // automatically — we truncate to ~160 chars to keep the layout clean).
+  // Truncate long descriptions for the OG card to keep the layout clean.
   const shortDesc = desc.length > 160 ? desc.slice(0, 157).trimEnd() + "…" : desc
 
-  const svg = await satori(
-    <div
-      style={{
-        width: W,
-        height: H,
-        background: p.bg,
-        display: "flex",
-        flexDirection: "column",
-        padding: "48px 56px",
-        fontFamily: "DejaVu Sans",
-        color: p.text,
-        position: "relative",
-        border: `4px solid ${p.border}`,
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Top ribbon */}
+  return new ImageResponse(
+    (
       <div
         style={{
+          width: W,
+          height: H,
+          background: p.bg,
           display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          fontSize: "16px",
-          fontWeight: 700,
-          color: p.accent,
-          letterSpacing: "2px",
-          textTransform: "uppercase",
-        }}
-      >
-        <span style={{ fontSize: "24px" }}>🎓</span>
-        <span>Certificate of Participation</span>
-      </div>
-
-      {/* Recipient name (hero) */}
-      <div
-        style={{
-          marginTop: "28px",
-          fontSize: "56px",
-          fontWeight: 700,
-          lineHeight: 1.1,
+          flexDirection: "column",
+          padding: "48px 56px",
           color: p.text,
+          position: "relative",
+          border: `4px solid ${p.border}`,
+          boxSizing: "border-box",
+          fontFamily: "system-ui, -apple-system, sans-serif",
         }}
       >
-        {params.recipientName}
-      </div>
+        {/* Top ribbon */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            fontSize: "16px",
+            fontWeight: 700,
+            color: p.accent,
+            letterSpacing: "2px",
+            textTransform: "uppercase",
+          }}
+        >
+          <span style={{ fontSize: "24px" }}>🎓</span>
+          <span>Certificate of Participation</span>
+        </div>
 
-      {/* "has successfully completed" */}
-      <div
-        style={{
-          marginTop: "12px",
-          fontSize: "20px",
-          color: p.muted,
-        }}
-      >
-        has successfully completed
-      </div>
+        {/* Recipient name (hero) */}
+        <div
+          style={{
+            marginTop: "28px",
+            fontSize: "56px",
+            fontWeight: 700,
+            lineHeight: 1.1,
+            color: p.text,
+          }}
+        >
+          {params.recipientName}
+        </div>
 
-      {/* Event name */}
-      <div
-        style={{
-          marginTop: "8px",
-          fontSize: "32px",
-          fontWeight: 700,
-          color: p.accent,
-          lineHeight: 1.2,
-        }}
-      >
-        {params.eventName}
-      </div>
-
-      {/* Event description (italic, muted) */}
-      {shortDesc && (
+        {/* "has successfully completed" */}
         <div
           style={{
             marginTop: "12px",
-            fontSize: "18px",
-            fontStyle: "italic",
+            fontSize: "20px",
             color: p.muted,
-            lineHeight: 1.4,
-            maxWidth: "920px",
           }}
         >
-          {shortDesc}
+          has successfully completed
         </div>
-      )}
 
-      {/* Bottom row: org name (left) + cert number + date (right) */}
-      <div
-        style={{
-          marginTop: "auto",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          borderTop: `1px solid ${p.border}`,
-          paddingTop: "20px",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          {orgName && (
-            <div style={{ fontSize: "20px", fontWeight: 700, color: p.text }}>
-              {orgName}
-            </div>
-          )}
-          {orgName && (
-            <div style={{ fontSize: "14px", color: p.muted, textTransform: "uppercase", letterSpacing: "1px" }}>
-              Organization
-            </div>
-          )}
+        {/* Event name */}
+        <div
+          style={{
+            marginTop: "8px",
+            fontSize: "32px",
+            fontWeight: 700,
+            color: p.accent,
+            lineHeight: 1.2,
+          }}
+        >
+          {params.eventName}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px", textAlign: "right" }}>
-          <div style={{ fontSize: "14px", color: p.muted, textTransform: "uppercase", letterSpacing: "1px" }}>
-            Certificate No.
+
+        {/* Event description (italic, muted) */}
+        {shortDesc && (
+          <div
+            style={{
+              marginTop: "12px",
+              fontSize: "18px",
+              fontStyle: "italic",
+              color: p.muted,
+              lineHeight: 1.4,
+              maxWidth: "920px",
+            }}
+          >
+            {shortDesc}
           </div>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: p.text, fontFamily: "DejaVu Sans Mono, monospace" }}>
-            {params.certificateNumber}
+        )}
+
+        {/* Bottom row: org name (left) + cert number + date (right) */}
+        <div
+          style={{
+            marginTop: "auto",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            borderTop: `1px solid ${p.border}`,
+            paddingTop: "20px",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {orgName && (
+              <div style={{ fontSize: "20px", fontWeight: 700, color: p.text }}>
+                {orgName}
+              </div>
+            )}
+            {orgName && (
+              <div style={{ fontSize: "14px", color: p.muted, textTransform: "uppercase", letterSpacing: "1px" }}>
+                Organization
+              </div>
+            )}
           </div>
-          <div style={{ fontSize: "14px", color: p.muted }}>
-            Issued on {fmtDate(params.issuedAt)}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px", textAlign: "right" }}>
+            <div style={{ fontSize: "14px", color: p.muted, textTransform: "uppercase", letterSpacing: "1px" }}>
+              Certificate No.
+            </div>
+            <div style={{ fontSize: "20px", fontWeight: 700, color: p.text }}>
+              {params.certificateNumber}
+            </div>
+            <div style={{ fontSize: "14px", color: p.muted }}>
+              Issued on {fmtDate(params.issuedAt)}
+            </div>
           </div>
         </div>
       </div>
-    </div>,
+    ),
     {
       width: W,
       height: H,
-      fonts,
     }
   )
-
-  // Convert SVG → PNG via resvg
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: "width", value: W },
-    background: p.bg,
-  })
-  return resvg.render().asPng()
 }
 
 /**
  * Fetch the certificate + event + org data from the DB by verification token,
- * then render the OG image. Returns null if the cert doesn't exist.
+ * then return the ImageResponse. Returns null if the cert doesn't exist.
  */
-export async function renderCertOgByToken(token: string): Promise<Buffer | null> {
+export async function renderCertOgByToken(token: string): Promise<ImageResponse | null> {
   const cert = await db.certificate.findUnique({
     where: { verificationToken: token },
     include: {
@@ -248,7 +235,7 @@ export async function renderCertOgByToken(token: string): Promise<Buffer | null>
     if (org) orgName = org.name
   }
 
-  return renderCertOgImage({
+  return renderCertOgResponse({
     recipientName: cert.recipientName,
     eventName: cert.event?.title ?? "Assessment",
     eventDescription: cert.event?.description ?? null,

@@ -179,7 +179,9 @@ function VerifiedCard({ data }: { data: VerifyResponse }) {
             Certificate Verified
           </h1>
           <p className="mt-2 text-sm text-emerald-700/80 dark:text-emerald-200/80">
-            This is a valid certificate issued by {cert.orgName ?? "Engagio"}.
+            This is a valid certificate issued by {cert.orgName ?? "Engagio"} to{" "}
+            <span className="font-semibold">{cert.recipientName}</span> for
+            completing <span className="font-semibold">{cert.eventName}</span>.
           </p>
         </div>
 
