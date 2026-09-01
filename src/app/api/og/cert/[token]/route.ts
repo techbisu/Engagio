@@ -12,8 +12,8 @@ import { renderCertOgByToken } from "@/lib/cert-og";
  * og:image to this URL so the platform shows the certificate image in the
  * preview card.
  *
- * Uses @vercel/og (ImageResponse) which is preconfigured for Vercel's
- * serverless environment — no native binary issues.
+ * Uses next/og (ImageResponse) which is bundled with Next.js and preconfigured
+ * for Vercel's serverless environment — no native binary issues.
  *
  * Cache for 1 hour (social crawlers re-fetch periodically; the cert content
  * is immutable so caching is safe).
@@ -39,7 +39,7 @@ export async function GET(
       );
     }
 
-    // imageResponse is an ImageResponse (a Response object) from @vercel/og.
+    // imageResponse is an ImageResponse (a Response object) from next/og.
     // Add caching headers by cloning and augmenting.
     const headers = new Headers(imageResponse.headers);
     headers.set(
@@ -52,9 +52,14 @@ export async function GET(
       headers,
     });
   } catch (e) {
+    // Log the FULL error (including stack) so we can debug on Vercel.
     console.error("[GET /api/og/cert/[token]] error:", e);
+    if (e instanceof Error) {
+      console.error("[GET /api/og/cert/[token]] error stack:", e.stack);
+      console.error("[GET /api/og/cert/[token]] error message:", e.message);
+    }
     return NextResponse.json(
-      { error: "Failed to render image" },
+      { error: "Failed to render image", details: e instanceof Error ? e.message : String(e) },
       { status: 500 }
     );
   }

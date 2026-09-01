@@ -14,7 +14,7 @@
  * wasn't compatible with the serverless runtime.
  */
 
-import { ImageResponse } from "@vercel/og"
+import { ImageResponse } from "next/og"
 import { db } from "@/lib/db"
 
 const W = 1200

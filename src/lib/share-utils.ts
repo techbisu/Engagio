@@ -136,20 +136,32 @@ export async function shareCertificate(
   // the native OS share sheet where the user picks WhatsApp / Facebook /
   // X / LinkedIn / etc.
   if (canShareFiles()) {
-    const shared = await shareViaWebApi(params)
-    if (shared) {
-      toast.success("Shared successfully!")
+    try {
+      const shared = await shareViaWebApi(params)
+      if (shared) {
+        toast.success("Shared successfully!")
+        return
+      }
+      // User cancelled (AbortError) — don't fall through to the fallback.
       return
+    } catch (e) {
+      // The Web Share API with files failed (e.g. the image fetch failed,
+      // File creation failed, or the browser silently rejected). Fall
+      // through to the URL-based fallback below so the user still gets
+      // a working share button instead of "nothing happens".
+      console.error("[share-utils] Web Share API with files failed, falling back:", e)
     }
-    // User cancelled — don't fall through to the fallback.
-    return
   }
 
-  // ── Path 2: Fallback for desktop browsers without file-share support ─
+  // ── Path 2: Fallback for desktop browsers OR when Web Share with files failed ─
   // 1. Download the PNG so the user can manually attach it.
   // 2. Open the platform-specific share URL with caption + URL.
   // 3. Show a toast telling the user to attach the downloaded image.
-  downloadImage(params.imageDataUrl, params.fileName)
+  try {
+    downloadImage(params.imageDataUrl, params.fileName)
+  } catch (e) {
+    console.error("[share-utils] downloadImage failed:", e)
+  }
 
   if (platform === "native") {
     // No native share sheet on desktop — just download + copy caption.
