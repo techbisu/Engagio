@@ -414,6 +414,28 @@ export function ResultsCertDashboard() {
       toast.error(e instanceof Error ? e.message : "Failed to unpublish"),
   })
 
+  // --- Cleanup stale IN_PROGRESS attempts ---
+  const cleanupMutation = useMutation({
+    mutationFn: () =>
+      api<{ cleaned: number; details: { byTimeLimit: number; byAge: number } }>(
+        "/api/attempts/cleanup",
+        { method: "POST" }
+      ),
+    onSuccess: (data) => {
+      if (data.cleaned > 0) {
+        toast.success(`Cleaned up ${data.cleaned} stale attempt${data.cleaned === 1 ? "" : "s"}!`, {
+          description: `${data.details.byTimeLimit} timed out, ${data.details.byAge} abandoned (24h+)`,
+        })
+      } else {
+        toast.success("No stale attempts found — all clean!")
+      }
+      qc.invalidateQueries({ queryKey: ["attempts", "all"] })
+      qc.invalidateQueries({ queryKey: ["analytics"] })
+    },
+    onError: (e: unknown) =>
+      toast.error(e instanceof Error ? e.message : "Failed to clean up stale attempts"),
+  })
+
   const generateSingleMutation = useMutation({
     mutationFn: (args: {
       userId: string
@@ -682,6 +704,20 @@ export function ResultsCertDashboard() {
                 >
                   <Award className="size-4" />
                   Generate Certificates
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => cleanupMutation.mutate()}
+                  disabled={cleanupMutation.isPending}
+                  className="bg-white dark:bg-slate-900"
+                  title="Mark old IN_PROGRESS attempts as TIMEOUT (participants who started but never submitted)"
+                >
+                  {cleanupMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Cleanup Stale
                 </Button>
               </div>
             </CardContent>
