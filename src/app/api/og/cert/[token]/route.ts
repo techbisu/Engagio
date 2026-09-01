@@ -12,8 +12,10 @@ import { renderCertOgByToken } from "@/lib/cert-og";
  * og:image to this URL so the platform shows the certificate image in the
  * preview card.
  *
- * Uses next/og (ImageResponse) which is bundled with Next.js and preconfigured
- * for Vercel's serverless environment — no native binary issues.
+ * IMPLEMENTATION: Builds an SVG string manually (no Satori/JSX needed),
+ * then converts to PNG using sharp (which IS in serverExternalPackages and
+ * works on Vercel). This avoids the next/og + Satori runtime issues that
+ * were causing 500 errors on Vercel's serverless environment.
  *
  * Cache for 1 hour (social crawlers re-fetch periodically; the cert content
  * is immutable so caching is safe).
@@ -31,32 +33,26 @@ export async function GET(
       );
     }
 
-    const imageResponse = await renderCertOgByToken(token);
-    if (!imageResponse) {
+    const png = await renderCertOgByToken(token);
+    if (!png) {
       return NextResponse.json(
         { error: "Certificate not found" },
         { status: 404 }
       );
     }
 
-    // imageResponse is an ImageResponse (a Response object) from next/og.
-    // Add caching headers by cloning and augmenting.
-    const headers = new Headers(imageResponse.headers);
-    headers.set(
-      "Cache-Control",
-      "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
-    );
-
-    return new Response(imageResponse.body, {
+    return new NextResponse(png, {
       status: 200,
-      headers,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
+        "Content-Length": String(png.length),
+      },
     });
   } catch (e) {
-    // Log the FULL error (including stack) so we can debug on Vercel.
     console.error("[GET /api/og/cert/[token]] error:", e);
     if (e instanceof Error) {
-      console.error("[GET /api/og/cert/[token]] error stack:", e.stack);
-      console.error("[GET /api/og/cert/[token]] error message:", e.message);
+      console.error("[GET /api/og/cert/[token]] stack:", e.stack);
     }
     return NextResponse.json(
       { error: "Failed to render image", details: e instanceof Error ? e.message : String(e) },
