@@ -10,6 +10,44 @@ import {
   getUserAgent,
 } from "@/lib/utils";
 
+/**
+ * Clean up stale IN_PROGRESS attempts for this user + quiz link.
+ *
+ * When a participant starts a quiz but never submits (closes the tab, loses
+ * connection, battery dies, etc.), the attempt stays IN_PROGRESS forever.
+ * This function marks old IN_PROGRESS attempts as TIMEOUT so:
+ *   1. They don't block the max-attempts check (allowing retakes)
+ *   2. Analytics don't show inflated "In Progress" numbers
+ *
+ * An attempt is considered stale if:
+ *   - It has a time limit AND the time limit + 10 min grace has passed
+ *   - It has NO time limit AND it's older than 24 hours
+ */
+async function cleanupStaleAttempts(userId: string, quizLinkId: string, timeLimit: number) {
+  const now = new Date();
+  const staleThreshold = timeLimit > 0
+    ? new Date(now.getTime() - (timeLimit + 10) * 60 * 1000) // timeLimit + 10 min grace
+    : new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours for no-limit quizzes
+
+  try {
+    await db.quizAttempt.updateMany({
+      where: {
+        userId,
+        quizLinkId,
+        status: "IN_PROGRESS",
+        startedAt: { lt: staleThreshold },
+      },
+      data: {
+        status: "TIMEOUT",
+        completedAt: now,
+      },
+    });
+  } catch (e) {
+    // Don't let cleanup failure block the attempt start — just log it.
+    console.error("[cleanupStaleAttempts] error:", e);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ── Rate limit: 20 quiz starts per minute per IP ──────────────────
@@ -77,6 +115,13 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // ── Clean up stale IN_PROGRESS attempts ──────────────────────────────
+    // Before checking max attempts, mark old IN_PROGRESS attempts as TIMEOUT
+    // so they don't block the user from retaking the quiz. This handles the
+    // case where a participant started a quiz but never submitted (closed the
+    // tab, lost connection, battery died, etc.).
+    await cleanupStaleAttempts(session.user.id, quizLinkId, quizLink.timeLimit);
 
     // Max attempts check
     if (quizLink.maxAttempts > 0) {
