@@ -208,17 +208,33 @@ export interface EmailLayoutProps {
   preheader?: string
   title: string
   intro?: string
-  /** Optional primary call to action rendered as a gradient button. */
   cta?: { label: string; url: string }
   bodyHtml: string
-  /** Footer note overrides the default "Powered by Engagio" line. */
   footerNote?: string
+  /** Optional organization branding — replaces the "Engagio" text logo with
+   *  the org's logo image + name + primary color. */
+  orgBranding?: {
+    name: string
+    logoUrl?: string | null
+    primaryColor?: string | null
+  }
 }
 
 export function renderEmailLayout(props: EmailLayoutProps): string {
-  const { preheader = "", title, intro, cta, bodyHtml, footerNote } = props
+  const { preheader = "", title, intro, cta, bodyHtml, footerNote, orgBranding } = props
   const safePreheader = escapeHtml(preheader)
   const safeTitle = escapeHtml(title)
+
+  // Use org branding if provided, otherwise fall back to Engagio defaults
+  const primary = orgBranding?.primaryColor || BRAND.primary
+  const primaryDark = orgBranding?.primaryColor
+    ? shadeColor(orgBranding.primaryColor, -15)
+    : BRAND.primaryDark
+
+  // Brand mark: org logo image if available, otherwise org name text
+  const brandMark = orgBranding?.logoUrl
+    ? `<img src="${escapeHtml(orgBranding.logoUrl)}" alt="${escapeHtml(orgBranding.name || "Organization")}" style="max-height:36px;max-width:180px;width:auto;height:auto;display:inline-block;" />`
+    : `<span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;background:linear-gradient(135deg,${primary},${BRAND.accent});-webkit-background-clip:text;background-clip:text;color:transparent;">${escapeHtml(orgBranding?.name || "Engagio")}</span>`
 
   return `<!doctype html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -242,7 +258,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
             <tr>
               <td align="center" style="padding:0 0 16px 0;">
                 <div style="display:inline-block;padding:8px 16px;background:white;border-radius:999px;border:1px solid ${BRAND.border};">
-                  <span style="font-weight:700;font-size:14px;letter-spacing:-0.01em;background:linear-gradient(135deg,${BRAND.primary},${BRAND.accent});-webkit-background-clip:text;background-clip:text;color:transparent;">Engagio</span>
+                  ${brandMark}
                 </div>
               </td>
             </tr>
@@ -250,7 +266,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
             <tr>
               <td style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};overflow:hidden;">
                 <!-- Gradient header -->
-                <div style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});padding:28px 32px;color:white;">
+                <div style="background:linear-gradient(135deg,${primary},${primaryDark});padding:28px 32px;color:white;">
                   <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">${safeTitle}</h1>
                 </div>
 
@@ -260,13 +276,13 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
                   ${
                     cta
                       ? `<div style="padding:24px 0 8px 0;text-align:center;">
-                          <a href="${escapeHtml(cta.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;letter-spacing:-0.01em;box-shadow:0 4px 14px rgba(99,102,241,0.35);">
+                          <a href="${escapeHtml(cta.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,${primary},${primaryDark});color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;letter-spacing:-0.01em;box-shadow:0 4px 14px ${primary}59;">
                             ${escapeHtml(cta.label)}
                           </a>
                         </div>
                         <p style="margin:8px 0 24px 0;font-size:12px;line-height:1.5;color:${BRAND.subtle};text-align:center;word-break:break-all;">
                           Or copy and paste this link:<br />
-                          <a href="${escapeHtml(cta.url)}" style="color:${BRAND.primary};text-decoration:underline;">${escapeHtml(cta.url)}</a>
+                          <a href="${escapeHtml(cta.url)}" style="color:${primary};text-decoration:underline;">${escapeHtml(cta.url)}</a>
                         </p>`
                       : ""
                   }
@@ -281,7 +297,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
 
             <tr>
               <td style="padding:16px 0 0 0;text-align:center;font-size:11px;color:${BRAND.subtle};">
-                You are receiving this because someone used Engagio with this email address.<br />
+                You are receiving this because someone used ${escapeHtml(orgBranding?.name || "Engagio")} with this email address.<br />
                 If this wasn't you, you can safely ignore this email.
               </td>
             </tr>
@@ -349,8 +365,9 @@ export async function sendCertificateIssuedEmail(params: {
   eventTitle: string
   certificateNumber: string
   verifyUrl: string
+  orgBranding?: { name: string; logoUrl?: string | null; primaryColor?: string | null }
 }): Promise<SendEmailResult> {
-  const { participantName, eventTitle, certificateNumber, verifyUrl } = params
+  const { participantName, eventTitle, certificateNumber, verifyUrl, orgBranding } = params
 
   const bodyHtml = `
     <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
@@ -367,6 +384,7 @@ export async function sendCertificateIssuedEmail(params: {
     intro: `Hi ${participantName}, great work — you've earned it.`,
     bodyHtml,
     cta: { label: "View Certificate →", url: verifyUrl },
+    orgBranding,
   })
 
   return sendEmail({
@@ -527,8 +545,9 @@ export async function sendAttemptResetEmail(params: {
   eventTitle: string
   quizUrl: string
   resetBy?: string
+  orgBranding?: { name: string; logoUrl?: string | null; primaryColor?: string | null }
 }): Promise<SendEmailResult> {
-  const { to, participantName, eventTitle, quizUrl, resetBy } = params
+  const { to, participantName, eventTitle, quizUrl, resetBy, orgBranding } = params
 
   const bodyHtml = `
     <p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:${BRAND.muted};">
@@ -547,6 +566,7 @@ export async function sendAttemptResetEmail(params: {
     intro: `Hi ${participantName}, you can now retake the quiz.`,
     bodyHtml,
     cta: { label: "Retake Quiz →", url: quizUrl },
+    orgBranding,
   })
 
   return sendEmail({
@@ -562,6 +582,19 @@ export async function sendAttemptResetEmail(params: {
 /* ────────────────────────────────────────────────────────────────────────
    Utilities & status helpers
    ──────────────────────────────────────────────────────────────────────── */
+
+/** Darken/lighten a hex color by a percentage (-100 to 100). */
+function shadeColor(hex: string, percent: number): string {
+  try {
+    const num = parseInt(hex.replace("#", ""), 16)
+    const r = Math.max(0, Math.min(255, (num >> 16) + Math.round(2.55 * percent)))
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + Math.round(2.55 * percent)))
+    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + Math.round(2.55 * percent)))
+    return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")
+  } catch {
+    return hex
+  }
+}
 
 export interface EmailStatus {
   configured: boolean

@@ -175,12 +175,25 @@ export async function POST(req: NextRequest) {
         : `${baseUrl}/dashboard`;
 
       try {
+        // Fetch org branding for the email template
+        let orgBranding: { name: string; logoUrl?: string | null; primaryColor?: string | null } | undefined
+        if (eventOrgId) {
+          const org = await db.organization.findUnique({
+            where: { id: eventOrgId },
+            select: { name: true, logoUrl: true, primaryColor: true },
+          })
+          if (org) {
+            orgBranding = { name: org.name, logoUrl: org.logoUrl, primaryColor: org.primaryColor }
+          }
+        }
+
         const result = await sendAttemptResetEmail({
           to: user.email,
           participantName: user.name || user.email.split("@")[0],
           eventTitle,
           quizUrl,
           resetBy: session.user.name || "Organizer",
+          orgBranding,
         });
         emailSent = result.sent;
         if (!result.sent) {

@@ -115,6 +115,7 @@ export async function generateCertificate(opts: {
       certTemplate: true,
       certIssueCondition: true,
       certOrgName: true,
+      organizationId: true,
     },
   })
 
@@ -215,12 +216,28 @@ export async function generateCertificate(opts: {
   if (user.email) {
     try {
       const emailBaseUrl = baseUrl || process.env.NEXTAUTH_URL || "http://localhost:3000"
+      // Fetch org branding (logo, name, primary color) for the email template
+      let orgBranding: { name: string; logoUrl?: string | null; primaryColor?: string | null } | undefined
+      if (event.organizationId) {
+        const org = await db.organization.findUnique({
+          where: { id: event.organizationId },
+          select: { name: true, logoUrl: true, primaryColor: true },
+        })
+        if (org) {
+          orgBranding = {
+            name: event.certOrgName || org.name,
+            logoUrl: org.logoUrl,
+            primaryColor: org.primaryColor,
+          }
+        }
+      }
       await sendCertificateIssuedEmail({
         to: user.email,
         participantName: recipientName,
         eventTitle: event.title,
         certificateNumber: cert.certificateNumber,
         verifyUrl: `${emailBaseUrl}/verify/${cert.verificationToken}`,
+        orgBranding,
       })
     } catch (e) {
       console.error("[cert-service] Failed to send certificate email:", e)
