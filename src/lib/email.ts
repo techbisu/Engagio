@@ -229,6 +229,9 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
 
   // Use org primary color if provided, otherwise default indigo
   const primary = orgBranding?.primaryColor || BRAND.primary
+  const primaryDark = orgBranding?.primaryColor
+    ? shadeColor(orgBranding.primaryColor, -15)
+    : BRAND.primaryDark
 
   // Brand mark: always use org name as bold text heading (no logo image —
   // logo images are often low-res and look bad in email clients)
@@ -264,7 +267,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
             <tr>
               <td style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};overflow:hidden;">
                 <!-- Gradient header -->
-                <div style="background:linear-gradient(135deg,${primary},${BRAND.primaryDark});padding:28px 32px;color:white;">
+                <div style="background:linear-gradient(135deg,${primary},${primaryDark});padding:28px 32px;color:white;">
                   <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">${safeTitle}</h1>
                 </div>
 
@@ -274,7 +277,7 @@ export function renderEmailLayout(props: EmailLayoutProps): string {
                   ${
                     cta
                       ? `<div style="padding:24px 0 8px 0;text-align:center;">
-                          <a href="${escapeHtml(cta.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;letter-spacing:-0.01em;box-shadow:0 4px 14px rgba(99,102,241,0.35);">
+                          <a href="${escapeHtml(cta.url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,${primary},${primaryDark});color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;letter-spacing:-0.01em;box-shadow:0 4px 14px ${primary}59;">
                             ${escapeHtml(cta.label)}
                           </a>
                         </div>
@@ -571,6 +574,19 @@ function isLikelyEmail(s: string): boolean {
 function formatRecipients(to: string | string[]): string {
   const arr = Array.isArray(to) ? to : [to]
   return arr.length <= 3 ? arr.join(", ") : `${arr.slice(0, 2).join(", ")} +${arr.length - 2}`
+}
+
+/** Darken/lighten a hex color by a percentage (-100 to 100). */
+function shadeColor(hex: string, percent: number): string {
+  try {
+    const num = parseInt(hex.replace("#", ""), 16)
+    const r = Math.max(0, Math.min(255, (num >> 16) + Math.round(2.55 * percent)))
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + Math.round(2.55 * percent)))
+    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + Math.round(2.55 * percent)))
+    return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")
+  } catch {
+    return hex
+  }
 }
 
 function escapeHtml(s: string): string {
