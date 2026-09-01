@@ -74,7 +74,7 @@ interface RegisteredActivity {
   isAcceptingResponses: boolean
   questionCount: number
   participantCount: number
-  quizLink: { slug: string; timeLimit: number; passThreshold: number; questionCount?: number } | null
+  quizLink: { slug: string; timeLimit: number; passThreshold: number; questionCount?: number; leaderboardEnabled?: boolean } | null
 }
 
 interface RegisteredEvent {
@@ -158,6 +158,12 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard, orgSlug
     if (!slug) return
     onViewLeaderboard(slug)
   }
+
+  // Check if ANY of the registered events' quiz links have leaderboardEnabled=true.
+  // If none do, hide the "View Leaderboard" card entirely.
+  const hasLeaderboardEnabled = registeredEvents.some(({ activities }) =>
+    activities.some(a => a.quizLink?.leaderboardEnabled !== false)
+  )
 
   return (
     <div className="space-y-6">
@@ -495,7 +501,8 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard, orgSlug
         </CardContent>
       </Card>
 
-      {/* View leaderboard */}
+      {/* View leaderboard — only show if at least one quiz link has leaderboardEnabled=true */}
+      {hasLeaderboardEnabled && (
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -543,6 +550,7 @@ export function StudentDashboard({ user, onStartQuiz, onViewLeaderboard, orgSlug
           </form>
         </CardContent>
       </Card>
+      )}
 
       {/* Recent attempts */}
       <Card>
