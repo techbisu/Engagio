@@ -207,8 +207,21 @@ export function QuizRunner({
         })
       }, 0)
     }
+    // Also handle error — if proctor fails, start the quiz anyway (don't block)
+    if (cameraGateOpen && phase === "error" && prevPhaseRef.current !== "error") {
+      setTimeout(() => {
+        setCameraGateOpen(false)
+        if (!requireFullscreen) {
+          setTimerStarted(true)
+        }
+        setStatus("active")
+        toast.warning("AI proctor unavailable", {
+          description: aiProctor.error || "Camera initialization failed. Quiz continuing without proctor.",
+        })
+      }, 0)
+    }
     prevPhaseRef.current = phase
-  }, [cameraGateOpen, aiProctor.initPhase, requireFullscreen])
+  }, [cameraGateOpen, aiProctor.initPhase, aiProctor.error, requireFullscreen])
 
   // If the proctor hook reports a camera error after the gate was closed,
   // surface it as a non-blocking toast.
@@ -493,7 +506,11 @@ export function QuizRunner({
   }
 
   // ----- Render: loading -----
-  if (status === "loading") {
+  // BUT: if the camera gate is open (AI proctor initializing), DON'T show
+  // the loading spinner — instead render the quiz container so the camera
+  // gate overlay can render on top. The user sees the camera gate, not the
+  // quiz questions (the gate is a full-screen overlay at z-200).
+  if (status === "loading" && !cameraGateOpen) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 dark:bg-slate-950">
         <Loader2 className="size-8 animate-spin text-emerald-600" />
