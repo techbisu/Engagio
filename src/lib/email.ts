@@ -632,19 +632,6 @@ function formatRecipients(to: string | string[]): string {
   return arr.length <= 3 ? arr.join(", ") : `${arr.slice(0, 2).join(", ")} +${arr.length - 2}`
 }
 
-/** Darken/lighten a hex color by a percentage (-100 to 100). */
-function shadeColor(hex: string, percent: number): string {
-  try {
-    const num = parseInt(hex.replace("#", ""), 16)
-    const r = Math.max(0, Math.min(255, (num >> 16) + Math.round(2.55 * percent)))
-    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + Math.round(2.55 * percent)))
-    const b = Math.max(0, Math.min(255, (num & 0x0000FF) + Math.round(2.55 * percent)))
-    return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")
-  } catch {
-    return hex
-  }
-}
-
 function escapeHtml(s: string): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
