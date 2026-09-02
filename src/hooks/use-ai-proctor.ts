@@ -299,11 +299,10 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
 
         analysisVideoRef.current?.play().catch(() => {})
 
-        // Also attach to the visible preview video
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
+        // Note: we DON'T attach to videoRef.current here because during init,
+        // the CameraPermissionGate is shown (videoRef is null — the sidebar
+        // video element doesn't exist yet). The re-attach interval below
+        // handles attaching the stream to the preview video once it mounts.
 
         // Step 3: Load BlazeFace model
         setInitPhase("loading-model")
@@ -401,8 +400,14 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
   }, [enabled]) // BUG FIX 1: ONLY depend on [enabled], not on tick or settings
 
   // ─── Re-attach stream to preview video periodically ───────────────────
+  // This runs continuously while enabled. It attaches the camera stream to
+  // the visible preview video element (videoRef) whenever the element is
+  // available and the stream isn't already attached. This handles:
+  // - The video element mounting AFTER the stream starts (during camera gate)
+  // - The stream getting detached on re-render
+  // - Mobile browsers that pause video on background
   useEffect(() => {
-    if (!enabled || !streamRef.current) return
+    if (!enabled) return
     const attachInterval = setInterval(() => {
       const video = videoRef.current
       const stream = streamRef.current
@@ -410,7 +415,7 @@ export function useAiProctor(options: UseAiProctorOptions): AiProctorState {
         video.srcObject = stream
         video.play().catch(() => {})
       }
-    }, 500)
+    }, 200) // Check every 200ms — fast enough to catch the video element mounting
     return () => clearInterval(attachInterval)
   }, [enabled])
 

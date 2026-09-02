@@ -1134,12 +1134,12 @@ function CameraPermissionGate({
 
   // Map initPhase to user-visible status
   const phaseInfo: Record<string, { label: string; description: string }> = {
-    "idle": { label: "Starting…", description: "Preparing AI security." },
-    "requesting-camera": { label: "Camera permission required", description: "Please allow camera access in your browser." },
-    "loading-model": { label: "Loading AI model…", description: "Downloading face detection model. This takes a few seconds." },
-    "calibrating": { label: "Calibrating…", description: "Establishing your baseline position. Please look at the screen." },
-    "ready": { label: "Ready!", description: "AI proctoring is active. Starting quiz…" },
-    "error": { label: "Setup failed", description: proctorError || "An error occurred during setup." },
+    "idle": { label: "Preparing security check", description: "Setting up your secure exam environment." },
+    "requesting-camera": { label: "Camera access required", description: "This exam requires camera verification. Please allow camera access when prompted." },
+    "loading-model": { label: "Initializing security", description: "Preparing your secure exam environment. This may take a few seconds." },
+    "calibrating": { label: "Almost ready", description: "Please look directly at the screen while we verify your position." },
+    "ready": { label: "All set!", description: "Security verification complete. Starting your exam…" },
+    "error": { label: "Setup incomplete", description: proctorError || "We couldn't complete the security setup. You can retry or go back." },
   }
 
   const info = phaseInfo[initPhase] || phaseInfo["idle"]
@@ -1176,10 +1176,9 @@ function CameraPermissionGate({
           {initPhase === "idle" && (
             <>
               <p className="text-sm text-muted-foreground">
-                This quiz uses <span className="font-semibold text-foreground">AI proctoring</span>.
-                Your camera will be used to verify your identity and detect potential
-                academic dishonesty. No video is recorded or transmitted — all
-                analysis runs locally in your browser.
+                This exam uses <span className="font-semibold text-foreground">secure proctoring</span>.
+                Your camera will be used to verify your identity and ensure exam integrity.
+                No video is recorded or transmitted — all analysis runs locally in your browser.
               </p>
               <ul className="space-y-1.5 text-left text-xs text-muted-foreground">
                 <li className="flex items-start gap-2">
