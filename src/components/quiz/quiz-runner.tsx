@@ -507,9 +507,9 @@ export function QuizRunner({
 
   // ----- Render: loading -----
   // BUT: if the camera gate is open (AI proctor initializing), DON'T show
-  // the loading spinner — instead render the quiz container so the camera
-  // gate overlay can render on top. The user sees the camera gate, not the
-  // quiz questions (the gate is a full-screen overlay at z-200).
+  // the loading spinner — instead render a dedicated proctor-init screen
+  // that shows the camera gate. The quiz questions are NOT rendered until
+  // the proctor is fully ready (initPhase === "ready").
   if (status === "loading" && !cameraGateOpen) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 dark:bg-slate-950">
@@ -517,6 +517,23 @@ export function QuizRunner({
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Starting your quiz…
         </p>
+      </div>
+    )
+  }
+
+  // ----- Render: proctor init (camera gate open, quiz NOT started) -----
+  // When AI proctor is enabled and the camera gate is open, show a clean
+  // screen with ONLY the camera gate. Quiz questions, timer, sidebar are
+  // NOT rendered — the user sees only the camera permission/calibration UI.
+  if (cameraGateOpen && status !== "active") {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <CameraPermissionGate
+          initPhase={aiProctor.initPhase}
+          proctorError={aiProctor.error}
+          onError={handleCameraError}
+          onBack={handleReturnToDashboard}
+        />
       </div>
     )
   }
