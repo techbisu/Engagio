@@ -35,7 +35,9 @@ function toCertDto(c: any): CertificateDto {
     issuedAt: c.issuedAt.toISOString(),
     issuedBy: c.issuedBy ?? null,
     status: (c.status ?? "VALID") as CertStatus,
-    certificateUrl: c.certificateUrl ?? null,
+    // FOT FIX: Don't return base64 certificateUrl — only return real CDN URLs.
+    // Base64 strings (1-4 MB) in the response cause massive bandwidth consumption.
+    certificateUrl: c.certificateUrl && !c.certificateUrl.startsWith("data:") ? c.certificateUrl : null,
     certificatePublicId: c.certificatePublicId ?? null,
     generatedAutomatically: c.generatedAutomatically ?? false,
     manualOverride: c.manualOverride ?? false,

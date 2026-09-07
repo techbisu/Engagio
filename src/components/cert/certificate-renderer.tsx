@@ -885,6 +885,14 @@ export const CertificateRenderer = React.forwardRef<
     propsRef.current = props;
   });
 
+  // ─── FOT FIX: Store onRendered in a ref so the canvas useEffect doesn't
+  // re-fire when the parent passes a new inline arrow function. This prevents
+  // an infinite re-render → re-upload loop that consumed 11+ GB of bandwidth.
+  const onRenderedRef = React.useRef(onRendered);
+  React.useEffect(() => {
+    onRenderedRef.current = onRendered;
+  });
+
   // Render the certificate to the canvas whenever inputs change.
   React.useEffect(() => {
     const canvas = internalRef.current;
@@ -949,7 +957,7 @@ export const CertificateRenderer = React.forwardRef<
       // Notify parent with the PNG data URL
       try {
         const dataUrl = canvas.toDataURL("image/png");
-        onRendered?.(dataUrl);
+        onRenderedRef.current?.(dataUrl);
       } catch {
         // ignore — e.g. tainted canvas (shouldn't happen with data URLs)
       }
@@ -975,7 +983,9 @@ export const CertificateRenderer = React.forwardRef<
     certificateNumber,
     issuedAt,
     verificationUrl,
-    onRendered,
+    // FOT FIX: onRendered removed from deps — stored in a ref above.
+    // This prevents the canvas from re-rendering when the parent passes
+    // a new inline arrow function, which caused an infinite upload loop.
   ]);
 
   return (

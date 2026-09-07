@@ -149,35 +149,28 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       tags: ["certificate", cert.eventId],
     });
 
-    // Update the cert record with the uploaded URL
-    const updated = await db.certificate.update({
+    // ─── FOT FIX: Don't store base64 in the database ─────────────────────
+    // When Cloudinary is NOT configured, uploadImage returns a base64 data URL
+    // (1-4 MB). Storing this in certificateUrl causes every subsequent GET
+    // request for the certificate to return the multi-MB string, consuming
+    // massive bandwidth. Only store real Cloudinary URLs.
+    const urlToStore = uploadResult.isLocal ? null : uploadResult.url;
+
+    // Update the cert record — only store real CDN URLs, not base64
+    await db.certificate.update({
       where: { id },
       data: {
-        certificateUrl: uploadResult.url,
+        certificateUrl: urlToStore,
         certificatePublicId: uploadResult.publicId ?? null,
-      },
-      include: {
-        event: {
-          select: {
-            id: true,
-            title: true,
-            certOrgName: true,
-            certSigneeName: true,
-            certSigneeTitle: true,
-            certSigneeImage: true,
-            certLogo: true,
-            certTemplate: true,
-            certPassingScore: true,
-          },
-        },
-        user: { select: { name: true, email: true } },
       },
     });
 
+    // ─── FOT FIX: Return a MINIMAL response ──────────────────────────────
+    // Don't echo the base64 back or return the full certificate DTO.
+    // The client already has the PNG (it uploaded it). The response only
+    // needs to confirm success + whether Cloudinary is configured.
     return NextResponse.json({
-      certificate: toCertDto(updated),
-      uploaded: uploadResult.isLocal ? false : true,
-      url: uploadResult.url,
+      uploaded: !uploadResult.isLocal,
       cloudinaryConfigured: isCloudinaryConfigured(),
     });
   } catch (e) {

@@ -32,7 +32,7 @@ function toCertDto(c: any): CertificateDto {
     issuedAt: c.issuedAt.toISOString(),
     issuedBy: c.issuedBy ?? null,
     status: (c.status ?? "VALID") as CertStatus,
-    certificateUrl: c.certificateUrl ?? null,
+    certificateUrl: c.certificateUrl && !c.certificateUrl.startsWith("data:") ? c.certificateUrl : null,
     certificatePublicId: c.certificatePublicId ?? null,
     generatedAutomatically: c.generatedAutomatically ?? false,
     manualOverride: c.manualOverride ?? false,

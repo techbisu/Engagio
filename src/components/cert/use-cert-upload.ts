@@ -1,57 +1,60 @@
 "use client"
 
 import * as React from "react"
-import { toast } from "sonner"
 import { api } from "@/components/student/api"
 
 /**
  * Hook to upload a certificate PNG to Cloudinary after the canvas renders it.
  *
- * The CertificateRenderer component calls `onRendered(dataUrl)` with a base64
- * PNG data URL. This hook wraps that callback to automatically upload the PNG
- * to the server (POST /api/certificates/[id]/upload-png), which uploads to
- * Cloudinary and stores the URL on the certificate record.
+ * FOT FIX: This hook now has an "already uploaded" guard — once a cert has
+ * been uploaded successfully, it will NOT re-upload the same cert again.
+ * This prevents the infinite re-upload loop that consumed 11+ GB of Vercel
+ * Fast Origin Transfer bandwidth.
  *
- * The stored Cloudinary URL is then used as:
- *   - og:image in the /verify/[token] page metadata (social media preview)
- *   - the image URL for social sharing (LinkedIn, Facebook, X, WhatsApp)
- *
- * Usage:
- *   const { uploadCert, isUploading, certUrl } = useCertUpload(certId)
- *   <CertificateRenderer onRendered={(dataUrl) => { uploadCert(dataUrl); setCertDataUrl(dataUrl); }} />
+ * The guard is a ref (uploadedRef) that persists across re-renders. Once
+ * set to true, subsequent calls to uploadCert() are silently ignored.
+ * The ref resets when the certId changes (different certificate).
  */
 export function useCertUpload(certId: string | null | undefined) {
   const [isUploading, setIsUploading] = React.useState(false)
   const [certUrl, setCertUrl] = React.useState<string | null>(null)
   const [uploadError, setUploadError] = React.useState<string | null>(null)
 
+  // ─── FOT FIX: Track whether we've already uploaded this cert ──────────
+  // Once uploaded, don't re-upload — prevents infinite loop.
+  const uploadedRef = React.useRef(false)
+  const lastCertIdRef = React.useRef<string | null>(null)
+
+  // Reset the guard when certId changes
+  React.useEffect(() => {
+    if (certId !== lastCertIdRef.current) {
+      uploadedRef.current = false
+      lastCertIdRef.current = certId ?? null
+    }
+  }, [certId])
+
   const uploadCert = React.useCallback(
     async (pngDataUrl: string) => {
       if (!certId || isUploading) return
+      // FOT FIX: Don't re-upload if we've already uploaded this cert
+      if (uploadedRef.current) return
 
+      uploadedRef.current = true
       setIsUploading(true)
       setUploadError(null)
       try {
-        const res = await api<{
-          url: string
-          uploaded: boolean
-          cloudinaryConfigured: boolean
-        }>(`/api/certificates/${certId}/upload-png`, {
-          method: "POST",
-          body: JSON.stringify({ pngDataUrl }),
-        })
-        if (res.uploaded) {
-          setCertUrl(res.url)
-          // Silent success — don't toast on every render, only on manual triggers
-        } else if (!res.cloudinaryConfigured) {
-          // Cloudinary not configured — the URL is a base64 data URL (works for
-          // download but NOT for og:image). Don't show an error since the
-          // admin may not have configured Cloudinary yet.
-          console.log("[useCertUpload] Cloudinary not configured, stored base64")
-        }
+        await api<{ uploaded: boolean; cloudinaryConfigured: boolean }>(
+          `/api/certificates/${certId}/upload-png`,
+          {
+            method: "POST",
+            body: JSON.stringify({ pngDataUrl }),
+          }
+        )
+        // FOT FIX: Don't store the response URL — it may be a multi-MB base64
+        // string. We don't need it client-side (the canvas already has the image).
       } catch (e) {
-        // Don't show a toast on auto-upload failure — it's a background task.
-        // The cert image still renders on the page and can be downloaded.
+        // Reset the guard on failure so the user can retry
+        uploadedRef.current = false
         console.error("[useCertUpload] upload failed:", e)
         setUploadError(e instanceof Error ? e.message : "Upload failed")
       } finally {
