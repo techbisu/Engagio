@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
           event: { organizationId: adminCtx.orgId },
         },
         orderBy: { startedAt: "desc" },
-        take: 200,
+        take: 1000,
         include: {
           user: {
             select: { name: true, email: true, image: true },
